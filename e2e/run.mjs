@@ -142,6 +142,22 @@ const scenarios = {
     assert.match(onDisk, /메모: ___@메모\n$/)
   },
 
+  async 'creates a template from the starter, labelled in Korean'(app, vault) {
+    await app.click('dc-button', '새 서식')
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')
+    const created = (await readdir(join(vault, '서식'))).filter((n) => n.startsWith('새 서식'))
+    assert.equal(created.length, 1, 'one starter template on disk')
+    assert.equal(await readFile(join(vault, '서식', created[0]), 'utf8'), await app.value('textarea'), 'file = editor text')
+    const labels = await app.cdp.waitFor(
+      `(() => { const l = __e2e.all('label').map((el) => el.textContent.trim()); return l.includes('상태') && l })()`,
+      'the preview labels',
+    )
+    assert.ok(labels.includes('메모'), `labels: ${labels.join(', ')}`)
+    // Back to the fixture template for the scenarios that follow.
+    await app.click('button', '버그 리포트')
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the fixture template')
+  },
+
   async 'creates a document, edits it, and saves again in place'(app, vault) {
     await app.click('button', '문서')
     await app.choose('select#template', TEMPLATE)

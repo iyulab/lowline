@@ -30,7 +30,10 @@ export const strings = {
   },
 } as const
 
-/** A starter template: its front matter names it, the body is plain Formdown. */
+/**
+ * A starter template: its front matter names it, the body is plain Formdown. Field names are
+ * Korean so the labels and the document's front matter keys read in the UI's language.
+ */
 export function starterTemplate(id: string): string {
   return `---
 id: ${id}
@@ -38,10 +41,10 @@ version: 1
 ---
 # ${strings.newTemplateName}
 
-제목: ___@title
+제목: ___@제목
 
-@status: [select options="열림,진행,닫힘"]
+@상태: [select options="열림,진행,닫힘"]
 
-@notes: [textarea rows=4]
+@메모: [textarea rows=4]
 `
 }

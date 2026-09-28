@@ -12,6 +12,7 @@ import {
   templateInfo,
   updateDocument,
 } from '../documents.js'
+import { starterTemplate } from '../strings.js'
 
 const template = `---
 id: bug-report
@@ -130,5 +131,22 @@ describe('documentTitle', () => {
     expect(documentTitle(template, { severity: 'high', expected: 'Saves', title: 'Freeze' })).toBe('Freeze')
     expect(documentTitle(template, { severity: 'high', expected: 'Saves' })).toBe('Saves')
     expect(documentTitle(template, { severity: 'high' })).toBeUndefined()
+  })
+})
+
+describe('starterTemplate', () => {
+  it('is a template whose fields are labelled in Korean', () => {
+    const source = starterTemplate('t1')
+    expect(templateInfo(source).ref).toBe('t1@1')
+    expect(parseFormdown(source).forms.map((f) => [f.name, f.label])).toEqual([
+      ['제목', '제목'],
+      ['상태', '상태'],
+      ['메모', '메모'],
+    ])
+  })
+
+  it('names new documents after its title field', () => {
+    const source = starterTemplate('t1')
+    expect(documentTitle(source, { 상태: '열림', 제목: '첫 기록' })).toBe('첫 기록')
   })
 })
