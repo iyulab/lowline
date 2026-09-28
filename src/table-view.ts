@@ -31,51 +31,8 @@ export class LlTable extends LitElement {
       font: inherit;
       padding: var(--dc-space-1, 4px);
     }
-    .scroll {
-      overflow: auto;
-      border: 1px solid var(--dc-color-border, #d0d0d0);
-      border-radius: var(--dc-radius-md, 6px);
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
+    dc-data-table {
       font-size: 13px;
-    }
-    th,
-    td {
-      text-align: left;
-      padding: var(--dc-space-2, 8px);
-      border-bottom: 1px solid var(--dc-color-border, #e4e4e4);
-      white-space: pre-line;
-      vertical-align: top;
-    }
-    th {
-      position: sticky;
-      top: 0;
-      background: var(--dc-color-bg-subtle, #f4f4f4);
-      font-weight: 600;
-    }
-    tbody tr {
-      cursor: pointer;
-    }
-    tbody tr:hover {
-      background: var(--dc-color-bg-subtle, #f4f4f4);
-    }
-    th[scope='row'] {
-      position: static;
-      background: none;
-      font-weight: 400;
-    }
-    .open {
-      all: unset;
-      cursor: pointer;
-      text-decoration: underline;
-      text-decoration-color: var(--dc-color-border, #d0d0d0);
-      text-underline-offset: 3px;
-    }
-    .open:focus-visible {
-      outline: 2px solid var(--dc-color-focus, #3b6fd8);
-      outline-offset: 2px;
     }
     .message {
       color: var(--dc-color-text-muted, #666);
@@ -138,12 +95,8 @@ export class LlTable extends LitElement {
     }
   }
 
-  /**
-   * Asks for a row's document to be opened. A click that ends a text selection in the table is
-   * left to the selection.
-   */
+  /** Asks for a row's document to be opened. */
   private openRow(path: string) {
-    if (getSelection()?.toString()) return
     this.dispatchEvent(new CustomEvent('ll-open-document', { detail: { path }, bubbles: true, composed: true }))
   }
 
@@ -168,37 +121,18 @@ export class LlTable extends LitElement {
         ${table ? html`<span class="message" role="status">${strings.tableCount(table.rows.length)}</span>` : nothing}
         ${skipped ? html`<span class="error">${strings.tableSkipped(skipped)}</span>` : nothing}
       </div>
-      ${table && table.rows.length === 0 ? html`<p class="message">${strings.tableEmpty}</p>` : nothing}
-      ${table && table.rows.length > 0
-        ? html`<div class="scroll">
-            <table>
-              <thead>
-                <tr>
-                  ${table.columns.map((c) => html`<th scope="col">${this.label(c.name)}</th>`)}
-                </tr>
-              </thead>
-              <tbody>
-                ${table.rows.map(
-                  (row) => html`<tr data-path=${row.path} @click=${() => this.openRow(row.path)}>
-                    ${table.columns.map((c, i) =>
-                      i === 0
-                        ? // The row's first cell names it and is how a keyboard opens it.
-                          // No whitespace around the button: cells keep line breaks (pre-line).
-                          html`<th scope="row"><button
-                              class="open"
-                              title=${strings.openDocument}
-                              @click=${(e: Event) => {
-                                e.stopPropagation()
-                                this.openRow(row.path)
-                              }}
-                            >${cellText(row.values[c.name]) || documentName(row.path)}</button></th>`
-                        : html`<td>${cellText(row.values[c.name])}</td>`,
-                    )}
-                  </tr>`,
-                )}
-              </tbody>
-            </table>
-          </div>`
+      ${table
+        ? html`<dc-data-table
+            .columns=${table.columns.map((c) => ({ key: c.name, label: this.label(c.name) }))}
+            .rows=${table.rows.map((row) => ({
+              id: row.path,
+              cells: Object.fromEntries(
+                table.columns.map((c, i) => [c.name, cellText(row.values[c.name]) || (i === 0 ? documentName(row.path) : '')]),
+              ),
+            }))}
+            empty-label=${strings.tableEmpty}
+            @activate=${(e: CustomEvent<{ id: string }>) => this.openRow(e.detail.id)}
+          ></dc-data-table>`
         : nothing}
     `
   }

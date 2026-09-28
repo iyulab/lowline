@@ -56,7 +56,6 @@ export const strings = {
   tableEmpty: '이 서식으로 만든 문서가 없습니다.',
   tableCount: (n: number) => `문서 ${n}건`,
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,
-  openDocument: '문서 열기',
   hostStarting: '표를 준비하고 있습니다…',
   learningEmpty: '아직 결정된 제안이 없습니다. 판단 칸의 제안을 수락·교정·거절하며 저장하면 여기서 곡선이 자랍니다.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,

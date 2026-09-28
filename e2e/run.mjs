@@ -400,7 +400,7 @@ const scenarios = {
     await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
     const note = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 15_000 },
     )
@@ -483,7 +483,7 @@ const scenarios = {
       await app.click('button', '표')
       await app.choose('select#template', 'intake@1')
       return app.cdp.waitFor(
-        `(() => { const rows = __e2e.all('tbody tr'); const text = rows.map((tr) => tr.textContent.replace(/\s+/g, ' ').trim()); return text.some((t) => t.includes('급여')) && text })()`,
+        `(() => { const rows = __e2e.all('tbody tr'); const text = rows.map((tr) => tr.textContent.replace(/\\s+/g, ' ').trim()); return text.some((t) => t.includes('급여')) && text })()`,
         'the intake table',
         { timeoutMs: 30_000 },
       )
@@ -493,7 +493,7 @@ const scenarios = {
       await app.choose('select#template', '서식/접수.fd.md')
       await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
       return app.cdp.waitFor(
-        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
         { timeoutMs: 30_000 },
       )
@@ -531,7 +531,8 @@ const scenarios = {
     const rows = [
       ['요청', '부서', '담당', '비고'],
       ['프린터 토너가 떨어졌어요', '영업', '총무', '지난달'],
-      ['회의실 프로젝터가 안 켜져요', '개발', '경비', ''],
+      // A cell with a line break comes quoted, the way spreadsheets copy it.
+      ['"회의실 프로젝터가\n안 켜져요"', '개발', '경비', ''],
       ['', '', '', '비고만 있는 행'],
     ]
     const text = rows.map((r) => r.join('\t')).join('\n')
@@ -561,14 +562,14 @@ const scenarios = {
     const values = await Promise.all(created.map((n) => fileValues(join(vault, '문서', n))))
     const toner = values.find((v) => v.요청 === '프린터 토너가 떨어졌어요')
     assert.deepEqual([toner?.template, toner?.부서, toner?.담당], ['intake@1', '영업', '총무'])
-    assert.equal(values.find((v) => v.요청 === '회의실 프로젝터가 안 켜져요')?.담당, '경비', 'kept as written')
+    assert.equal(values.find((v) => v.요청 === '회의실 프로젝터가\n안 켜져요')?.담당, '경비', 'kept as written, line break and all')
 
     // Imported records are confirmed values: a similar new record gets the imported answer suggested.
     await app.choose('select#template', '서식/접수.fd.md')
     await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
     await app.choose('select[name="부서"]', '영업')
     const suggestion = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 30_000 },
     )
@@ -580,7 +581,7 @@ const scenarios = {
     await app.click('button', '학습')
     await app.answerUnsaved('편집 버리기')
     const figures = await app.cdp.waitFor(
-      `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\s+/g, ' ').trim() })()`,
+      `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\\s+/g, ' ').trim() })()`,
       'the curve of 접수 · 담당',
       { timeoutMs: 30_000 },
     )
@@ -630,7 +631,7 @@ ${JSON.stringify(await listed())}`)
       await app.choose('select#template', '서식/접수.fd.md')
       await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       const note = await app.cdp.waitFor(
-        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
         { timeoutMs: 15_000 },
       )
