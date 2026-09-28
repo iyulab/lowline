@@ -1,0 +1,33 @@
+{
+  "name": "lowline",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A local form editor that learns from your confirmations",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@formdown/core": "0.5.0",
+    "@formdown/ui": "0.5.0",
+    "@iyulab/desktop-compact": "0.3.0",
+    "@iyulab/desktop-patterns": "0.3.0",
+    "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-dialog": "^2.8.0",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

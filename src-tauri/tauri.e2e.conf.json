@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.iyulab.lowline.e2e",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lowline (e2e)",
+        "width": 1200,
+        "height": 780,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9223"
+      }
+    ]
+  }
+}

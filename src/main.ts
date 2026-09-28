@@ -1,0 +1,8 @@
+import '@iyulab/desktop-patterns/shell'
+import '@iyulab/desktop-patterns/sidebar'
+import '@iyulab/desktop-patterns/toolbar'
+import '@iyulab/desktop-patterns/page'
+import '@iyulab/desktop-compact/button'
+import '@iyulab/desktop-compact/empty-state'
+import '@formdown/ui'
+import './app.js'

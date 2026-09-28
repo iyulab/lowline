@@ -1,0 +1,19 @@
+@import '@iyulab/desktop-compact/tokens.css';
+@import '@iyulab/desktop-patterns/tokens.css';
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--dc-color-bg, #fff);
+  color: var(--dc-color-text, #1a1a1a);
+  font-family: var(--dc-font-family, system-ui, sans-serif);
+}
+
+ll-app {
+  display: block;
+  height: 100%;
+}

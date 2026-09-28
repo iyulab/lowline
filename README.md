@@ -10,6 +10,21 @@ Lowline is a desktop app for structured notes. You write documents from forms; f
 
 > Status: early development. Nothing is released yet.
 
+## Development
+
+Requires Node.js 22+, Rust (stable) and, on Windows, the WebView2 runtime.
+
+```bash
+npm install
+npm run tauri dev      # run the app
+npm test               # web UI tests
+cargo test --manifest-path src-tauri/Cargo.toml   # shell tests
+```
+
+Layout: `src-tauri/` is the shell — the only code that reads or writes files, all inside the open vault folder and all writes atomic. `src/` is the web UI.
+
+`src-tauri/tauri.e2e.conf.json` builds a variant that exposes the WebView DevTools protocol on port 9223 for automated UI checks: `npm run tauri build -- --debug --no-bundle --config src-tauri/tauri.e2e.conf.json`.
+
 ## License
 
 Lowline is licensed under the [GNU Affero General Public License v3.0](LICENSE). iyulab holds the copyright and also offers Lowline under a separate commercial license for organizations that cannot adopt AGPL-3.0 terms.
