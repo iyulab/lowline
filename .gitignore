@@ -11,8 +11,7 @@ artifacts/
 node_modules/
 dist/
 
-# Desktop shell build output
-src-tauri/target/
+# Desktop shell build output (add per shell once chosen)
 
 # Editors / OS
 .idea/
