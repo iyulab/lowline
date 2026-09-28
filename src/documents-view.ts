@@ -185,8 +185,10 @@ export class LlDocuments extends LitElement {
         // What is on screen is now held nowhere else: it is unsaved, whatever was typed.
         this.dirty = true
         this.error = strings.removedOutside
+        this.message = '' // an earlier "saved" no longer holds
       } else if (this.dirty) {
         this.error = strings.changedOutsideDirty
+        this.message = ''
         this.changedOutside = true
       } else {
         await this.open(draft.path)

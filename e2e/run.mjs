@@ -457,6 +457,27 @@ const scenarios = {
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2000))`)
     assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion is not offered on reopening')
   },
+  async 'shows nothing when no confirmed record is close enough to suggest from'(app, vault) {
+    await app.choose('select#template', '서식/접수.fd.md')
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.type('[data-field-name="요청"]', '사내 동호회 가입 신청서 양식')
+    await app.choose('select[name="부서"]', '개발')
+    // Suggestions are asked for once typing pauses; this waits well past that and the answer.
+    await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2500))`)
+    assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'no suggestion is made up')
+    assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in')
+
+    // Saving it records no suggestion event: nothing was offered, so nothing was decided.
+    const eventsBefore = (await events(vault)).length
+    const documentsBefore = new Set(await documentsIn(vault))
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal((await events(vault)).length, eventsBefore, 'no suggestion event')
+    const [saved] = (await documentsIn(vault)).filter((n) => !documentsBefore.has(n))
+    assert.ok(saved, 'the document is saved')
+    assert.ok(!(await fileValues(join(vault, '문서', saved))).담당, 'the file has no 담당 either')
+    await app.noAlert()
+  },
   async 'rebuilds the same table and the same suggestion after a restart, with nothing kept but the vault'(app, vault) {
     const tableNow = async () => {
       await app.click('button', '표')
@@ -480,7 +501,7 @@ const scenarios = {
 
     const table = await tableNow()
     const suggestion = await suggestionNow()
-    assert.equal(table.length, 4, 'two fixture records and the two made above')
+    assert.equal(table.length, 5, 'two fixture records and the three made above')
 
     await app.restart(vault)
     assert.deepEqual(await tableNow(), table, 'the same table')
@@ -568,7 +589,7 @@ const scenarios = {
     const rejected = decided.filter((e) => e.kind === 'reject').length
     assert.equal(decided.length, 2, 'one accepted and one rejected suggestion so far')
     assert.ok(figures.includes(`수락 ${accepted} · 교정 0 · 거절 ${rejected}`), figures)
-    assert.ok(figures.includes('최근 2건 중 제안이 맞음 50%'), figures)
+    assert.ok(figures.includes('제안이 나온 최근 2건 중 맞음 50%'), figures)
     assert.ok(decided.every((e) => e.template === 'intake@1'), 'events name their template')
     await app.noAlert()
   },
