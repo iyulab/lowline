@@ -130,6 +130,15 @@ async function fileBody(path) {
 }
 
 const scenarios = {
+  async 'starts the sidecar with the app'(app) {
+    const status = await app.cdp.waitFor(
+      `window.__TAURI_INTERNALS__.invoke('host_status').then((s) => s.state !== 'starting' && s)`,
+      'the sidecar to start',
+      { timeoutMs: 30_000 },
+    )
+    assert.deepEqual(status, { state: 'ready' })
+  },
+
   async 'edits a template and saves it with Ctrl+S'(app, vault) {
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
     await app.cdp.evaluate(`(() => { const t = __e2e.one('textarea'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); return true })()`)
@@ -226,6 +235,16 @@ const scenarios = {
   },
 }
 
+async function sidecarsRunning() {
+  const { execFileSync } = await import('node:child_process')
+  for (let i = 0; i < 20; i++) {
+    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq Lowline.Host.exe', '/NH'], { encoding: 'utf8' })
+    if (!out.includes('Lowline.Host.exe')) return 0
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  return 1
+}
+
 async function main() {
   if (!existsSync(exe)) throw new Error(`no e2e build at ${exe} — run \`npm run build:e2e\` first`)
   const vault = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
@@ -256,6 +275,11 @@ async function main() {
     child.kill()
     await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)))
     await rm(vault, { recursive: true, force: true })
+  }
+  // The sidecar lives in the app's job object: when the app is gone, so is the sidecar.
+  if (process.platform === 'win32' && (await sidecarsRunning()) > 0) {
+    failed++
+    console.log('  ✗ the sidecar outlived the app')
   }
   console.log(failed ? `\n${failed} scenario failed` : `\nall ${Object.keys(scenarios).length} scenarios passed`)
   process.exitCode = failed ? 1 : 0

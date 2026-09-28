@@ -1,11 +1,13 @@
+mod host;
 mod vault;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, RunEvent, State};
 
+use host::{HostState, HostStatus};
 use vault::{Entry, Vault, VaultError, DOCUMENTS_DIR, DOCUMENT_SUFFIX, TEMPLATES_DIR, TEMPLATE_SUFFIX};
 
 /// The open vault. The shell is the only place that touches files.
@@ -89,18 +91,48 @@ fn create_file(path: String, content: String, state: State<AppState>) -> Command
     with_vault(&state, |v| v.create(&path, &content))
 }
 
+/// Whether the sidecar is starting, ready, or failed to start.
+#[tauri::command]
+fn host_status(state: State<HostState>) -> HostStatus {
+    state.status()
+}
+
+/// Starts the sidecar off the main thread, so the window opens while it starts.
+fn start_host(app: &tauri::AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let result = (|| {
+            let exe = host::executable(&app.path().resource_dir().map_err(|e| e.to_string())?);
+            let log = app.path().app_log_dir().map_err(|e| e.to_string())?.join("host.stderr.log");
+            host::Host::start(&exe, log)
+        })();
+        app.state::<HostState>().set(result);
+    });
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
+        .manage(HostState::default())
+        .setup(|app| {
+            start_host(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_vault,
             list_templates,
             list_documents,
             read_file,
             write_file,
-            create_file
+            create_file,
+            host_status
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Lowline");
+        .build(tauri::generate_context!())
+        .expect("error while building Lowline")
+        .run(|app, event| {
+            if let RunEvent::Exit = event {
+                app.state::<HostState>().stop();
+            }
+        });
 }

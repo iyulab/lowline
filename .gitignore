@@ -25,3 +25,6 @@ Thumbs.db
 # Local-only notes (development tracking lives outside this repository)
 claudedocs/
 .claude/
+
+# .NET sidecar publish output (bundled as a Tauri resource)
+src-host/publish/

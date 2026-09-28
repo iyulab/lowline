@@ -22,6 +22,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Canonical paths without the `\\?\` prefix on Windows (already a Tauri dependency).
 dunce = "1"
+# The sidecar: a per-launch token, and HTTP to it on loopback.
+getrandom = "0.4"
+ureq = { version = "3", default-features = false }
 # Added together: adding a crate from the same git source later re-resolves Cargo.lock.
 tauri-kit-fs = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.2.0" }
 tauri-kit-sidecar = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.2.0" }

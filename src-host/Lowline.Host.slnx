@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Lowline.Host.Tests/Lowline.Host.Tests.csproj" />
+  <Project Path="Lowline.Host/Lowline.Host.csproj" />
+</Solution>

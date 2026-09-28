@@ -12,17 +12,19 @@ Lowline is a desktop app for structured notes. You write documents from forms; f
 
 ## Development
 
-Requires Node.js 22+, Rust (stable) and, on Windows, the WebView2 runtime.
+Requires Node.js 22+, Rust (stable), the .NET 10 SDK and, on Windows, the WebView2 runtime.
 
 ```bash
 npm install
+npm run build:host     # publish the .NET sidecar; the shell bundles it, so build it before cargo
 npm run tauri dev      # run the app
 npm test               # web UI tests
+npm run test:host                                  # sidecar tests
 cargo test --manifest-path src-tauri/Cargo.toml   # shell tests
 npm run build:e2e && npm run test:e2e              # end-to-end scenarios in the real window
 ```
 
-Layout: `src-tauri/` is the shell — the only code that reads or writes files, all inside the open vault folder and all writes atomic. `src/` is the web UI.
+Layout: `src-tauri/` is the shell — the only code that reads or writes files, all inside the open vault folder and all writes atomic. `src/` is the web UI. `src-host/` is the .NET sidecar for projections and suggestions: the shell starts it with the app and a per-launch token, it listens on a loopback port and never touches vault files.
 
 End-to-end scenarios live in `e2e/`. `npm run build:e2e` builds a debug variant (`src-tauri/tauri.e2e.conf.json`) that exposes the WebView DevTools protocol on port 9223; `npm run test:e2e` copies the fixture vault in `e2e/fixtures/vault/` to a temporary folder, drives the window with clicks and typing, and checks the saved files on disk.
 
