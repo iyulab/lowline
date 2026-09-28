@@ -8,8 +8,9 @@ import { strings } from './strings.js'
 import { vault, type VaultInfo } from './vault-client.js'
 import './templates-view.js'
 import './documents-view.js'
+import './table-view.js'
 
-type View = 'templates' | 'documents'
+type View = 'templates' | 'documents' | 'table'
 
 @customElement('ll-app')
 export class LlApp extends LitElement {
@@ -81,6 +82,7 @@ export class LlApp extends LitElement {
           .items=${[
             { id: 'templates', icon: '▤', label: strings.navTemplates },
             { id: 'documents', icon: '▦', label: strings.navDocuments },
+            { id: 'table', icon: '▥', label: strings.navTable },
           ]}
           @dp-sidebar-select=${(e: DpSidebarSelectEvent) => (this.view = e.itemId as View)}
         >
@@ -88,7 +90,7 @@ export class LlApp extends LitElement {
         </dp-sidebar>
         <dp-toolbar
           slot="toolbar"
-          heading=${this.view === 'templates' ? strings.navTemplates : strings.navDocuments}
+          heading=${{ templates: strings.navTemplates, documents: strings.navDocuments, table: strings.navTable }[this.view]}
           subtitle=${info?.root ?? ''}
           show-toggle
           toggle-label=${strings.toggleSidebar}
@@ -107,7 +109,9 @@ export class LlApp extends LitElement {
               </div>`
             : this.view === 'templates'
               ? html`<ll-templates .vaultInfo=${info}></ll-templates>`
-              : html`<ll-documents .vaultInfo=${info}></ll-documents>`}
+              : this.view === 'documents'
+                ? html`<ll-documents .vaultInfo=${info}></ll-documents>`
+                : html`<ll-table .vaultInfo=${info}></ll-table>`}
         </dp-page>
       </dp-shell>
     `

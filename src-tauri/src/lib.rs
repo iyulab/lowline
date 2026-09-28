@@ -8,7 +8,9 @@ use serde::Serialize;
 use tauri::{Manager, RunEvent, State};
 
 use host::{HostState, HostStatus};
-use vault::{Entry, Vault, VaultError, DOCUMENTS_DIR, DOCUMENT_SUFFIX, TEMPLATES_DIR, TEMPLATE_SUFFIX};
+use vault::{
+    Entry, Vault, VaultError, DOCUMENTS_DIR, DOCUMENT_SUFFIX, TEMPLATES_DIR, TEMPLATE_SUFFIX,
+};
 
 /// The open vault. The shell is the only place that touches files.
 #[derive(Default)]
@@ -25,17 +27,26 @@ struct CommandError {
 
 impl From<VaultError> for CommandError {
     fn from(e: VaultError) -> Self {
-        CommandError { kind: e.kind(), message: e.to_string() }
+        CommandError {
+            kind: e.kind(),
+            message: e.to_string(),
+        }
     }
 }
 
 type CommandResult<T> = Result<T, CommandError>;
 
 fn no_vault() -> CommandError {
-    CommandError { kind: "no-vault", message: "no vault is open".into() }
+    CommandError {
+        kind: "no-vault",
+        message: "no vault is open".into(),
+    }
 }
 
-fn with_vault<T>(state: &State<AppState>, f: impl FnOnce(&Vault) -> vault::Result<T>) -> CommandResult<T> {
+fn with_vault<T>(
+    state: &State<AppState>,
+    f: impl FnOnce(&Vault) -> vault::Result<T>,
+) -> CommandResult<T> {
     let guard = state.vault.lock().expect("vault state poisoned");
     let vault = guard.as_ref().ok_or_else(no_vault)?;
     Ok(f(vault)?)
@@ -56,7 +67,10 @@ fn open_vault(path: String, state: State<AppState>) -> CommandResult<VaultInfo> 
     let root = vault.root();
     let info = VaultInfo {
         root: root.display().to_string(),
-        name: root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+        name: root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
         templates_dir: TEMPLATES_DIR,
         documents_dir: DOCUMENTS_DIR,
     };
@@ -97,13 +111,66 @@ fn host_status(state: State<HostState>) -> HostStatus {
     state.status()
 }
 
+/// Hands the sidecar a snapshot of the vault, as the UI parsed it. Returns what it ingested.
+#[tauri::command]
+async fn host_ingest(
+    snapshot: serde_json::Value,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let body = snapshot.to_string();
+    host_json(blocking(move || client.post_json("/vault/ingest", &body)).await?)
+}
+
+/// A template's documents as a table.
+#[tauri::command]
+async fn host_projection(
+    template: String,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let path = format!("/projection/{}", encode_segment(&template));
+    host_json(blocking(move || client.get(&path)).await?)
+}
+
+/// Runs a request to the sidecar off the async runtime.
+async fn blocking(
+    request: impl FnOnce() -> Result<String, ureq::Error> + Send + 'static,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(request)
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
+fn host_json(body: String) -> Result<serde_json::Value, String> {
+    serde_json::from_str(&body)
+        .map_err(|e| format!("the sidecar answered with something else than JSON: {e}"))
+}
+
+/// Percent-encodes everything outside the unreserved set (and `@`), so a template id is one segment.
+fn encode_segment(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'@' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
 /// Starts the sidecar off the main thread, so the window opens while it starts.
 fn start_host(app: &tauri::AppHandle) {
     let app = app.clone();
     std::thread::spawn(move || {
         let result = (|| {
             let exe = host::executable(&app.path().resource_dir().map_err(|e| e.to_string())?);
-            let log = app.path().app_log_dir().map_err(|e| e.to_string())?.join("host.stderr.log");
+            let log = app
+                .path()
+                .app_log_dir()
+                .map_err(|e| e.to_string())?
+                .join("host.stderr.log");
             host::Host::start(&exe, log)
         })();
         app.state::<HostState>().set(result);
@@ -126,7 +193,9 @@ pub fn run() {
             read_file,
             write_file,
             create_file,
-            host_status
+            host_status,
+            host_ingest,
+            host_projection
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")
@@ -135,4 +204,18 @@ pub fn run() {
                 app.state::<HostState>().stop();
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::encode_segment;
+
+    #[test]
+    fn a_template_id_stays_one_path_segment() {
+        assert_eq!(encode_segment("bug-report@1"), "bug-report@1");
+        assert_eq!(
+            encode_segment("상담/기록 1"),
+            "%EC%83%81%EB%8B%B4%2F%EA%B8%B0%EB%A1%9D%201"
+        );
+    }
 }

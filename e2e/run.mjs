@@ -2,6 +2,7 @@
 //
 //   npm run build:e2e   builds the debug app with the e2e config (debugging port 9223)
 //   npm run test:e2e    copies the fixture vault to a temp folder and runs every scenario
+//                       (E2E_SCREENSHOTS=<dir> saves a picture of the window after each one)
 //
 // The one seam: the folder picker is a native dialog, so the vault is opened through the same
 // `open_vault` command the picker's result goes to. Everything after that is clicks and typing.
@@ -233,6 +234,35 @@ const scenarios = {
     assert.equal(await app.checked('input[name="재현됨"]'), false, 'the checkbox reopens unchecked')
     await app.noAlert()
   },
+
+  async 'shows each document as one row of its template table'(app, vault) {
+    await app.click('button', '표')
+    await app.choose('select#template', 'bug-report@1')
+    const [name] = await documentsIn(vault)
+    const values = await fileValues(join(vault, '문서', name))
+    const rows = await app.cdp.waitFor(
+      `(() => { const rows = __e2e.all('tbody tr'); return rows.length > 0 && rows.map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent)) })()`,
+      'the table rows',
+      { timeoutMs: 30_000 },
+    )
+    const headers = await app.cdp.evaluate(`__e2e.all('th').map((th) => th.textContent)`)
+    assert.deepEqual(headers, ['제목', '심각도', '재현 절차', '재현됨', '환경', '메모'])
+    assert.equal(rows.length, 1, 'one row per document, however often it was saved')
+    const row = Object.fromEntries(headers.map((h, i) => [h, rows[0][i]]))
+    assert.equal(row.제목, values.제목)
+    assert.equal(row.심각도, values.심각도)
+    assert.equal(row.재현됨, values.재현됨 ? '✓' : '')
+    assert.equal(row.환경, values.환경)
+    await app.noAlert()
+  },
+}
+
+/** With E2E_SCREENSHOTS=<dir>, each passed scenario leaves a picture of the window. */
+async function screenshot(cdp, dir, name) {
+  const { mkdir, writeFile } = await import('node:fs/promises')
+  await mkdir(dir, { recursive: true })
+  const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' })
+  await writeFile(join(dir, `${name.replace(/[^\p{L}\p{N}]+/gu, '-')}.png`), Buffer.from(data, 'base64'))
 }
 
 async function sidecarsRunning() {
@@ -264,6 +294,7 @@ async function main() {
       try {
         await run(app, vault)
         console.log(`  ✓ ${name}`)
+        if (process.env.E2E_SCREENSHOTS) await screenshot(cdp, process.env.E2E_SCREENSHOTS, name)
       } catch (e) {
         failed++
         console.log(`  ✗ ${name}\n    ${e.message.replaceAll('\n', '\n    ')}`)

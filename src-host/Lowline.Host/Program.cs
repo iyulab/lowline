@@ -13,6 +13,8 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
     builder.WebHost.UseUrls("http://127.0.0.1:0");
 }
 
+builder.Services.AddSingleton<VaultProjection>();
+
 var app = builder.Build();
 
 var token = app.Configuration[HostAuth.TokenVariable];
@@ -24,7 +26,13 @@ if (string.IsNullOrEmpty(token))
 
 app.Use(HostAuth.RequireToken(token));
 
-app.MapGet("/health", () => new Health("ok", VaultIndexed: false, MemoryReady: false));
+app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: false));
+
+app.MapPost("/vault/ingest", (VaultSnapshot snapshot, VaultProjection vault, CancellationToken ct) =>
+    vault.IngestAsync(snapshot, ct));
+
+app.MapGet("/projection/{**template}", async (string template, VaultProjection vault, CancellationToken ct) =>
+    await vault.TableAsync(template, ct) is { } table ? Results.Ok(table) : Results.NotFound());
 
 app.MapPost("/shutdown", (HttpContext context, IHostApplicationLifetime lifetime) =>
 {

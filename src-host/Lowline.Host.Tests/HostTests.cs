@@ -37,6 +37,31 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         Assert.Equal(new Health("ok", VaultIndexed: false, MemoryReady: false), health);
     }
 
+    [Fact]
+    public async Task Ingests_a_vault_and_serves_its_table_over_http()
+    {
+        // Its own host: ingesting changes state the other tests read.
+        await using var factory = new Factory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        var ingest = await client.PostAsync("/vault/ingest", new StringContent("""
+            {"templates": [{"ref": "bug-report@1", "fields": [{"name": "제목", "type": "text"}, {"name": "재현됨", "type": "checkbox"}]}],
+             "documents": [{"path": "문서/a.md", "template": "bug-report@1", "values": {"제목": "멈춤", "재현됨": true}}]}
+            """, System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        ingest.EnsureSuccessStatusCode();
+        Assert.Equal("""{"ingested":1,"projections":["bug-report@1"],"skipped":[]}""",
+            await ingest.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        var table = await client.GetStringAsync("/projection/bug-report@1", TestContext.Current.CancellationToken);
+        Assert.Equal(
+            """{"template":"bug-report@1","columns":[{"name":"제목","type":"text"},{"name":"재현됨","type":"checkbox"}],"rows":[{"path":"문서/a.md","values":{"제목":"멈춤","재현됨":true}}]}""",
+            System.Text.RegularExpressions.Regex.Unescape(table));
+
+        var health = await client.GetFromJsonAsync<Health>("/health", TestContext.Current.CancellationToken);
+        Assert.True(health!.VaultIndexed);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/projection/none@1", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

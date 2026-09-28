@@ -1,5 +1,6 @@
 // The UI's only way to the vault: commands handled by the shell, which owns every file.
 import { invoke } from '@tauri-apps/api/core'
+import type { IngestResult, ProjectionTable, VaultSnapshot } from './projection.js'
 
 export interface VaultInfo {
   root: string
@@ -34,4 +35,14 @@ export const vault = {
   write: (path: string, content: string) => invoke<void>('write_file', { path, content }),
   /** Creates the file atomically; rejects with `already-exists` instead of replacing one. */
   create: (path: string, content: string) => invoke<void>('create_file', { path, content }),
+}
+
+/** Whether the sidecar is up. */
+export type HostStatus = { state: 'starting' } | { state: 'ready' } | { state: 'failed'; message: string }
+
+/** The sidecar, through the shell: the UI never holds its address or token. */
+export const host = {
+  status: () => invoke<HostStatus>('host_status'),
+  ingest: (snapshot: VaultSnapshot) => invoke<IngestResult>('host_ingest', { snapshot }),
+  projection: (template: string) => invoke<ProjectionTable>('host_projection', { template }),
 }

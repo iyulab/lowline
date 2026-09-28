@@ -254,8 +254,14 @@ mod tests {
         let (_dir, v) = vault();
         let outside = tempfile::tempdir().unwrap();
         std::os::unix::fs::symlink(outside.path(), v.root().join("escape")).unwrap();
-        assert!(matches!(v.resolve("escape/a.md"), Err(VaultError::OutsideVault(_))));
-        assert!(matches!(v.write("escape/a.md", "x"), Err(VaultError::OutsideVault(_))));
+        assert!(matches!(
+            v.resolve("escape/a.md"),
+            Err(VaultError::OutsideVault(_))
+        ));
+        assert!(matches!(
+            v.write("escape/a.md", "x"),
+            Err(VaultError::OutsideVault(_))
+        ));
     }
 
     #[cfg(windows)]
@@ -272,8 +278,14 @@ mod tests {
             .output()
             .unwrap();
         assert!(status.status.success(), "mklink /J failed");
-        assert!(matches!(v.resolve("escape/a.md"), Err(VaultError::OutsideVault(_))));
-        assert!(matches!(v.write("escape/a.md", "x"), Err(VaultError::OutsideVault(_))));
+        assert!(matches!(
+            v.resolve("escape/a.md"),
+            Err(VaultError::OutsideVault(_))
+        ));
+        assert!(matches!(
+            v.write("escape/a.md", "x"),
+            Err(VaultError::OutsideVault(_))
+        ));
         assert!(!outside.path().join("a.md").exists());
     }
 
@@ -300,7 +312,10 @@ mod tests {
     #[test]
     fn read_of_missing_file_is_not_found() {
         let (_dir, v) = vault();
-        assert!(matches!(v.read("문서/none.md"), Err(VaultError::NotFound(_))));
+        assert!(matches!(
+            v.read("문서/none.md"),
+            Err(VaultError::NotFound(_))
+        ));
     }
 
     #[test]
