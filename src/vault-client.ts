@@ -55,6 +55,14 @@ export function onVaultChanged(onChange: (change: VaultChanged) => void): Promis
   return listen<VaultChanged>('vault-changed', (e) => onChange(e.payload))
 }
 
+/**
+ * Whether a change removed `path`. When changes were lost there is no list of removals, so the
+ * vault's listing as it is now — `listed`, read after the change — decides.
+ */
+export function removedBy(change: VaultChanged, path: string, listed: readonly string[]): boolean {
+  return change.removed.includes(path) || (change.rescan && !listed.includes(path))
+}
+
 /** Whether a change touches `path`. */
 export function touches(change: VaultChanged, path: string): boolean {
   return change.rescan || change.written.includes(path) || change.removed.includes(path)

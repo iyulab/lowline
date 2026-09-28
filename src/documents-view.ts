@@ -18,7 +18,7 @@ import { suggestionEvents } from './events.js'
 import type { Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { host, onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { syncVault } from './vault-snapshot.js'
 import { createDocumentFile } from './document-files.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
@@ -181,7 +181,7 @@ export class LlDocuments extends LitElement {
     await this.refresh()
     const draft = this.draft
     if (draft?.kind === 'existing' && touches(change, draft.path)) {
-      if (change.removed.includes(draft.path)) {
+      if (removedBy(change, draft.path, this.documents.map((d) => d.path))) {
         // What is on screen is now held nowhere else: it is unsaved, whatever was typed.
         this.dirty = true
         this.error = strings.removedOutside

@@ -5,7 +5,7 @@ import { describeError } from './errors.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import { starterTemplate, strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+import { onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 /** Templates: pick one, edit its Formdown source next to a live preview, save. */
 @customElement('ll-templates')
@@ -118,7 +118,9 @@ export class LlTemplates extends LitElement {
       await this.refresh()
       const selected = this.selected
       if (!selected || !touches(change, selected)) return
-      if (change.removed.includes(selected)) {
+      if (removedBy(change, selected, this.entries.map((e) => e.path))) {
+        // What is on screen is now held nowhere else: it is unsaved, whatever was typed.
+        this.dirty = true
         this.error = strings.removedOutside
       } else if (this.dirty) {
         this.error = strings.changedOutsideDirty
@@ -167,6 +169,9 @@ export class LlTemplates extends LitElement {
     try {
       templateInfo(this.source) // a template must name itself
       await vault.write(this.selected, this.source)
+      // The app's own writes are not reported back: a template made again after it was removed
+      // outside rejoins the list here.
+      await this.refresh()
       this.dirty = false
       this.changedOutside = false
       this.message = strings.saved

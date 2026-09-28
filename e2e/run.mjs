@@ -207,6 +207,22 @@ const scenarios = {
     assert.match(onDisk, /메모: ___@메모\n$/)
   },
 
+  async 'says when the open template is removed outside, and saving makes it again'(app, vault) {
+    const path = join(vault, TEMPLATE)
+    const before = await readFile(path, 'utf8')
+    await rm(path)
+    await app.cdp.waitFor(
+      `__e2e.all('[role=alert]').some((el) => el.textContent.includes('밖에서 지워졌습니다'))`,
+      'the removal announced',
+    )
+    assert.equal(await app.value('textarea'), before, 'what was on screen is still there')
+
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal(await readFile(path, 'utf8'), before, 'made again with what was on screen')
+    await app.noAlert()
+  },
+
   async 'creates a template from the starter, labelled in Korean'(app, vault) {
     await app.click('dc-button', '새 서식')
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')
