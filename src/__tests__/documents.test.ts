@@ -4,8 +4,7 @@ import {
   TemplateError,
   documentFileName,
   documentTitle,
-  documentTemplateRef,
-  documentValues,
+  documentFrontMatter,
   fieldValues,
   newDocument,
   templateBody,
@@ -70,7 +69,7 @@ describe('newDocument', () => {
 
   it('keeps values that YAML would read as another type as strings', () => {
     const doc = newDocument(template, { title: 'true', severity: '007' })
-    expect(documentValues(doc)).toEqual({ title: 'true', severity: '007' })
+    expect(documentFrontMatter(doc).values).toEqual({ title: 'true', severity: '007' })
   })
 })
 
@@ -79,10 +78,10 @@ describe('checkbox values', () => {
 
   it('records a checkbox as a boolean, false included, and reads it back as one', () => {
     const doc = newDocument(withCheckbox, { title: 'A', reproduced: true })
-    expect(documentValues(doc)).toEqual({ title: 'A', reproduced: true })
+    expect(documentFrontMatter(doc).values).toEqual({ title: 'A', reproduced: true })
     const unchecked = updateDocument(doc, { reproduced: false })
-    expect(documentValues(unchecked)).toEqual({ title: 'A', reproduced: false })
-    expect(fieldValues(documentValues(unchecked))).toEqual({ title: 'A', reproduced: false })
+    expect(documentFrontMatter(unchecked).values).toEqual({ title: 'A', reproduced: false })
+    expect(fieldValues(documentFrontMatter(unchecked).values)).toEqual({ title: 'A', reproduced: false })
   })
 })
 
@@ -100,8 +99,8 @@ describe('updateDocument', () => {
   it('changes values and leaves the body byte for byte', () => {
     const doc = newDocument(template, { title: 'First', severity: 'low' })
     const updated = updateDocument(doc, { title: 'Second', severity: '' })
-    expect(documentValues(updated)).toEqual({ title: 'Second' })
-    expect(documentTemplateRef(updated)).toBe('bug-report@1')
+    expect(documentFrontMatter(updated).values).toEqual({ title: 'Second' })
+    expect(documentFrontMatter(updated).template).toBe('bug-report@1')
     expect(updated.endsWith(templateBody(template))).toBe(true)
   })
 

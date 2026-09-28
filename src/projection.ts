@@ -2,7 +2,7 @@
 // The UI parses (Formdown lives here); the sidecar projects. Neither re-reads the other's work.
 
 import { parseFormdown } from '@formdown/core'
-import { documentTemplateRef, documentValues, templateInfo } from './documents.js'
+import { documentFrontMatter, templateInfo } from './documents.js'
 import type { SuggestionEvent } from './events.js'
 
 export interface TemplateField {
@@ -65,9 +65,9 @@ function suggestFields(data: Record<string, unknown> | undefined, fields: Templa
 
 /** A document's template and values, or undefined when it names no template. */
 export function documentSnapshot(path: string, source: string, modified?: number): DocumentSnapshot | undefined {
-  const template = documentTemplateRef(source)
+  const { template, values } = documentFrontMatter(source)
   if (!template) return undefined
-  return { path, template, values: documentValues(source), ...(modified ? { modified } : {}) }
+  return { path, template, values, ...(modified ? { modified } : {}) }
 }
 
 export interface ProjectionTable {

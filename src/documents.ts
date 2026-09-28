@@ -81,17 +81,10 @@ export function updateDocument(documentSource: string, values: FieldValues): str
   return updateFrontMatter(documentSource, valueChanges(values))
 }
 
-/** The field values a document records. */
-export function documentValues(documentSource: string): Record<string, unknown> {
-  const data = { ...(parseFormdown(documentSource).frontMatter?.data ?? {}) }
-  delete data.template
-  return data
-}
-
-/** The `template` reference of a document, if any. */
-export function documentTemplateRef(documentSource: string): string | undefined {
-  const ref = parseFormdown(documentSource).frontMatter?.data.template
-  return typeof ref === 'string' ? ref : undefined
+/** A document's template reference and its values, read from its front matter in one parse. */
+export function documentFrontMatter(documentSource: string): { template?: string; values: Record<string, unknown> } {
+  const { template, ...values } = parseFormdown(documentSource).frontMatter?.data ?? {}
+  return { ...(typeof template === 'string' ? { template } : {}), values }
 }
 
 /**

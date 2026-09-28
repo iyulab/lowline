@@ -4,8 +4,7 @@ import { guard } from 'lit/directives/guard.js'
 import { keyed } from 'lit/directives/keyed.js'
 import {
   documentTitle,
-  documentTemplateRef,
-  documentValues,
+  documentFrontMatter,
   fieldValues,
   newDocument,
   templateBody,
@@ -329,8 +328,9 @@ export class LlDocuments extends LitElement {
     this.reset()
     try {
       const source = await vault.read(path)
-      this.values = this.initialValues = fieldValues(documentValues(source))
-      this.draft = { kind: 'existing', path, source, templateRef: documentTemplateRef(source) }
+      const { template, values } = documentFrontMatter(source)
+      this.values = this.initialValues = fieldValues(values)
+      this.draft = { kind: 'existing', path, source, templateRef: template }
       this.opened++
       void this.prepareSuggestions(this.draft.templateRef)
     } catch (e) {
