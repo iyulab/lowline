@@ -114,6 +114,7 @@ export class LlTemplates extends LitElement {
       await vault.write(this.selected, this.source)
       this.dirty = false
       this.message = strings.saved
+      this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
     } catch (e) {
       this.error = describeError(e)
     }

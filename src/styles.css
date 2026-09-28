@@ -1,6 +1,44 @@
 @import '@iyulab/desktop-compact/tokens.css';
 @import '@iyulab/desktop-patterns/tokens.css';
 
+/* Brand palette: ink on paper, and ink blue for the caret — the only accent. */
+:root {
+  --ll-ink: #1a1a1a;
+  --ll-paper: #f7f5f0;
+  --ll-caret: #2f4a6d;
+  --ll-pending: #b4b1aa;
+
+  --dc-color-bg: var(--ll-paper);
+  --dc-color-surface: #efece5;
+  --dc-color-surface-hover: #e7e3da;
+  --dc-color-border: #e2ded5;
+  --dc-color-text: var(--ll-ink);
+  --dc-color-text-secondary: #5e5c57;
+  --dc-color-text-muted: #6b6964;
+  --dc-color-accent: var(--ll-caret);
+  --dc-color-accent-contrast: var(--ll-paper);
+}
+
+/* Paper on ink; the accent steps aside and the caret takes the paper color. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ll-ink: #f7f5f0;
+    --ll-paper: #1a1a1a;
+    --ll-caret: #f7f5f0;
+    --ll-pending: #6b6964;
+
+    --dc-color-bg: var(--ll-paper);
+    --dc-color-surface: #232322;
+    --dc-color-surface-hover: #2c2c2a;
+    --dc-color-border: #3a3936;
+    --dc-color-text: var(--ll-ink);
+    --dc-color-text-secondary: #bdbab2;
+    --dc-color-text-muted: #9a978f;
+    --dc-color-accent: #7a8ba0;
+    --dc-color-accent-contrast: var(--ll-paper);
+  }
+}
+
 html,
 body {
   margin: 0;
@@ -8,8 +46,8 @@ body {
 }
 
 body {
-  background: var(--dc-color-bg, #fff);
-  color: var(--dc-color-text, #1a1a1a);
+  background: var(--dc-color-bg);
+  color: var(--dc-color-text);
   font-family: var(--dc-font-family, system-ui, sans-serif);
 }
 

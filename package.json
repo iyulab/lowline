@@ -16,6 +16,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource/instrument-sans": "5.3.0",
     "@formdown/core": "0.5.0",
     "@formdown/ui": "0.5.0",
     "@iyulab/desktop-compact": "0.3.0",

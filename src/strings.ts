@@ -7,6 +7,7 @@ export const strings = {
   toggleSidebar: '사이드바 접기/펼치기',
   openVault: '볼트 열기',
   openVaultTitle: '볼트로 쓸 폴더 선택',
+  tagline: '서식을 노트처럼 쓰는 로컬 에디터',
   noVault: '볼트를 열면 서식과 문서가 여기에 보입니다.',
   save: '저장',
   saved: '저장했습니다',
