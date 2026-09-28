@@ -5,7 +5,7 @@
 //! links that point outside. Writes are atomic (the old content or the new, never a torn file).
 
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
@@ -191,6 +191,31 @@ impl Vault {
         })
     }
 
+    /// Appends one line to a file, creating it (and its folders) if needed.
+    ///
+    /// The line and its newline go out in one write and are flushed to disk before this returns.
+    /// A crash can still leave a partial last line; readers skip a line they cannot parse.
+    /// TODO: move to tauri-kit-fs once a second app needs append-only logs (thin-app procedure 2).
+    pub fn append_line(&self, rel: &str, line: &str) -> Result<()> {
+        if line.contains(['\n', '\r']) {
+            return Err(VaultError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "a line cannot hold a line break",
+            )));
+        }
+        let abs = self.prepare(rel)?;
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&abs)?;
+        let mut bytes = Vec::with_capacity(line.len() + 1);
+        bytes.extend_from_slice(line.as_bytes());
+        bytes.push(b'\n');
+        file.write_all(&bytes)?;
+        file.sync_data()?;
+        Ok(())
+    }
+
     fn prepare(&self, rel: &str) -> Result<PathBuf> {
         let abs = self.resolve(rel)?;
         if let Some(parent) = abs.parent() {
@@ -333,5 +358,30 @@ mod tests {
             .map(|e| e.path)
             .collect();
         assert_eq!(names, ["서식/a.fd.md", "서식/b.fd.md"]);
+    }
+
+    #[test]
+    fn appends_lines_creating_the_file_and_its_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        vault
+            .append_line(".lowline/events/a.jsonl", r#"{"n":1}"#)
+            .unwrap();
+        vault
+            .append_line(".lowline/events/a.jsonl", r#"{"n":2}"#)
+            .unwrap();
+        let text = fs::read_to_string(dir.path().join(".lowline/events/a.jsonl")).unwrap();
+        assert_eq!(text, "{\"n\":1}\n{\"n\":2}\n");
+    }
+
+    #[test]
+    fn refuses_a_line_with_a_line_break_or_outside_the_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        assert!(vault.append_line("log.jsonl", "a\nb").is_err());
+        assert!(matches!(
+            vault.append_line("../log.jsonl", "a"),
+            Err(VaultError::OutsideVault(_))
+        ));
     }
 }

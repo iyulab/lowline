@@ -105,6 +105,65 @@ fn create_file(path: String, content: String, state: State<AppState>) -> Command
     with_vault(&state, |v| v.create(&path, &content))
 }
 
+/// Where this install's events go: one append-only file per device, so vaults shared through a
+/// sync service never have two devices writing the same file.
+const EVENTS_DIR: &str = ".lowline/events";
+
+/// Appends one suggestion event (accept, correct or reject) to this device's event file in the vault.
+#[tauri::command]
+fn record_event(
+    event: serde_json::Value,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> CommandResult<()> {
+    if !event.is_object() {
+        return Err(CommandError {
+            kind: "io",
+            message: "an event is a JSON object".into(),
+        });
+    }
+    let device = device_id(&app).map_err(|e| CommandError {
+        kind: "io",
+        message: e.to_string(),
+    })?;
+    let line = event.to_string();
+    with_vault(&state, |v| {
+        v.append_line(&format!("{EVENTS_DIR}/{device}.jsonl"), &line)
+    })
+}
+
+/// This install's id, made on first use and kept outside any vault.
+fn device_id(app: &tauri::AppHandle) -> std::io::Result<String> {
+    let dir = app.path().app_config_dir().map_err(std::io::Error::other)?;
+    let path = dir.join("device-id");
+    if let Ok(id) = std::fs::read_to_string(&path) {
+        let id = id.trim();
+        if !id.is_empty() {
+            return Ok(id.to_string());
+        }
+    }
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // UUID version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let id = format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    );
+    std::fs::create_dir_all(&dir)?;
+    tauri_kit_fs::write_atomic_new(&path, id.as_bytes()).or_else(|e| match e.kind() {
+        // Another window made it first: use theirs.
+        std::io::ErrorKind::AlreadyExists => Ok(()),
+        _ => Err(e),
+    })?;
+    Ok(std::fs::read_to_string(&path)?.trim().to_string())
+}
+
 /// Whether the sidecar is starting, ready, or failed to start.
 #[tauri::command]
 fn host_status(state: State<HostState>) -> HostStatus {
@@ -145,7 +204,10 @@ async fn blocking(
 
 /// A suggestion for one judgment field of a document being filled in.
 #[tauri::command]
-async fn host_suggest(request: serde_json::Value, state: State<'_, HostState>) -> Result<serde_json::Value, String> {
+async fn host_suggest(
+    request: serde_json::Value,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
     let client = state.client()?;
     let body = request.to_string();
     host_json(blocking(move || client.post_json("/suggest", &body)).await?)
@@ -204,7 +266,8 @@ pub fn run() {
             host_status,
             host_ingest,
             host_projection,
-            host_suggest
+            host_suggest,
+            record_event
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")

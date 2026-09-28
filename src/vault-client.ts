@@ -35,6 +35,8 @@ export const vault = {
   write: (path: string, content: string) => invoke<void>('write_file', { path, content }),
   /** Creates the file atomically; rejects with `already-exists` instead of replacing one. */
   create: (path: string, content: string) => invoke<void>('create_file', { path, content }),
+  /** Appends a suggestion event to this device's event file in the vault. */
+  recordEvent: (event: object) => invoke<void>('record_event', { event }),
 }
 
 /** Whether the sidecar is up. */

@@ -124,6 +124,15 @@ async function documentsIn(vault) {
   return (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md') && !FIXTURE_DOCUMENT.test(n))
 }
 
+/** Every suggestion event the vault holds, oldest first. */
+async function events(vault) {
+  const dir = join(vault, '.lowline', 'events')
+  const files = existsSync(dir) ? await readdir(dir) : []
+  const lines = []
+  for (const f of files) lines.push(...(await readFile(join(dir, f), 'utf8')).split('\n').filter(Boolean))
+  return lines.map((l) => JSON.parse(l))
+}
+
 const fileValues = async (path) => parseFormdown(await readFile(path, 'utf8')).frontMatter?.data ?? {}
 
 /** Everything after the front matter. */
@@ -285,6 +294,31 @@ const scenarios = {
     const values = await fileValues(join(vault, '문서', created[0]))
     assert.equal(values.담당, '장비')
     assert.equal(values.요청, '노트북 배터리가 금방 닳아요')
+
+    const [accepted] = await events(vault)
+    assert.deepEqual(
+      { doc: accepted.doc, field: accepted.field, kind: accepted.kind, suggested: accepted.suggested, value: accepted.value },
+      { doc: `문서/${created[0]}`, field: '담당', kind: 'accept', suggested: '장비', value: '장비' },
+    )
+    assert.equal(accepted.recall, '문서/접수-1.md')
+  },
+
+  async 'records a rejected suggestion when the document is saved without it'(app, vault) {
+    await app.choose('select#template', '서식/접수.fd.md')
+    await app.type('[data-field-name="요청"]', '급여 명세서를 다시 받고 싶어요')
+    await app.choose('select[name="부서"]', '개발')
+    await app.cdp.waitFor(`__e2e.all('[role=note][data-field="담당"]').length === 1`, 'a suggestion for 담당', { timeoutMs: 15_000 })
+    await app.click('dc-button', '거절')
+    await app.cdp.waitFor(`__e2e.all('[role=note]').length === 0`, 'the suggestion to be set aside')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    await app.noAlert()
+
+    await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 1000))`)
+    assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion does not come back after saving')
+    const all = await events(vault)
+    assert.equal(all.length, 2, 'one event per confirmation, not per save')
+    assert.deepEqual([all[1].kind, all[1].suggested, all[1].value], ['reject', '인사', null])
   },
 }
 

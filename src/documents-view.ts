@@ -14,6 +14,7 @@ import {
   type FieldValues,
 } from './documents.js'
 import { describeError } from './errors.js'
+import { suggestionEvents } from './events.js'
 import type { Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { host, vault, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -124,6 +125,12 @@ export class LlDocuments extends LitElement {
   private template?: TemplateSnapshot
   /** Suggestions for the draft's empty judgment fields, by field name. */
   @state() private suggestions = new Map<string, Suggestion>()
+  /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
+  private offered = new Map<string, Suggestion>()
+  /** Fields whose suggestion was rejected in this draft: not offered again until it is reopened. */
+  private rejected = new Set<string>()
+  /** Template names (their file names) by `id@version`. */
+  @state() private templateNames = new Map<string, string>()
   /** Counts accepted suggestions, so the form is handed its values again. */
   @state() private applied = 0
   private suggestTimer?: ReturnType<typeof setTimeout>
@@ -139,6 +146,15 @@ export class LlDocuments extends LitElement {
   private async refresh() {
     try {
       ;[this.documents, this.templates] = await Promise.all([vault.listDocuments(), vault.listTemplates()])
+      const names = new Map<string, string>()
+      for (const t of this.templates) {
+        try {
+          names.set(templateInfo(await vault.read(t.path)).ref, t.name.replace(/\.fd\.md$/, ''))
+        } catch {
+          // a template without an identity has no documents
+        }
+      }
+      this.templateNames = names
     } catch (e) {
       this.error = describeError(e)
     }
@@ -150,6 +166,8 @@ export class LlDocuments extends LitElement {
     this.dirty = false
     this.template = undefined
     this.suggestions = new Map()
+    this.offered = new Map()
+    this.rejected = new Set()
   }
 
   /**
@@ -180,7 +198,10 @@ export class LlDocuments extends LitElement {
       if (!isEmpty(values[field])) continue
       try {
         const suggestion = await host.suggest(template.ref, field, values)
-        if (suggestion.value !== null) next.set(field, suggestion)
+        if (suggestion.value !== null && !this.rejected.has(field)) {
+          next.set(field, suggestion)
+          this.offered.set(field, suggestion)
+        }
       } catch {
         // no suggestion for this field
       }
@@ -200,9 +221,27 @@ export class LlDocuments extends LitElement {
     this.applied++
     this.dirty = true
     this.message = ''
+    this.dismiss(field)
+  }
+
+  /** Sets a suggestion aside. The rejection is recorded if the field is still empty when saved. */
+  private reject(field: string) {
+    this.rejected.add(field)
+    this.dismiss(field)
+  }
+
+  private dismiss(field: string) {
     const rest = new Map(this.suggestions)
     rest.delete(field)
     this.suggestions = rest
+  }
+
+  /** Records what the save confirmed about the suggestions offered for this draft. */
+  private async recordSuggestionEvents(path: string) {
+    const events = suggestionEvents(this.offered, this.rejected, this.values, path, new Date())
+    // Each event is recorded once; a rejection stays in force while the draft is open.
+    this.offered = new Map()
+    for (const event of events) await vault.recordEvent(event)
   }
 
   private async startNew(templatePath: string) {
@@ -247,6 +286,7 @@ export class LlDocuments extends LitElement {
         this.draft = { kind: 'existing', path, source, templateRef: draft.templateRef }
         await this.refresh()
       }
+      if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.path)
       this.dirty = false
       this.message = strings.saved
       this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
@@ -289,6 +329,7 @@ export class LlDocuments extends LitElement {
             ? html`<span class="source">${strings.suggestionSource(s.source.replace(/^.*\//, '').replace(/\.md$/, ''))}</span>`
             : nothing}
           <dc-button size="sm" variant="secondary" @click=${() => this.accept(field, s.value!)}>${strings.accept}</dc-button>
+          <dc-button size="sm" variant="ghost" @click=${() => this.reject(field)}>${strings.reject}</dc-button>
         </div>`,
       )}
     </div>`
@@ -328,7 +369,9 @@ export class LlDocuments extends LitElement {
           ? html`
               <div class="bar">
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
-                ${draft.templateRef ? html`<span class="message">${strings.documentFrom(draft.templateRef)}</span>` : nothing}
+                ${draft.templateRef
+                  ? html`<span class="message">${strings.documentFrom(this.templateNames.get(draft.templateRef) ?? draft.templateRef)}</span>`
+                  : nothing}
                 ${this.error
                   ? html`<span class="error" role="alert">${this.error}</span>`
                   : html`<span class="message" role="status">${this.message}</span>`}
