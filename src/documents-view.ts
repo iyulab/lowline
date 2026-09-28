@@ -182,6 +182,8 @@ export class LlDocuments extends LitElement {
     const draft = this.draft
     if (draft?.kind === 'existing' && touches(change, draft.path)) {
       if (change.removed.includes(draft.path)) {
+        // What is on screen is now held nowhere else: it is unsaved, whatever was typed.
+        this.dirty = true
         this.error = strings.removedOutside
       } else if (this.dirty) {
         this.error = strings.changedOutsideDirty
@@ -347,8 +349,10 @@ export class LlDocuments extends LitElement {
         const source = newDocument(draft.templateSource, this.values)
         const path = await this.createDocument(source, documentTitle(draft.templateSource, this.values))
         this.draft = { kind: 'existing', path, source, templateRef: draft.templateRef }
-        await this.refresh()
       }
+      // The app's own writes are not reported back, so the list is read here: a new document, or
+      // one made again after it was removed outside, joins it.
+      await this.refresh()
       if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.path)
       this.dirty = false
       this.changedOutside = false

@@ -326,6 +326,25 @@ const scenarios = {
     assert.equal((await fileValues(path)).심각도, '높음', 'the file is left as the outside edit made it')
     await app.noAlert()
   },
+
+  async 'says when the open document is removed outside, and saving makes it again'(app, vault) {
+    // Another device removed the document this one has open; a sync client carries the removal here.
+    const [name] = await documentsIn(vault)
+    const path = join(vault, '문서', name)
+    const before = await fileValues(path)
+    await rm(path)
+    await app.cdp.waitFor(
+      `__e2e.all('[role=alert]').some((el) => el.textContent.includes('밖에서 지워졌습니다'))`,
+      'the removal announced',
+    )
+    assert.equal(await app.value('select[name="심각도"]'), before.심각도, 'what was on screen is still there')
+
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.ok((await documentsIn(vault)).includes(name), 'made again under its own name')
+    assert.deepEqual(await fileValues(path), before, 'with the values that were on screen')
+    await app.noAlert()
+  },
   async 'shows each document as one row of its template table'(app, vault) {
     await app.click('button', '표')
     await app.choose('select#template', 'bug-report@1')
