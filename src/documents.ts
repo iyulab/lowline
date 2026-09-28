@@ -2,7 +2,7 @@
 // its `id` and `version`. A document is a copy of the template body whose front matter records
 // which template it came from (`template: <id>@<version>`) and the value of each field.
 
-import { parseFormdown, updateFrontMatter } from '@formdown/core'
+import { parseFormdown, readFrontMatter, updateFrontMatter } from '@formdown/core'
 
 /** A field's value: text, a list of texts (checkbox group), or a boolean (single checkbox). */
 export type FieldValue = string | string[] | boolean
@@ -19,7 +19,7 @@ export class TemplateError extends Error {}
 
 /** Reads a template's identity from its front matter. There is no fallback: no id, no template. */
 export function templateInfo(source: string): TemplateInfo {
-  const data = parseFormdown(source).frontMatter?.data ?? {}
+  const data = readFrontMatter(source)?.frontMatter.data ?? {}
   const id = data.id
   const version = data.version
   if (typeof id !== 'string' || id.trim() === '') {
@@ -36,7 +36,7 @@ export function templateInfo(source: string): TemplateInfo {
 
 /** The template text after its front matter, byte for byte. */
 export function templateBody(source: string): string {
-  const span = parseFormdown(source).frontMatter?.span
+  const span = readFrontMatter(source)?.frontMatter.span
   if (!span) return source
   return source.slice(span.end).replace(/^\r?\n/, '')
 }
@@ -81,9 +81,9 @@ export function updateDocument(documentSource: string, values: FieldValues): str
   return updateFrontMatter(documentSource, valueChanges(values))
 }
 
-/** A document's template reference and its values, read from its front matter in one parse. */
+/** A document's template reference and its values, read from its front matter alone. */
 export function documentFrontMatter(documentSource: string): { template?: string; values: Record<string, unknown> } {
-  const { template, ...values } = parseFormdown(documentSource).frontMatter?.data ?? {}
+  const { template, ...values } = readFrontMatter(documentSource)?.frontMatter.data ?? {}
   return { ...(typeof template === 'string' ? { template } : {}), values }
 }
 
