@@ -40,6 +40,7 @@ export const strings = {
   importProblems: (n: number) => `선택지와 맞지 않는 값 ${n}개 — 적힌 그대로 가져옵니다`,
   importProblem: (row: number, field: string, value: string) => `${row}행 ${field}: ${value}`,
   importConfirm: (n: number) => `${n}건 가져오기`,
+  importing: (done: number, total: number) => `가져오는 중 ${done} / ${total}`,
   imported: (n: number) => `${n}건을 가져왔습니다`,
   importStopped: (created: number, message: string) => `${created}건을 만든 뒤 멈췄습니다: ${message}`,
   tableTemplate: '서식',

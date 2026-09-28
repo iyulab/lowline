@@ -76,6 +76,8 @@ export class LlImport extends LitElement {
   @state() private fields: ImportField[] = []
   @state() private plan?: ImportPlan
   @state() private busy = false
+  /** Documents created so far in the running import. */
+  @state() private created = 0
   @state() private error = ''
 
   private async chooseTemplate(path: string) {
@@ -105,6 +107,7 @@ export class LlImport extends LitElement {
     if (!plan || plan.documents.length === 0) return
     this.busy = true
     this.error = ''
+    this.created = 0
     let created = 0
     try {
       const date = new Date()
@@ -112,6 +115,7 @@ export class LlImport extends LitElement {
         const source = newDocument(this.templateSource, values)
         await createDocumentFile(this.vaultInfo.documentsDir, source, documentTitle(this.templateSource, values), date)
         created++
+        this.created = created
       }
       this.dispatchEvent(new CustomEvent('ll-imported', { detail: { created }, bubbles: true, composed: true }))
     } catch (e) {
@@ -137,7 +141,7 @@ export class LlImport extends LitElement {
           <option value="">${strings.pickTemplate}</option>
           ${this.templates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
         </select>
-        <dc-button size="sm" variant="ghost" @click=${this.cancel}>${strings.cancel}</dc-button>
+        <dc-button size="sm" variant="ghost" ?disabled=${this.busy} @click=${this.cancel}>${strings.cancel}</dc-button>
       </div>
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       ${this.templatePath && this.fields.length
@@ -181,7 +185,9 @@ export class LlImport extends LitElement {
           size="sm"
           ?disabled=${this.busy || plan.documents.length === 0}
           @click=${this.importDocuments}
-          >${strings.importConfirm(plan.documents.length)}</dc-button
+          >${this.busy
+            ? strings.importing(this.created, plan.documents.length)
+            : strings.importConfirm(plan.documents.length)}</dc-button
         >
       </div>
     `
