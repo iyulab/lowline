@@ -62,12 +62,19 @@ public sealed class VaultProjection
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Snapshot? _current;
     private Suggestions? _suggestions;
+    private CancellationTokenSource? _selecting;
     private IReadOnlyList<FieldCurve> _curves = [];
 
     public bool Indexed => _current is not null;
 
     /// <summary>Whether suggestions have been built from the vault's confirmed values.</summary>
     public bool MemoryReady => _suggestions is not null;
+
+    /// <summary>
+    /// The threshold selection the latest ingest started, if it needed one; completes when its result is
+    /// in use (or it was superseded by a later ingest).
+    /// </summary>
+    public Task ThresholdsSelected { get; private set; } = Task.CompletedTask;
 
     /// <summary>
     /// Replaces what the sidecar knows with this snapshot.
@@ -82,7 +89,7 @@ public sealed class VaultProjection
     public async Task<IngestResult> IngestAsync(VaultSnapshot vault, CancellationToken cancellationToken)
     {
         var snapshot = await Snapshot.BuildAsync(vault, cancellationToken);
-        var suggestions = await Suggestions.BuildAsync(vault, cancellationToken);
+        var suggestions = await Suggestions.BuildAsync(vault, cancellationToken, _suggestions);
         var curves = Curves.Compute(vault);
         await _gate.WaitAsync(cancellationToken);
         try
@@ -92,12 +99,44 @@ public sealed class VaultProjection
             _suggestions = suggestions;
             _curves = curves;
             if (previous is not null) await previous.DisposeAsync();
+            _selecting?.Cancel();
+            _selecting = null;
+            if (suggestions.NeedsSelection)
+            {
+                _selecting = new CancellationTokenSource();
+                ThresholdsSelected = SelectThresholdsAsync(suggestions, _selecting.Token);
+            }
         }
         finally
         {
             _gate.Release();
         }
         return snapshot.Result;
+    }
+
+    /// <summary>
+    /// Chooses thresholds away from the request that ingested the vault — the replay takes seconds on a large
+    /// vault — and uses them if no later ingest has replaced these suggestions meanwhile.
+    /// </summary>
+    private async Task SelectThresholdsAsync(Suggestions suggestions, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var chosen = await Task.Run(() => suggestions.SelectThresholdsAsync(cancellationToken), cancellationToken);
+            await _gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (ReferenceEquals(_suggestions, suggestions)) suggestions.Apply(chosen);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // superseded by a later ingest
+        }
     }
 
     /// <summary>The table for one template, or null when the vault has no such template.</summary>

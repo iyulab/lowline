@@ -10,7 +10,7 @@ namespace Lowline.Host.Tests;
 /// </summary>
 public sealed class RebuildCostTests
 {
-    private static readonly TemplateSnapshot Intake = new("intake@1",
+    internal static readonly TemplateSnapshot Intake = new("intake@1",
     [
         new TemplateField("요청", "textarea"),
         new TemplateField("부서", "text"),
@@ -25,7 +25,7 @@ public sealed class RebuildCostTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static VaultSnapshot Synthetic(int count)
+    internal static VaultSnapshot Synthetic(int count)
     {
         var random = new Random(count);
         var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
@@ -65,6 +65,10 @@ public sealed class RebuildCostTests
         var first = Stopwatch.StartNew();
         await vault.IngestAsync(snapshot, Ct);
         first.Stop();
+        // Thresholds are chosen apart from the ingest, by replaying the history once.
+        var thresholds = Stopwatch.StartNew();
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+        thresholds.Stop();
         var again = Stopwatch.StartNew();
         var result = await vault.IngestAsync(snapshot, Ct);
         again.Stop();
@@ -86,7 +90,7 @@ public sealed class RebuildCostTests
         await vault.CurvesAsync(Ct);
         curves.Stop();
 
-        var line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms · rebuild {again.ElapsedMilliseconds} ms · "
+        var line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms · thresholds {thresholds.ElapsedMilliseconds} ms · rebuild {again.ElapsedMilliseconds} ms · "
             + $"table {table.ElapsedMilliseconds} ms · suggest {suggest.ElapsedMilliseconds} ms · curves {curves.ElapsedMilliseconds} ms · "
             + $"managed heap {GC.GetTotalMemory(forceFullCollection: true) / (1024 * 1024)} MB";
         TestContext.Current.TestOutputHelper?.WriteLine(line);

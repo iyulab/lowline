@@ -33,14 +33,53 @@ public sealed class SuggestionsTests
             Document("문서/2.md", """{"요청": "급여 명세서를 다시 받고 싶어요", "부서": "개발", "담당": "인사"}"""));
 
         var suggestion = await vault.SuggestAsync(
-            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업"}""")), Ct);
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요!", "부서": "기획"}""")), Ct);
 
         Assert.NotNull(suggestion);
         Assert.Equal("장비", suggestion.Value);
         Assert.Equal("memory", suggestion.Mode);
         Assert.Equal("문서/1.md", suggestion.Source);
-        Assert.True(suggestion.Similarity >= Suggestions.MemoryThreshold);
+        Assert.True(suggestion.Similarity >= Suggestions.PriorThreshold);
         Assert.True(vault.MemoryReady);
+    }
+
+    [Fact]
+    public async Task Does_not_offer_a_value_only_another_fields_value_backs()
+    {
+        // 인사 was confirmed with 부서 개발, but the request itself resembles nothing confirmed.
+        var vault = await Vault(
+            Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
+            Document("문서/2.md", """{"요청": "급여 명세서를 다시 받고 싶어요", "부서": "개발", "담당": "인사"}"""));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "회의실 예약 방법이 궁금합니다", "부서": "개발"}""")), Ct);
+
+        Assert.Equal(new Suggestion(null, "abstain", null, null), suggestion);
+    }
+
+    [Fact]
+    public async Task Does_not_offer_a_value_nothing_in_the_document_backs()
+    {
+        // 장비 is the field's most frequent value, but nothing in this document points to it.
+        var vault = await Vault(
+            Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
+            Document("문서/2.md", """{"요청": "모니터가 깜빡여요", "부서": "영업", "담당": "장비"}"""));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "회의실 예약 방법이 궁금합니다", "부서": "총무"}""")), Ct);
+
+        Assert.Equal(new Suggestion(null, "abstain", null, null), suggestion);
+    }
+
+    [Fact]
+    public async Task A_document_is_not_its_own_similar_document()
+    {
+        var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요!"}"""), "문서/1.md"), Ct);
+
+        Assert.Null(suggestion!.Value);
     }
 
     [Fact]
@@ -51,7 +90,7 @@ public sealed class SuggestionsTests
         var suggestion = await vault.SuggestAsync(
             new SuggestRequest("intake@1", "담당", Values("""{"요청": "회의실 예약 방법이 궁금합니다"}""")), Ct);
 
-        Assert.Equal(new Suggestion(null, "abstain", null, suggestion!.Similarity), suggestion);
+        Assert.Equal(new Suggestion(null, "abstain", null, null), suggestion);
     }
 
     [Fact]
@@ -75,9 +114,42 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
-    public void The_request_is_the_other_filled_fields_in_template_order() =>
-        Assert.Equal("요청: 배터리\n부서: 영업",
-            Suggestions.Request(Intake, "담당", Values("""{"부서": "영업", "담당": "장비", "요청": "배터리"}""")));
+    public async Task Chooses_a_fields_threshold_from_its_history_once_it_is_long_enough()
+    {
+        var few = await Suggestions.BuildAsync(new VaultSnapshot([Intake],
+            [.. Enumerable.Range(1, 5).Select(i => Document($"문서/{i}.md", $$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}"""))]), Ct);
+        Assert.Null(few.Choice("intake@1", "담당")); // too short: the prior threshold serves
+
+        var many = await Suggestions.BuildAsync(Many(15), Ct);
+        Assert.True(many.NeedsSelection);
+        Assert.Null(many.Choice("intake@1", "담당")); // chosen apart from building memory
+        many.Apply(await many.SelectThresholdsAsync(Ct));
+        Assert.False(many.NeedsSelection);
+        var choice = many.Choice("intake@1", "담당");
+        Assert.NotNull(choice);
+        Assert.True(choice.Precision >= Suggestions.TargetPrecision);
+        Assert.True(choice.Answered >= Suggestions.MinimumAnswered);
+
+        // Rebuilt from the same vault, the field keeps its threshold rather than replaying again.
+        var rebuilt = await Suggestions.BuildAsync(Many(15), Ct, previous: many);
+        Assert.False(rebuilt.NeedsSelection);
+        Assert.Equal(choice, rebuilt.Choice("intake@1", "담당"));
+        Assert.True((await Suggestions.BuildAsync(Many(17), Ct, previous: many)).NeedsSelection); // grew by a tenth
+    }
+
+    private static VaultSnapshot Many(int count) => new([Intake],
+        [.. Enumerable.Range(1, count).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
+            Values($$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}"""), Modified: i))]);
+
+    [Fact]
+    public async Task A_vault_ingest_chooses_thresholds_in_the_background()
+    {
+        var vault = new VaultProjection();
+        await vault.IngestAsync(Many(15), Ct);
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+        await vault.IngestAsync(Many(15), Ct);
+        Assert.True(vault.ThresholdsSelected.IsCompleted); // nothing grew: no replay started
+    }
 
     private static readonly DocumentSnapshot[] Confirmed =
     [
