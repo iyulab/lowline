@@ -66,6 +66,8 @@ public sealed class Suggestions
     /// Remembers the judgment values the vault's documents hold. The same field is answered by its
     /// latest confirmation: documents are taken newest first, and a case already answered by a newer
     /// document is not remembered again — its older answer was corrected since.
+    /// TODO(upstream: docket iyulab/Gil#534) — recency is the memory's rule to own: settled documents
+    /// with a confirmation time, rebuilt in any order. Remove this ordering once that surface is used.
     /// </summary>
     public static async Task<Suggestions> BuildAsync(VaultSnapshot vault, CancellationToken cancellationToken)
     {
