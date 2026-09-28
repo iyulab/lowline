@@ -21,6 +21,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { syncVault } from './vault-snapshot.js'
 import { createDocumentFile } from './document-files.js'
+import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
 
 /** How long typing pauses before suggestions are asked for again. */
@@ -164,6 +165,11 @@ export class LlDocuments extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     void this.unlisten?.then((stop) => stop())
+    markUnsaved('documents', false)
+  }
+
+  updated(changed: Map<string, unknown>) {
+    if (changed.has('dirty')) markUnsaved('documents', this.dirty)
   }
 
   /**
@@ -360,6 +366,11 @@ export class LlDocuments extends LitElement {
     return createDocumentFile(this.vaultInfo.documentsDir, source, title)
   }
 
+  /** Goes elsewhere once unsaved edits to the open document are let go. */
+  private async leaveFor(next: () => unknown) {
+    if (await confirmDiscard()) await next()
+  }
+
   private startImport() {
     this.reset()
     this.draft = undefined
@@ -406,21 +417,22 @@ export class LlDocuments extends LitElement {
             id="template"
             @change=${(e: Event) => {
               const select = e.target as HTMLSelectElement
-              if (select.value) void this.startNew(select.value)
+              const path = select.value
+              if (path) void this.leaveFor(() => this.startNew(path))
               select.value = ''
             }}
           >
             <option value="">${strings.pickTemplate}</option>
             ${this.templates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
           </select>
-          <dc-button size="sm" variant="ghost" @click=${this.startImport}>${strings.import}</dc-button>
+          <dc-button size="sm" variant="ghost" @click=${() => this.leaveFor(() => this.startImport())}>${strings.import}</dc-button>
         </div>
         ${this.documents.length === 0
           ? html`<p class="message">${strings.noDocuments}</p>`
           : this.documents.map(
               (d) => html`<button
                 aria-current=${draft?.kind === 'existing' && draft.path === d.path}
-                @click=${() => this.open(d.path)}
+                @click=${() => this.leaveFor(() => this.open(d.path))}
               >
                 ${d.name.replace(/\.md$/, '')}
               </button>`,

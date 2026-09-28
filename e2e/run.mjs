@@ -145,6 +145,13 @@ class App {
     return this.cdp.waitFor(`__e2e.all('[role=status]').some((el) => el.textContent.trim() === ${q(text)})`, `status "${text}"`)
   }
 
+  /** Waits for the unsaved-edits question and answers it with the button labelled `choice`. */
+  async answerUnsaved(choice) {
+    await this.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open)`, 'the unsaved-edits question')
+    await this.click('dc-button', choice)
+    await this.cdp.waitFor(`!__e2e.all('dc-confirm-dialog').some((d) => d.open)`, 'the question answered')
+  }
+
   async noAlert() {
     const alert = await this.cdp.evaluate(`__e2e.all('[role=alert]').map((el) => el.textContent.trim()).filter(Boolean).join(' / ')`)
     assert.equal(alert, '', 'no error shown')
@@ -445,6 +452,21 @@ const scenarios = {
     assert.equal(await suggestionNow(), suggestion, 'the same suggestion')
     await app.noAlert()
   },
+  async 'asks before dropping unsaved edits'(app) {
+    // The scenario before left a new document typed into and not saved.
+    await app.click('button', '문서')
+    const typed = await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]')?.textContent`)
+    assert.ok(typed, 'an unsaved draft is open')
+
+    await app.click('nav button', '접수-1')
+    await app.answerUnsaved('계속 편집')
+    assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]')?.textContent`), typed, 'the edits are kept')
+
+    await app.click('nav button', '접수-1')
+    await app.answerUnsaved('편집 버리기')
+    await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '접수-1'`, 'the other document open')
+    await app.noAlert()
+  },
   async 'imports rows copied from a spreadsheet, and suggests from them'(app, vault) {
     const before = new Set(await documentsIn(vault))
     await app.click('button', '문서')
@@ -498,7 +520,9 @@ const scenarios = {
     await app.noAlert()
   },
   async 'shows how often suggestions were right, from the event files'(app, vault) {
+    // The scenario before left a new document typed into: leaving it asks first.
     await app.click('button', '학습')
+    await app.answerUnsaved('편집 버리기')
     const figures = await app.cdp.waitFor(
       `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\\s+/g, ' ').trim() })()`,
       'the curve of 접수 · 담당',

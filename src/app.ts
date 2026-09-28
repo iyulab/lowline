@@ -1,11 +1,13 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, queryAll, state } from 'lit/decorators.js'
 import { open } from '@tauri-apps/plugin-dialog'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
 import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
 import { strings } from './strings.js'
 import { vault, type VaultInfo } from './vault-client.js'
+import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
 import './templates-view.js'
 import './documents-view.js'
 import './table-view.js'
@@ -51,6 +53,9 @@ export class LlApp extends LitElement {
   @state() private error = ''
   /** A document to open in the documents view, asked for from elsewhere (a table row). */
   @state() private openPath?: string
+  /** The unsaved-edits question is showing; the answer settles the promise it was asked with. */
+  @state() private asking = false
+  private answer?: (discard: boolean) => void
   @queryAll('ll-mark') private marks!: NodeListOf<LlMark>
 
   connectedCallback() {
@@ -60,13 +65,41 @@ export class LlApp extends LitElement {
     this.addEventListener('pointerdown', () => this.marks.forEach((m) => m.wake()))
     // A save is a confirmation: the mark shows "not yet" becoming "confirmed".
     this.addEventListener('ll-confirmed', () => this.marks.forEach((m) => m.confirm()))
+    setDiscardQuestion(
+      () =>
+        new Promise<boolean>((resolve) => {
+          this.answer = resolve
+          this.asking = true
+        }),
+    )
+    // Closing the window with unsaved edits asks first, like everywhere else in the app.
+    const win = getCurrentWindow()
+    void win.onCloseRequested(async (e) => {
+      if (!hasUnsaved()) return
+      e.preventDefault()
+      if (await confirmDiscard()) await win.destroy()
+    })
     this.addEventListener('ll-open-document', (e) => {
       this.openPath = (e as CustomEvent<{ path: string }>).detail.path
       this.view = 'documents'
     })
   }
 
+  private settle(discard: boolean) {
+    this.asking = false
+    this.answer?.(discard)
+    this.answer = undefined
+  }
+
+  private async switchTo(view: View) {
+    if (view === this.view) return
+    if (!(await confirmDiscard())) return this.requestUpdate() // the sidebar shows the view kept
+    this.openPath = undefined
+    this.view = view
+  }
+
   private async openVault() {
+    if (!(await confirmDiscard())) return
     const path = await open({ directory: true, title: strings.openVaultTitle })
     if (typeof path !== 'string') return
     try {
@@ -92,10 +125,7 @@ export class LlApp extends LitElement {
             { id: 'table', icon: '▥', label: strings.navTable },
             { id: 'learning', icon: '◔', label: strings.navLearning },
           ]}
-          @dp-sidebar-select=${(e: DpSidebarSelectEvent) => {
-            this.openPath = undefined
-            this.view = e.itemId as View
-          }}
+          @dp-sidebar-select=${(e: DpSidebarSelectEvent) => void this.switchTo(e.itemId as View)}
         >
           <ll-mark slot="icon" size="20" label=""></ll-mark>
         </dp-sidebar>
@@ -127,6 +157,16 @@ export class LlApp extends LitElement {
                   : html`<ll-learning .vaultInfo=${info}></ll-learning>`}
         </dp-page>
       </dp-shell>
+      <dc-confirm-dialog
+        heading=${strings.unsavedHeading}
+        confirm-label=${strings.unsavedDiscard}
+        cancel-label=${strings.unsavedKeep}
+        danger
+        .open=${this.asking}
+        @confirm=${() => this.settle(true)}
+        @cancel=${() => this.settle(false)}
+        >${strings.unsavedBody}</dc-confirm-dialog
+      >
     `
   }
 }

@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { templateInfo } from './documents.js'
 import { describeError } from './errors.js'
+import { confirmDiscard, markUnsaved } from './unsaved.js'
 import { starterTemplate, strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -98,6 +99,17 @@ export class LlTemplates extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     void this.unlisten?.then((stop) => stop())
+    markUnsaved('templates', false)
+  }
+
+  updated(changed: Map<string, unknown>) {
+    if (changed.has('dirty')) markUnsaved('templates', this.dirty)
+  }
+
+  /** Opens another template once unsaved edits to this one are let go. */
+  private async choose(path: string) {
+    if (path === this.selected || !(await confirmDiscard())) return
+    await this.select(path)
   }
 
   /** Shows what another program did to the templates; an edit in progress is never replaced. */
@@ -165,6 +177,7 @@ export class LlTemplates extends LitElement {
   }
 
   private async create() {
+    if (!(await confirmDiscard())) return
     this.error = ''
     const id = `template-${Date.now().toString(36)}`
     const dir = this.vaultInfo.templatesDir
@@ -193,7 +206,7 @@ export class LlTemplates extends LitElement {
         ${this.entries.length === 0
           ? html`<p class="message">${strings.noTemplates}</p>`
           : this.entries.map(
-              (e) => html`<button aria-current=${e.path === this.selected} @click=${() => this.select(e.path)}>
+              (e) => html`<button aria-current=${e.path === this.selected} @click=${() => this.choose(e.path)}>
                 ${e.name.replace(/\.fd\.md$/, '')}
               </button>`,
             )}
