@@ -19,11 +19,12 @@ npm install
 npm run tauri dev      # run the app
 npm test               # web UI tests
 cargo test --manifest-path src-tauri/Cargo.toml   # shell tests
+npm run build:e2e && npm run test:e2e              # end-to-end scenarios in the real window
 ```
 
 Layout: `src-tauri/` is the shell — the only code that reads or writes files, all inside the open vault folder and all writes atomic. `src/` is the web UI.
 
-`src-tauri/tauri.e2e.conf.json` builds a variant that exposes the WebView DevTools protocol on port 9223 for automated UI checks: `npm run tauri build -- --debug --no-bundle --config src-tauri/tauri.e2e.conf.json`.
+End-to-end scenarios live in `e2e/`. `npm run build:e2e` builds a debug variant (`src-tauri/tauri.e2e.conf.json`) that exposes the WebView DevTools protocol on port 9223; `npm run test:e2e` copies the fixture vault in `e2e/fixtures/vault/` to a temporary folder, drives the window with clicks and typing, and checks the saved files on disk.
 
 ## License
 

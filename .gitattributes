@@ -1,0 +1,2 @@
+# Fixture vaults are compared byte for byte; keep them exactly as committed.
+e2e/fixtures/** -text
