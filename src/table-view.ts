@@ -3,7 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { describeError } from './errors.js'
 import { cellText, type IngestResult, type ProjectionTable, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
-import { host, type VaultInfo } from './vault-client.js'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { host, onVaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 
 /** A document's name as the vault shows it: its file name without the extension. */
@@ -95,9 +96,18 @@ export class LlTable extends LitElement {
   @state() private waiting = true
   @state() private error = ''
 
+  private unlisten?: Promise<UnlistenFn>
+
   connectedCallback() {
     super.connectedCallback()
     void this.load()
+    // Another program changed the vault: the table is projected again from what is there now.
+    this.unlisten = onVaultChanged(() => void this.load())
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    void this.unlisten?.then((stop) => stop())
   }
 
   /** Reads the vault, hands it to the sidecar, and shows the first template's table. */

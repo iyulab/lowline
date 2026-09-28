@@ -18,7 +18,8 @@ import { describeError } from './errors.js'
 import { suggestionEvents } from './events.js'
 import type { Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
-import { host, vault, type VaultEntry, type VaultInfo } from './vault-client.js'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { host, onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { syncVault } from './vault-snapshot.js'
 
 /** How long typing pauses before suggestions are asked for again. */
@@ -146,10 +147,40 @@ export class LlDocuments extends LitElement {
   @state() private message = ''
   @state() private error = ''
 
+  private unlisten?: Promise<UnlistenFn>
+
   connectedCallback() {
     super.connectedCallback()
     void this.refresh()
     if (this.openPath) void this.open(this.openPath)
+    this.unlisten = onVaultChanged((change) => void this.outsideChange(change))
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    void this.unlisten?.then((stop) => stop())
+  }
+
+  /**
+   * Shows what another program did to the vault. The open document is read again only when it
+   * has no unsaved edits; otherwise the person is told, and saving decides. Suggestions learn from
+   * the vault as it is now.
+   */
+  private async outsideChange(change: VaultChanged) {
+    await this.refresh()
+    const draft = this.draft
+    if (draft?.kind === 'existing' && touches(change, draft.path)) {
+      if (change.removed.includes(draft.path)) {
+        this.error = strings.removedOutside
+      } else if (this.dirty) {
+        this.error = strings.changedOutsideDirty
+      } else {
+        await this.open(draft.path)
+        if (!change.rescan) this.message = strings.reloadedOutside
+        return // opening prepares the suggestions again
+      }
+    }
+    if (this.template) void this.prepareSuggestions(draft?.templateRef)
   }
 
   private async refresh() {

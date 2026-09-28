@@ -3,7 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { templateInfo } from './documents.js'
 import { describeError } from './errors.js'
 import { starterTemplate, strings } from './strings.js'
-import { vault, type VaultEntry, type VaultInfo } from './vault-client.js'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 /** Templates: pick one, edit its Formdown source next to a live preview, save. */
 @customElement('ll-templates')
@@ -84,9 +85,36 @@ export class LlTemplates extends LitElement {
   @state() private message = ''
   @state() private error = ''
 
+  private unlisten?: Promise<UnlistenFn>
+
   connectedCallback() {
     super.connectedCallback()
     void this.refresh()
+    this.unlisten = onVaultChanged((change) => void this.outsideChange(change))
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    void this.unlisten?.then((stop) => stop())
+  }
+
+  /** Shows what another program did to the templates; an edit in progress is never replaced. */
+  private async outsideChange(change: VaultChanged) {
+    try {
+      await this.refresh()
+      const selected = this.selected
+      if (!selected || !touches(change, selected)) return
+      if (change.removed.includes(selected)) {
+        this.error = strings.removedOutside
+      } else if (this.dirty) {
+        this.error = strings.changedOutsideDirty
+      } else {
+        await this.select(selected)
+        if (!change.rescan) this.message = strings.reloadedOutside
+      }
+    } catch (e) {
+      this.error = describeError(e)
+    }
   }
 
   private async refresh() {

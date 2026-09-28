@@ -1,5 +1,6 @@
 // The UI's only way to the vault: commands handled by the shell, which owns every file.
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
 
 export interface VaultInfo {
@@ -39,6 +40,24 @@ export const vault = {
   recordEvent: (event: object) => invoke<void>('record_event', { event }),
   /** Every device's event file. */
   listEvents: () => invoke<VaultEntry[]>('list_events'),
+}
+
+/** What changed in the vault outside the app. Paths are relative to the vault, `/`-separated. */
+export interface VaultChanged {
+  /** Changes were lost: everything shown may be stale. */
+  rescan: boolean
+  written: string[]
+  removed: string[]
+}
+
+/** Calls `onChange` whenever something outside the app changes the vault; resolves to the way to stop. */
+export function onVaultChanged(onChange: (change: VaultChanged) => void): Promise<UnlistenFn> {
+  return listen<VaultChanged>('vault-changed', (e) => onChange(e.payload))
+}
+
+/** Whether a change touches `path`. */
+export function touches(change: VaultChanged, path: string): boolean {
+  return change.rescan || change.written.includes(path) || change.removed.includes(path)
 }
 
 /** Whether the sidecar is up. */

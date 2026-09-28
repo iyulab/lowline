@@ -1,21 +1,24 @@
 mod host;
 mod vault;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{Manager, RunEvent, State};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
+use tauri_kit_watch::{ChangeKind, Notice, Watch, Watcher};
 
 use host::{HostState, HostStatus};
 use vault::{
     Entry, Vault, VaultError, DOCUMENTS_DIR, DOCUMENT_SUFFIX, TEMPLATES_DIR, TEMPLATE_SUFFIX,
 };
 
-/// The open vault. The shell is the only place that touches files.
+/// The open vault and the watch on it. The shell is the only place that touches files.
 #[derive(Default)]
 struct AppState {
     vault: Mutex<Option<Vault>>,
+    watcher: Mutex<Option<Watcher>>,
 }
 
 /// What a command failure looks like to the UI.
@@ -62,7 +65,7 @@ struct VaultInfo {
 }
 
 #[tauri::command]
-fn open_vault(path: String, state: State<AppState>) -> CommandResult<VaultInfo> {
+fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> CommandResult<VaultInfo> {
     let vault = Vault::open(&PathBuf::from(&path))?;
     let root = vault.root();
     let info = VaultInfo {
@@ -74,8 +77,81 @@ fn open_vault(path: String, state: State<AppState>) -> CommandResult<VaultInfo> 
         templates_dir: TEMPLATES_DIR,
         documents_dir: DOCUMENTS_DIR,
     };
+    // The previous vault's watch stops before the next one starts.
+    state.watcher.lock().expect("watch state poisoned").take();
+    let watcher = watch_vault(&app, &vault)
+        .inspect_err(|e| {
+            eprintln!("the vault is not watched, outside edits show on the next read: {e}")
+        })
+        .ok();
     *state.vault.lock().expect("vault state poisoned") = Some(vault);
+    *state.watcher.lock().expect("watch state poisoned") = watcher;
     Ok(info)
+}
+
+/// Where the app keeps files of its own in a vault that are not the user's: probe files of the
+/// watch. Nothing in it is reported.
+const TMP_DIR: &str = ".lowline/tmp";
+
+/// How often the watch checks that it still hears the vault.
+const PROBE_EVERY: Duration = Duration::from_secs(300);
+
+/// What changed in the vault, as the UI is told: paths relative to the vault, `/`-separated.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct VaultChanged {
+    /// Changes were lost: everything shown may be stale and is read again.
+    rescan: bool,
+    written: Vec<String>,
+    removed: Vec<String>,
+}
+
+impl From<Notice> for VaultChanged {
+    fn from(notice: Notice) -> Self {
+        let mut changed = VaultChanged {
+            rescan: false,
+            written: Vec::new(),
+            removed: Vec::new(),
+        };
+        match notice {
+            Notice::Rescan => changed.rescan = true,
+            Notice::Changed(changes) => {
+                for change in changes {
+                    let path = slashed(&change.path);
+                    match change.kind {
+                        ChangeKind::Written => changed.written.push(path),
+                        ChangeKind::Removed => changed.removed.push(path),
+                    }
+                }
+            }
+        }
+        changed
+    }
+}
+
+fn slashed(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Watches the vault for edits made outside the app — another editor, a sync client, another
+/// device — and tells the UI. This app's own writes are left out, and so is this device's event
+/// file, which only this app appends to.
+fn watch_vault(app: &AppHandle, vault: &Vault) -> std::io::Result<Watcher> {
+    let _ = tauri_kit_fs::sweep_staging(&vault.root().join(TMP_DIR), Duration::from_secs(3600));
+    let own_events = device_id(app)
+        .ok()
+        .map(|d| PathBuf::from(format!("{EVENTS_DIR}/{d}.jsonl")));
+    let app = app.clone();
+    Watch::new(vault.root())
+        .own_writes(vault.own_writes())
+        .ignore(move |rel| rel.starts_with(TMP_DIR) || own_events.as_deref() == Some(rel))
+        .probe_liveness(TMP_DIR, PROBE_EVERY)
+        .start(move |notice| {
+            let _ = app.emit("vault-changed", VaultChanged::from(notice));
+        })
 }
 
 #[tauri::command]
@@ -287,7 +363,8 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::encode_segment;
+    use super::*;
+    use tauri_kit_watch::Change;
 
     #[test]
     fn a_template_id_stays_one_path_segment() {
@@ -296,5 +373,23 @@ mod tests {
             encode_segment("상담/기록 1"),
             "%EC%83%81%EB%8B%B4%2F%EA%B8%B0%EB%A1%9D%201"
         );
+    }
+
+    #[test]
+    fn a_change_reaches_the_ui_with_vault_paths() {
+        let changed = VaultChanged::from(Notice::Changed(vec![
+            Change {
+                path: Path::new("문서").join("a.md"),
+                kind: ChangeKind::Written,
+            },
+            Change {
+                path: PathBuf::from("서식/b.fd.md"),
+                kind: ChangeKind::Removed,
+            },
+        ]));
+        assert_eq!(changed.written, vec!["문서/a.md"]);
+        assert_eq!(changed.removed, vec!["서식/b.fd.md"]);
+        assert!(!changed.rescan);
+        assert!(VaultChanged::from(Notice::Rescan).rescan);
     }
 }

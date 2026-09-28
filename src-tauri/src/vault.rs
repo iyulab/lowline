@@ -10,6 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
+use tauri_kit_watch::OwnWrites;
 
 /// Folder for form templates.
 pub const TEMPLATES_DIR: &str = "서식";
@@ -75,6 +76,8 @@ pub struct Entry {
 #[derive(Debug, Clone)]
 pub struct Vault {
     root: PathBuf,
+    /// What this app wrote, so the vault watch does not report it back as an outside edit.
+    own: OwnWrites,
 }
 
 impl Vault {
@@ -87,11 +90,19 @@ impl Vault {
         if !root.is_dir() {
             return Err(VaultError::NotFound(path.display().to_string()));
         }
-        Ok(Vault { root })
+        Ok(Vault {
+            root,
+            own: OwnWrites::new(),
+        })
     }
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// The record of this app's own writes, for the vault watch.
+    pub fn own_writes(&self) -> &OwnWrites {
+        &self.own
     }
 
     /// Maps a vault-relative path to a location inside the vault, or refuses it.
@@ -178,16 +189,22 @@ impl Vault {
     /// Replaces (or creates) a file atomically.
     pub fn write(&self, rel: &str, content: &str) -> Result<()> {
         let abs = self.prepare(rel)?;
-        tauri_kit_fs::write_atomic(&abs, content.as_bytes())?;
+        self.own.record(&abs, content.as_bytes());
+        tauri_kit_fs::write_atomic(&abs, content.as_bytes())
+            .inspect_err(|_| self.own.forget(&abs))?;
         Ok(())
     }
 
     /// Creates a file atomically, refusing to replace one that is already there.
     pub fn create(&self, rel: &str, content: &str) -> Result<()> {
         let abs = self.prepare(rel)?;
-        tauri_kit_fs::write_atomic_new(&abs, content.as_bytes()).map_err(|e| match e.kind() {
-            io::ErrorKind::AlreadyExists => VaultError::AlreadyExists(rel.to_string()),
-            _ => VaultError::Io(e),
+        self.own.record(&abs, content.as_bytes());
+        tauri_kit_fs::write_atomic_new(&abs, content.as_bytes()).map_err(|e| {
+            self.own.forget(&abs);
+            match e.kind() {
+                io::ErrorKind::AlreadyExists => VaultError::AlreadyExists(rel.to_string()),
+                _ => VaultError::Io(e),
+            }
         })
     }
 

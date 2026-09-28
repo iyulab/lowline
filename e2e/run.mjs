@@ -8,7 +8,7 @@
 // `open_vault` command the picker's result goes to. Everything after that is clicks and typing.
 
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -274,6 +274,33 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'shows an edit made outside the app, and never replaces an unsaved one'(app, vault) {
+    // The document is open from the scenario before, with nothing unsaved.
+    const [name] = await documentsIn(vault)
+    const path = join(vault, '문서', name)
+    const severity = async (value) => writeFile(path, (await readFile(path, 'utf8')).replace(/^심각도: .*$/m, `심각도: ${value}`))
+
+    await severity('낮음')
+    await app.status('밖에서 바뀌어 다시 읽었습니다')
+    assert.equal(await app.value('select[name="심각도"]'), '낮음', 'the open document shows the outside edit')
+
+    // With an unsaved edit, an outside edit is announced and nothing typed is lost.
+    await app.choose('select[name="심각도"]', '보통')
+    await severity('높음')
+    await app.cdp.waitFor(
+      `__e2e.all('[role=alert]').some((el) => el.textContent.includes('밖에서 바뀌었습니다'))`,
+      'the outside edit announced',
+    )
+    assert.equal(await app.value('select[name="심각도"]'), '보통', 'the unsaved edit is kept')
+
+    // Saving decides. The save is the app's own write: it is not taken for an outside edit.
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal((await fileValues(path)).심각도, '보통')
+    await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 1500))`)
+    await app.status('저장했습니다')
+    await app.noAlert()
+  },
   async 'shows each document as one row of its template table'(app, vault) {
     await app.click('button', '표')
     await app.choose('select#template', 'bug-report@1')
