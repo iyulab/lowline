@@ -34,6 +34,8 @@ app.MapPost("/vault/ingest", (VaultSnapshot snapshot, VaultProjection vault, Can
 app.MapGet("/projection/{**template}", async (string template, VaultProjection vault, CancellationToken ct) =>
     await vault.TableAsync(template, ct) is { } table ? Results.Ok(table) : Results.NotFound());
 
+app.MapGet("/curves", (VaultProjection vault, CancellationToken ct) => vault.CurvesAsync(ct));
+
 app.MapPost("/suggest", async (SuggestRequest request, VaultProjection vault, CancellationToken ct) =>
     await vault.SuggestAsync(request, ct) is { } suggestion ? Results.Ok(suggestion) : Results.NotFound());
 

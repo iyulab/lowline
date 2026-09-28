@@ -9,8 +9,9 @@ import { vault, type VaultInfo } from './vault-client.js'
 import './templates-view.js'
 import './documents-view.js'
 import './table-view.js'
+import './learning-view.js'
 
-type View = 'templates' | 'documents' | 'table'
+type View = 'templates' | 'documents' | 'table' | 'learning'
 
 @customElement('ll-app')
 export class LlApp extends LitElement {
@@ -89,6 +90,7 @@ export class LlApp extends LitElement {
             { id: 'templates', icon: '▤', label: strings.navTemplates },
             { id: 'documents', icon: '▦', label: strings.navDocuments },
             { id: 'table', icon: '▥', label: strings.navTable },
+            { id: 'learning', icon: '◔', label: strings.navLearning },
           ]}
           @dp-sidebar-select=${(e: DpSidebarSelectEvent) => {
             this.openPath = undefined
@@ -99,7 +101,7 @@ export class LlApp extends LitElement {
         </dp-sidebar>
         <dp-toolbar
           slot="toolbar"
-          heading=${{ templates: strings.navTemplates, documents: strings.navDocuments, table: strings.navTable }[this.view]}
+          heading=${{ templates: strings.navTemplates, documents: strings.navDocuments, table: strings.navTable, learning: strings.navLearning }[this.view]}
           subtitle=${info?.root ?? ''}
           show-toggle
           toggle-label=${strings.toggleSidebar}
@@ -120,7 +122,9 @@ export class LlApp extends LitElement {
               ? html`<ll-templates .vaultInfo=${info}></ll-templates>`
               : this.view === 'documents'
                 ? html`<ll-documents .vaultInfo=${info} .openPath=${this.openPath}></ll-documents>`
-                : html`<ll-table .vaultInfo=${info}></ll-table>`}
+                : this.view === 'table'
+                  ? html`<ll-table .vaultInfo=${info}></ll-table>`
+                  : html`<ll-learning .vaultInfo=${info}></ll-learning>`}
         </dp-page>
       </dp-shell>
     `

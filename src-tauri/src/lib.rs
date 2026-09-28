@@ -274,6 +274,13 @@ async fn host_projection(
     host_json(blocking(move || client.get(&path)).await?)
 }
 
+/// How the suggestions of each judgment field have fared, from the vault's event files.
+#[tauri::command]
+async fn host_curves(state: State<'_, HostState>) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    host_json(blocking(move || client.get("/curves")).await?)
+}
+
 /// Runs a request to the sidecar off the async runtime.
 async fn blocking(
     request: impl FnOnce() -> Result<String, ureq::Error> + Send + 'static,
@@ -348,6 +355,7 @@ pub fn run() {
             host_status,
             host_ingest,
             host_projection,
+            host_curves,
             host_suggest,
             record_event,
             list_events

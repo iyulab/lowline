@@ -7,6 +7,8 @@
   --ll-paper: #f7f5f0;
   --ll-caret: #2f4a6d;
   --ll-pending: #b4b1aa;
+  /* Data marks: the caret's ink blue, stepped until it reads as a color on paper (checked). */
+  --ll-chart-line: #3c67a3;
 
   --dc-color-bg: var(--ll-paper);
   --dc-color-surface: #efece5;
@@ -26,6 +28,7 @@
     --ll-paper: #1a1a1a;
     --ll-caret: #f7f5f0;
     --ll-pending: #6b6964;
+    --ll-chart-line: #6a92cf;
 
     --dc-color-bg: var(--ll-paper);
     --dc-color-surface: #232322;

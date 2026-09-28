@@ -22,9 +22,10 @@ public sealed record DocumentSnapshot(string Path, string Template, IReadOnlyDic
 
 /// <summary>
 /// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the
-/// vault's event files. <see cref="Doc"/> is the document's vault path.
+/// vault's event files. <see cref="Doc"/> is the document's vault path, <see cref="Template"/> its
+/// template (absent in events recorded before it was written down).
 /// </summary>
-public sealed record SuggestionEvent(string At, string Doc, string Field, string Kind, string Suggested);
+public sealed record SuggestionEvent(string At, string Doc, string Field, string Kind, string Suggested, string? Template = null);
 
 /// <summary>
 /// Everything the sidecar knows about a vault: what the shell read and the UI parsed — templates,
@@ -57,6 +58,7 @@ public sealed class VaultProjection
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Snapshot? _current;
     private Suggestions? _suggestions;
+    private IReadOnlyList<FieldCurve> _curves = [];
 
     public bool Indexed => _current is not null;
 
@@ -77,12 +79,14 @@ public sealed class VaultProjection
     {
         var snapshot = await Snapshot.BuildAsync(vault, cancellationToken);
         var suggestions = await Suggestions.BuildAsync(vault, cancellationToken);
+        var curves = Curves.Compute(vault);
         await _gate.WaitAsync(cancellationToken);
         try
         {
             var previous = _current;
             _current = snapshot;
             _suggestions = suggestions;
+            _curves = curves;
             if (previous is not null) await previous.DisposeAsync();
         }
         finally
@@ -99,6 +103,20 @@ public sealed class VaultProjection
         try
         {
             return _current is null ? null : await _current.TableAsync(template, cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>The correction curve of every judgment field that has had a suggestion decided.</summary>
+    public async Task<IReadOnlyList<FieldCurve>> CurvesAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return _curves;
         }
         finally
         {

@@ -288,7 +288,7 @@ export class LlDocuments extends LitElement {
 
   /** Records what the save confirmed about the suggestions offered for this draft. */
   private async recordSuggestionEvents(path: string) {
-    const events = suggestionEvents(this.offered, this.rejected, this.values, path, new Date())
+    const events = suggestionEvents(this.offered, this.rejected, this.values, path, new Date(), this.template?.ref)
     // Each event is recorded once; a rejection stays in force while the draft is open.
     this.offered = new Map()
     for (const event of events) await vault.recordEvent(event)

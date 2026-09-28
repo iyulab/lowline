@@ -488,6 +488,22 @@ const scenarios = {
     assert.ok(suggestion.includes('총무'), `suggested from the import: ${suggestion}`)
     await app.noAlert()
   },
+  async 'shows how often suggestions were right, from the event files'(app, vault) {
+    await app.click('button', '학습')
+    const figures = await app.cdp.waitFor(
+      `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\\s+/g, ' ').trim() })()`,
+      'the curve of 접수 · 담당',
+      { timeoutMs: 30_000 },
+    )
+    const decided = (await events(vault)).filter((e) => e.field === '담당')
+    const accepted = decided.filter((e) => e.kind === 'accept').length
+    const rejected = decided.filter((e) => e.kind === 'reject').length
+    assert.equal(decided.length, 2, 'one accepted and one rejected suggestion so far')
+    assert.ok(figures.includes(`수락 ${accepted} · 교정 0 · 거절 ${rejected}`), figures)
+    assert.ok(figures.includes('최근 2건 중 제안이 맞음 50%'), figures)
+    assert.ok(decided.every((e) => e.template === 'intake@1'), 'events name their template')
+    await app.noAlert()
+  },
 }
 
 /** With E2E_SCREENSHOTS=<dir>, each passed scenario leaves a picture of the window. */

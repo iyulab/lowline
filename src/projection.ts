@@ -88,6 +88,17 @@ export function cellText(value: unknown): string {
   return String(value)
 }
 
+/** How a judgment field's suggestions have fared, decision by decision. */
+export interface FieldCurve {
+  template: string
+  field: string
+  accepted: number
+  corrected: number
+  rejected: number
+  /** After the nth decision, the share of the latest ones (up to a window) that were right. */
+  points: { n: number; at: string; rate: number }[]
+}
+
 export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
   value: string | null

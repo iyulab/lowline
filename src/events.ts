@@ -11,6 +11,8 @@ export interface SuggestionEvent {
   at: string
   /** The document, relative to the vault. */
   doc: string
+  /** The document's template, so the event still says where it belongs if the document is renamed. */
+  template?: string
   field: string
   kind: EventKind
   suggested: string
@@ -41,6 +43,7 @@ export function suggestionEvents(
   saved: FieldValues,
   doc: string,
   at: Date,
+  template?: string,
 ): SuggestionEvent[] {
   const events: SuggestionEvent[] = []
   for (const [field, suggestion] of offered) {
@@ -53,6 +56,7 @@ export function suggestionEvents(
     events.push({
       at: at.toISOString(),
       doc,
+      ...(template ? { template } : {}),
       field,
       kind,
       suggested: suggestion.value,
