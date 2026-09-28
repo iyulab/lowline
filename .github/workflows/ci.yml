@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+
+permissions:
+  contents: read
+
+# A newer push makes the run for the older one moot.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# One Linux job: the UI, the shell and the sidecar are each tested where they build. The end-to-end
+# scenarios drive the real Windows window and run locally (npm run test:e2e).
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: dtolnay/rust-toolchain@stable
+        id: toolchain
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-cargo-
+
+      - name: System libraries for the shell (WebKitGTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
+      - name: Install
+        run: npm ci
+
+      - name: UI — types and tests
+        run: |
+          npm run typecheck
+          npm test
+
+      # The shell embeds the built UI and bundles the published sidecar; the tests need neither to
+      # be real, only present.
+      - name: Shell tests
+        run: |
+          npx vite build
+          mkdir -p src-host/publish
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Sidecar tests
+        run: npm run test:host
