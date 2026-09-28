@@ -53,10 +53,16 @@ class App {
   static async launch() {
     const app = new App()
     app.child = spawn(exe, [], { stdio: 'ignore' })
-    const page = await findPage(PORT)
-    app.cdp = await Cdp.connect(page.webSocketDebuggerUrl)
-    await app.ready()
-    return app
+    try {
+      const page = await findPage(PORT)
+      app.cdp = await Cdp.connect(page.webSocketDebuggerUrl)
+      await app.ready()
+      return app
+    } catch (e) {
+      // A window that never answered must not outlive the run (nor keep this process alive).
+      await app.quit()
+      throw e
+    }
   }
 
   /** Ends the app the hard way — nothing it holds in memory survives. */
@@ -67,6 +73,9 @@ class App {
     child.kill()
     await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)))
     this.child = undefined
+    // WebView2's browser process outlives the app by a moment. The next launch must start a browser
+    // of its own: one that joins a browser still shutting down never opens the debugging port.
+    await portClosed(PORT)
   }
 
   /** Ends the app and starts it again on the same vault, in the same App. */
@@ -506,6 +515,39 @@ const scenarios = {
   },
 }
 
+/** Waits until nothing answers on the debugging port: the last window's browser has gone. */
+async function portClosed(port, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) })
+    } catch {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error(`the browser on debugging port ${port} did not go away`)
+}
+
+/**
+ * What a failed scenario leaves behind, so an intermittent failure can be read afterwards: a
+ * picture of the window and what the page was saying (alerts and status lines). In E2E_SCREENSHOTS
+ * when set, otherwise in the system temp folder.
+ */
+async function failureEvidence(app, name) {
+  try {
+    const dir =
+      process.env.E2E_SCREENSHOTS ?? join(tmpdir(), 'lowline-e2e-failures', new Date().toISOString().replace(/[:.]/g, '-'))
+    await screenshot(app.cdp, dir, `FAILED ${name}`)
+    const said = await app.cdp.evaluate(
+      `__e2e.all('[role=alert], [role=status]').map((el) => el.getAttribute('role') + ': ' + el.textContent.trim()).filter((t) => !t.endsWith(': '))`,
+    )
+    console.log(`    page: ${JSON.stringify(said)}\n    evidence: ${dir}`)
+  } catch (e) {
+    console.log(`    (no evidence: ${e.message})`)
+  }
+}
+
 /** With E2E_SCREENSHOTS=<dir>, each passed scenario leaves a picture of the window. */
 async function screenshot(cdp, dir, name) {
   const { mkdir, writeFile } = await import('node:fs/promises')
@@ -543,7 +585,7 @@ async function main() {
       } catch (e) {
         failed++
         console.log(`  ✗ ${name}\n    ${e.message.replaceAll('\n', '\n    ')}`)
-        if (process.env.E2E_SCREENSHOTS) await screenshot(app.cdp, process.env.E2E_SCREENSHOTS, `FAILED ${name}`)
+        await failureEvidence(app, name)
         break
       }
     }
