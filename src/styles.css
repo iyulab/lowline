@@ -18,6 +18,8 @@
   --dc-color-text-secondary: #5e5c57;
   --dc-color-text-muted: #6b6964;
   --dc-color-accent: var(--ll-caret);
+  /* The accent here is already a text-strength shade (8.3:1 on paper, 5:1 in dark), so its text form is itself. */
+  --dc-color-accent-text: var(--dc-color-accent);
   --dc-color-accent-contrast: var(--ll-paper);
 }
 
@@ -38,6 +40,7 @@
     --dc-color-text-secondary: #bdbab2;
     --dc-color-text-muted: #9a978f;
     --dc-color-accent: #7a8ba0;
+    --dc-color-accent-text: var(--dc-color-accent);
     --dc-color-accent-contrast: var(--ll-paper);
   }
 }
