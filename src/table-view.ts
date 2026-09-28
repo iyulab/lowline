@@ -93,9 +93,11 @@ export class LlTable extends LitElement {
   private async show(template: string) {
     this.selected = template
     try {
-      this.table = await host.projection(template)
+      const table = await host.projection(template)
+      // Another template may have been picked while this one loaded: its table wins.
+      if (this.selected === template) this.table = table
     } catch (e) {
-      this.error = describeError(e)
+      if (this.selected === template) this.error = describeError(e)
     }
   }
 

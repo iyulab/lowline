@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { guard } from 'lit/directives/guard.js'
+import { keyed } from 'lit/directives/keyed.js'
 import {
   documentFileName,
   documentTitle,
@@ -134,6 +135,8 @@ export class LlDocuments extends LitElement {
   /** Counts accepted suggestions, so the form is handed its values again. */
   @state() private applied = 0
   private suggestTimer?: ReturnType<typeof setTimeout>
+  /** Counts requests for suggestions; only the latest one's answers are shown. */
+  private suggestRun = 0
   @state() private dirty = false
   @state() private message = ''
   @state() private error = ''
@@ -192,21 +195,22 @@ export class LlDocuments extends LitElement {
   private async suggest() {
     const template = this.template
     if (!template) return
+    const run = ++this.suggestRun
     const values = { ...this.values }
     const next = new Map<string, Suggestion>()
     for (const field of template.suggest) {
       if (!isEmpty(values[field])) continue
       try {
         const suggestion = await host.suggest(template.ref, field, values)
-        if (suggestion.value !== null && !this.rejected.has(field)) {
-          next.set(field, suggestion)
-          this.offered.set(field, suggestion)
-        }
+        if (suggestion.value !== null && !this.rejected.has(field)) next.set(field, suggestion)
       } catch {
         // no suggestion for this field
       }
     }
-    if (this.template === template) this.suggestions = next
+    // Values may have changed (or another draft opened) while these were asked for.
+    if (run !== this.suggestRun || this.template !== template) return
+    this.suggestions = next
+    for (const [field, suggestion] of next) this.offered.set(field, suggestion)
   }
 
   private scheduleSuggest() {
@@ -377,12 +381,15 @@ export class LlDocuments extends LitElement {
                   : html`<span class="message" role="status">${this.message}</span>`}
               </div>
               ${this.renderSuggestions()}
-              <formdown-ui
+              ${keyed(
+                this.opened,
+                html`<formdown-ui
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .showSubmitButton=${false}
                 @formdown-data-update=${this.onData}
-              ></formdown-ui>
+              ></formdown-ui>`,
+              )}
             `
           : this.error
             ? html`<p class="error" role="alert">${this.error}</p>`

@@ -49,8 +49,34 @@ const HELPERS = `window.__e2e = {
 const q = (s) => JSON.stringify(s)
 
 class App {
-  constructor(cdp) {
-    this.cdp = cdp
+  /** Starts the app and waits for its window. */
+  static async launch() {
+    const app = new App()
+    app.child = spawn(exe, [], { stdio: 'ignore' })
+    const page = await findPage(PORT)
+    app.cdp = await Cdp.connect(page.webSocketDebuggerUrl)
+    await app.ready()
+    return app
+  }
+
+  /** Ends the app the hard way — nothing it holds in memory survives. */
+  async quit() {
+    this.cdp?.close()
+    const child = this.child
+    if (!child) return
+    child.kill()
+    await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)))
+    this.child = undefined
+  }
+
+  /** Ends the app and starts it again on the same vault, in the same App. */
+  async restart(vault) {
+    await this.quit()
+    assert.equal(await sidecarsRunning(), 0, 'the sidecar went with the app')
+    const next = await App.launch()
+    this.child = next.child
+    this.cdp = next.cdp
+    await this.openVault(vault)
   }
 
   async ready() {
@@ -275,7 +301,7 @@ const scenarios = {
     await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
     const note = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 15_000 },
     )
@@ -305,6 +331,11 @@ const scenarios = {
 
   async 'records a rejected suggestion when the document is saved without it'(app, vault) {
     await app.choose('select#template', '서식/접수.fd.md')
+    // A new document from the same template starts empty: nothing carries over from the last one.
+    await app.cdp.waitFor(
+      `__e2e.one('select[name="부서"]')?.value === '' && __e2e.one('[data-field-name="요청"]')?.textContent === ''`,
+      'an empty form',
+    )
     await app.type('[data-field-name="요청"]', '급여 명세서를 다시 받고 싶어요')
     await app.choose('select[name="부서"]', '개발')
     await app.cdp.waitFor(`__e2e.all('[role=note][data-field="담당"]').length === 1`, 'a suggestion for 담당', { timeoutMs: 15_000 })
@@ -319,6 +350,36 @@ const scenarios = {
     const all = await events(vault)
     assert.equal(all.length, 2, 'one event per confirmation, not per save')
     assert.deepEqual([all[1].kind, all[1].suggested, all[1].value], ['reject', '인사', null])
+  },
+  async 'rebuilds the same table and the same suggestion after a restart, with nothing kept but the vault'(app, vault) {
+    const tableNow = async () => {
+      await app.click('button', '표')
+      await app.choose('select#template', 'intake@1')
+      return app.cdp.waitFor(
+        `(() => { const rows = __e2e.all('tbody tr'); const text = rows.map((tr) => tr.textContent.replace(/\\s+/g, ' ').trim()); return text.some((t) => t.includes('급여')) && text })()`,
+        'the intake table',
+        { timeoutMs: 30_000 },
+      )
+    }
+    const suggestionNow = async () => {
+      await app.click('button', '문서')
+      await app.choose('select#template', '서식/접수.fd.md')
+      await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
+      return app.cdp.waitFor(
+        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+        'a suggestion for 담당',
+        { timeoutMs: 30_000 },
+      )
+    }
+
+    const table = await tableNow()
+    const suggestion = await suggestionNow()
+    assert.equal(table.length, 4, 'two fixture records and the two made above')
+
+    await app.restart(vault)
+    assert.deepEqual(await tableNow(), table, 'the same table')
+    assert.equal(await suggestionNow(), suggestion, 'the same suggestion')
+    await app.noAlert()
   },
 }
 
@@ -345,31 +406,26 @@ async function main() {
   const vault = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
   await cp(join(here, 'fixtures', 'vault'), vault, { recursive: true })
 
-  const child = spawn(exe, [], { stdio: 'ignore' })
-  let cdp
+  let app
   let failed = 0
   try {
-    const page = await findPage(PORT)
-    cdp = await Cdp.connect(page.webSocketDebuggerUrl)
-    const app = new App(cdp)
-    await app.ready()
+    app = await App.launch()
     await app.openVault(vault)
     // Scenarios run in order against one window: each builds on the files the last one left.
     for (const [name, run] of Object.entries(scenarios)) {
       try {
         await run(app, vault)
         console.log(`  ✓ ${name}`)
-        if (process.env.E2E_SCREENSHOTS) await screenshot(cdp, process.env.E2E_SCREENSHOTS, name)
+        if (process.env.E2E_SCREENSHOTS) await screenshot(app.cdp, process.env.E2E_SCREENSHOTS, name)
       } catch (e) {
         failed++
         console.log(`  ✗ ${name}\n    ${e.message.replaceAll('\n', '\n    ')}`)
+        if (process.env.E2E_SCREENSHOTS) await screenshot(app.cdp, process.env.E2E_SCREENSHOTS, `FAILED ${name}`)
         break
       }
     }
   } finally {
-    cdp?.close()
-    child.kill()
-    await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)))
+    await app?.quit()
     await rm(vault, { recursive: true, force: true })
   }
   // The sidecar lives in the app's job object: when the app is gone, so is the sidecar.
