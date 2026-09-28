@@ -18,11 +18,13 @@ public sealed record TemplateField(string Name, string Type, bool Multiple = fal
 public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> Fields, IReadOnlyList<string>? Suggest = null);
 
 /// <summary>
-/// A document: where it lives in the vault, its template, its recorded values, and when it was last
-/// saved (ms since the epoch — its values were last confirmed then), if known.
+/// A document: where it lives in the vault, its template, its recorded values, when it was last
+/// saved (ms since the epoch — its values were last confirmed then), if known, and whether a sync
+/// client left a conflict copy of it — until the person settles which to keep, its values are not
+/// confirmed: it stays in the table, and suggestions do not learn from it.
 /// </summary>
 public sealed record DocumentSnapshot(
-    string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values, long? Modified = null);
+    string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values, long? Modified = null, bool Conflicted = false);
 
 /// <summary>
 /// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the

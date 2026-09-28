@@ -78,6 +78,11 @@ describe('weeklyCounts', () => {
     ])
   })
 
+  it('does not count a document with a conflict copy as confirmed', () => {
+    const unsettled = documents.map((d) => (d.path === '문서/3.md' ? { ...d, conflicted: true } : d))
+    expect(weeklyCounts([notes, intake, bug], unsettled, events).forms[1]).toEqual({ form: 2, confirmed: 1, weeks: 1, perWeek: 1 })
+  })
+
   it('carries no name, value or path', () => {
     const text = JSON.stringify(counts)
     for (const secret of ['intake', 'bug', '담당', '긴급', '장비', '비밀', '환자', '문서', '.md']) expect(text).not.toContain(secret)

@@ -62,6 +62,25 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/projection/none@1", TestContext.Current.CancellationToken)).StatusCode);
     }
 
+    [Fact]
+    public async Task Reads_a_document_marked_conflicted_over_http()
+    {
+        await using var factory = new Factory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        var ct = TestContext.Current.CancellationToken;
+        var ingest = await client.PostAsync("/vault/ingest", new StringContent("""
+            {"templates": [{"ref": "intake@1", "fields": [{"name": "요청", "type": "textarea"}, {"name": "담당", "type": "select"}], "suggest": ["담당"]}],
+             "documents": [{"path": "문서/a.md", "template": "intake@1", "values": {"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}, "conflicted": true}]}
+            """, System.Text.Encoding.UTF8, "application/json"), ct);
+        ingest.EnsureSuccessStatusCode();
+
+        var suggestion = await client.PostAsJsonAsync("/suggest",
+            new { template = "intake@1", field = "담당", values = new { 요청 = "노트북 배터리가 금방 닳아요!" } }, ct);
+
+        Assert.Equal(new Suggestion(null, "abstain", null, null), await suggestion.Content.ReadFromJsonAsync<Suggestion>(ct));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

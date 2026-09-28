@@ -3,7 +3,7 @@
 import { TemplateError } from './documents.js'
 import { parseEvents, type SuggestionEvent } from './events.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type TemplateSnapshot } from './projection.js'
-import { host, vault } from './vault-client.js'
+import { host, vault, withoutConflictCopies } from './vault-client.js'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -15,13 +15,15 @@ export interface ReadVault {
   events: SuggestionEvent[]
 }
 
-/** Every template with an identity and every document that names a template. */
+/**
+ * Every template with an identity and every document that names a template. Sync clients' conflict
+ * copies are not read: a copy is not a second document, template or event file, and the document it
+ * copies is marked as not settled.
+ */
 export async function readVault(): Promise<ReadVault> {
-  const [templateEntries, documentEntries, eventEntries] = await Promise.all([
-    vault.listTemplates(),
-    vault.listDocuments(),
-    vault.listEvents(),
-  ])
+  const listed = await Promise.all([vault.listTemplates(), vault.listDocuments(), vault.listEvents()])
+  const [templateEntries, documentEntries, eventEntries] = listed.map((entries) => withoutConflictCopies(entries).files)
+  const { conflicted } = withoutConflictCopies(listed[1])
   // One call into the shell per kind of file, not one per file: a vault of thousands of documents
   // would otherwise spend most of a read crossing that boundary. A file removed since it was listed
   // is left out — the change that removed it reads the vault again.
@@ -47,7 +49,7 @@ export async function readVault(): Promise<ReadVault> {
   documentEntries.forEach((entry, i) => {
     const source = documentSources[i]
     const document = source === null ? undefined : documentSnapshot(entry.path, source, entry.modifiedMs)
-    if (document) documents.push(document)
+    if (document) documents.push(conflicted.has(entry.path) ? { ...document, conflicted: true } : document)
   })
   const events = eventSources.flatMap((source) => (source === null ? [] : parseEvents(source)))
   return { templates, names, documents, events }

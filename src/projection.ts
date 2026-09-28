@@ -28,6 +28,11 @@ export interface DocumentSnapshot {
   values: Record<string, unknown>
   /** When the file was last saved (ms since the epoch): its values were last confirmed then. */
   modified?: number
+  /**
+   * A sync client left a conflict copy of it: its values are not confirmed until the person settles
+   * which to keep. It stays in the table; suggestions do not learn from it.
+   */
+  conflicted?: boolean
 }
 
 export interface VaultSnapshot {

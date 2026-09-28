@@ -10,6 +10,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
+use tauri_kit_fs::conflict_copy_of;
 use tauri_kit_watch::OwnWrites;
 
 /// Folder for form templates.
@@ -71,6 +72,10 @@ pub struct Entry {
     pub path: String,
     pub name: String,
     pub modified_ms: u64,
+    /// For a copy a sync client made when the file changed on two devices, the path of the file it
+    /// is a copy of. Which of the two to keep is the person's to decide.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict_of: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -140,8 +145,9 @@ impl Vault {
         Ok(joined)
     }
 
-    /// Lists the files directly inside `dir` whose names end with `suffix`, sorted by path.
-    /// A missing folder is an empty listing.
+    /// Lists the files directly inside `dir` whose names end with `suffix`, sorted by path, and the
+    /// sync clients' conflict copies of such files — a copy's marker goes before the last extension,
+    /// so its own name may not end with `suffix`. A missing folder is an empty listing.
     pub fn list(&self, dir: &str, suffix: &str) -> Result<Vec<Entry>> {
         let abs = self.resolve(dir)?;
         let read = match fs::read_dir(&abs) {
@@ -159,9 +165,12 @@ impl Vault {
             let Some(name) = item.file_name().to_str().map(str::to_owned) else {
                 continue;
             };
-            if !name.ends_with(suffix) {
-                continue;
-            }
+            let conflict_of = match conflict_copy_of(&name) {
+                Some(original) if original.ends_with(suffix) => Some(format!("{dir}/{original}")),
+                Some(_) => continue,
+                None if name.ends_with(suffix) => None,
+                None => continue,
+            };
             let modified_ms = meta
                 .modified()
                 .ok()
@@ -172,6 +181,7 @@ impl Vault {
                 path: format!("{dir}/{name}"),
                 name,
                 modified_ms,
+                conflict_of,
             });
         }
         entries.sort_by(|a, b| a.path.cmp(&b.path));
@@ -402,6 +412,31 @@ mod tests {
             .map(|e| e.path)
             .collect();
         assert_eq!(names, ["서식/a.fd.md", "서식/b.fd.md"]);
+    }
+
+    #[test]
+    fn lists_conflict_copies_with_the_file_they_copy() {
+        let (_dir, v) = vault();
+        v.write("서식/회의.fd.md", "a").unwrap();
+        // The marker goes before the last extension: the copy no longer ends in `.fd.md`.
+        v.write("서식/회의.fd (김의 충돌된 사본 2026-09-29).md", "b").unwrap();
+        v.write("서식/회의.fd.sync-conflict-20260929-143015-ABCDEFG.md", "c").unwrap();
+        v.write("서식/메모 (conflicted copy 2026-09-29 143015).md", "d").unwrap();
+        let listed: Vec<_> = v
+            .list(TEMPLATES_DIR, TEMPLATE_SUFFIX)
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.path, e.conflict_of))
+            .collect();
+        let original = Some("서식/회의.fd.md".to_string());
+        assert_eq!(
+            listed,
+            [
+                ("서식/회의.fd (김의 충돌된 사본 2026-09-29).md".to_string(), original.clone()),
+                ("서식/회의.fd.md".to_string(), None),
+                ("서식/회의.fd.sync-conflict-20260929-143015-ABCDEFG.md".to_string(), original),
+            ]
+        );
     }
 
     #[test]

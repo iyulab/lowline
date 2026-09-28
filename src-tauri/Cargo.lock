@@ -3300,16 +3300,16 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-fs"
-version = "0.3.0"
-source = "git+https://github.com/iyulab/tauri-kit?tag=v0.3.0#7fe2f92ac7ed6f6aa2e429c878d4de08bc0e2b2b"
+version = "0.4.0"
+source = "git+https://github.com/iyulab/tauri-kit?tag=v0.4.0#0d3d2e541ea3982f42a9689c8d058f7c759095db"
 dependencies = [
  "tempfile",
 ]
 
 [[package]]
 name = "tauri-kit-sidecar"
-version = "0.3.0"
-source = "git+https://github.com/iyulab/tauri-kit?tag=v0.3.0#7fe2f92ac7ed6f6aa2e429c878d4de08bc0e2b2b"
+version = "0.4.0"
+source = "git+https://github.com/iyulab/tauri-kit?tag=v0.4.0#0d3d2e541ea3982f42a9689c8d058f7c759095db"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -3317,8 +3317,8 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-watch"
-version = "0.3.0"
-source = "git+https://github.com/iyulab/tauri-kit?tag=v0.3.0#7fe2f92ac7ed6f6aa2e429c878d4de08bc0e2b2b"
+version = "0.4.0"
+source = "git+https://github.com/iyulab/tauri-kit?tag=v0.4.0#0d3d2e541ea3982f42a9689c8d058f7c759095db"
 dependencies = [
  "notify-debouncer-full",
  "tauri-kit-fs",

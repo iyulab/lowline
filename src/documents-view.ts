@@ -20,6 +20,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { syncVault } from './vault-snapshot.js'
 import { createDocumentFile } from './document-files.js'
+import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
 
@@ -61,6 +62,11 @@ export class LlDocuments extends LitElement {
     nav button[aria-current='true'] {
       border-color: var(--dc-color-border, #d0d0d0);
       background: var(--dc-color-bg-subtle, #f4f4f4);
+    }
+    nav button .note {
+      display: block;
+      font-size: 0.85em;
+      color: var(--dc-color-text-muted, #666);
     }
     .new {
       display: flex;
@@ -203,6 +209,7 @@ export class LlDocuments extends LitElement {
       ;[this.documents, this.templates] = await Promise.all([vault.listDocuments(), vault.listTemplates()])
       const names = new Map<string, string>()
       for (const t of this.templates) {
+        if (t.conflictOf !== undefined) continue // the copy names the same template as its original
         try {
           names.set(templateInfo(await vault.read(t.path)).ref, t.name.replace(/\.fd\.md$/, ''))
         } catch {
@@ -414,6 +421,11 @@ export class LlDocuments extends LitElement {
     </div>`
   }
 
+  /** Templates to write documents from: a conflict copy is not a second template. */
+  private get settledTemplates() {
+    return this.templates.filter((t) => t.conflictOf === undefined)
+  }
+
   render() {
     const draft = this.draft
     return html`
@@ -430,7 +442,7 @@ export class LlDocuments extends LitElement {
             }}
           >
             <option value="">${strings.pickTemplate}</option>
-            ${this.templates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
+            ${this.settledTemplates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
           </select>
           <dc-button size="sm" variant="ghost" @click=${() => this.leaveFor(() => this.startImport())}>${strings.import}</dc-button>
         </div>
@@ -442,6 +454,7 @@ export class LlDocuments extends LitElement {
                 @click=${() => this.leaveFor(() => this.open(d.path))}
               >
                 ${d.name.replace(/\.md$/, '')}
+                ${noteFor(conflictLabel(d, this.documents, '.md'))}
               </button>`,
             )}
       </nav>
@@ -449,7 +462,7 @@ export class LlDocuments extends LitElement {
         ${this.importing
           ? html`<ll-import
               .vaultInfo=${this.vaultInfo}
-              .templates=${this.templates}
+              .templates=${this.settledTemplates}
               @ll-imported=${(e: CustomEvent<{ created: number }>) => void this.imported(e.detail.created)}
               @ll-import-cancel=${() => (this.importing = false)}
             ></ll-import>`
@@ -467,6 +480,7 @@ export class LlDocuments extends LitElement {
                   ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
                   : nothing}
               </div>
+              ${draft.kind === 'existing' ? noticeFor(conflictNotice(draft.path, this.documents, '.md', strings.conflictedOriginal)) : nothing}
               ${this.renderSuggestions()}
               ${keyed(
                 this.opened,

@@ -93,13 +93,14 @@ public sealed class Suggestions
             .ToHashSet();
 
     /// <summary>
-    /// Builds memory from the vault's saved documents. Where documents disagree, Gil keeps the latest
-    /// confirmation, so the order they come in does not matter. Each judgment field keeps the similarity
+    /// Builds memory from the vault's saved documents, leaving out those with a conflict copy — their
+    /// values are not confirmed until the person settles which copy to keep. Where documents disagree,
+    /// Gil keeps the latest confirmation, so the order they come in does not matter. Each judgment field keeps the similarity
     /// threshold <paramref name="previous"/> chose for it until <see cref="SelectThresholdsAsync"/> chooses again.
     /// </summary>
     public static async Task<Suggestions> BuildAsync(VaultSnapshot vault, CancellationToken cancellationToken, Suggestions? previous = null)
     {
-        var documents = vault.Documents.ToLookup(d => d.Template, StringComparer.Ordinal);
+        var documents = vault.Documents.Where(d => !d.Conflicted).ToLookup(d => d.Template, StringComparer.Ordinal);
         var templates = vault.Templates
             .Where(t => t.Fields.Any(f => t.Suggest?.Contains(f.Name) == true))
             .ToDictionary(t => t.Ref, StringComparer.Ordinal);

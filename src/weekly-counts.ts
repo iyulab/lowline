@@ -24,7 +24,7 @@ export interface WeekCounts {
 
 export interface FormCounts {
   form: number
-  /** Saved documents with a value in at least one judgment field. */
+  /** Saved documents with a value in at least one judgment field, leaving out those not settled (`conflicted`). */
   confirmed: number
   /** Weeks from the first such save to the last, both included. */
   weeks: number
@@ -96,7 +96,7 @@ export function weeklyCounts(
 
   const formCounts = forms.map((template, i): FormCounts => {
     const saved = documents
-      .filter((d) => d.template === template.ref && template.suggest.some((f) => isFilled(d.values[f])))
+      .filter((d) => d.template === template.ref && !d.conflicted && template.suggest.some((f) => isFilled(d.values[f])))
       .map((d) => d.modified)
     const times = saved.filter((m): m is number => m !== undefined && m > 0)
     // Folded rather than spread: a spread's arguments are limited, and a vault can hold more documents.

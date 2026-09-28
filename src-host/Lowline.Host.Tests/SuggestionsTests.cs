@@ -83,6 +83,21 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task Does_not_learn_from_a_document_with_a_conflict_copy()
+    {
+        // A sync client kept both devices' edits: which values hold is not settled yet.
+        var vault = await Vault(
+            Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}""") with { Conflicted = true });
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요!"}""")), Ct);
+        var table = await vault.TableAsync("intake@1", Ct);
+
+        Assert.Equal(new Suggestion(null, "abstain", null, null), suggestion);
+        Assert.Equal("문서/1.md", Assert.Single(table!.Rows).Path);
+    }
+
+    [Fact]
     public async Task Abstains_when_nothing_confirmed_is_close_enough()
     {
         var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));

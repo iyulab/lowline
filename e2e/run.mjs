@@ -34,7 +34,7 @@ const HELPERS = `window.__e2e = {
   one(selector, text) {
     // An item's text may lead with an icon ("▦ 문서"); the label is what follows.
     const matches = (el) => {
-      const t = el.textContent.replace(/\s+/g, ' ').trim()
+      const t = el.textContent.replace(/\\s+/g, ' ').trim()
       return t === text || t.endsWith(' ' + text)
     }
     return this.all(selector).find((el) => text === undefined || matches(el))
@@ -400,7 +400,7 @@ const scenarios = {
     await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
     const note = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 15_000 },
     )
@@ -483,7 +483,7 @@ const scenarios = {
       await app.click('button', '표')
       await app.choose('select#template', 'intake@1')
       return app.cdp.waitFor(
-        `(() => { const rows = __e2e.all('tbody tr'); const text = rows.map((tr) => tr.textContent.replace(/\\s+/g, ' ').trim()); return text.some((t) => t.includes('급여')) && text })()`,
+        `(() => { const rows = __e2e.all('tbody tr'); const text = rows.map((tr) => tr.textContent.replace(/\s+/g, ' ').trim()); return text.some((t) => t.includes('급여')) && text })()`,
         'the intake table',
         { timeoutMs: 30_000 },
       )
@@ -493,7 +493,7 @@ const scenarios = {
       await app.choose('select#template', '서식/접수.fd.md')
       await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
       return app.cdp.waitFor(
-        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
         { timeoutMs: 30_000 },
       )
@@ -568,7 +568,7 @@ const scenarios = {
     await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
     await app.choose('select[name="부서"]', '영업')
     const suggestion = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 30_000 },
     )
@@ -580,7 +580,7 @@ const scenarios = {
     await app.click('button', '학습')
     await app.answerUnsaved('편집 버리기')
     const figures = await app.cdp.waitFor(
-      `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\\s+/g, ' ').trim() })()`,
+      `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\s+/g, ' ').trim() })()`,
       'the curve of 접수 · 담당',
       { timeoutMs: 30_000 },
     )
@@ -608,6 +608,44 @@ const scenarios = {
     const legend = await app.cdp.evaluate(`__e2e.all('details.counts li').map((li) => li.textContent.trim())`)
     assert.ok(legend[0].startsWith('서식 1 = 접수'), legend[0])
     await app.noAlert()
+  },
+
+  async 'shows a sync conflict copy beside its original, and learns from neither until one is kept'(app, vault) {
+    // A sync client kept another device's edit of 접수-1 as a copy.
+    const copy = join(vault, '문서', '접수-1 (다른 기기의 충돌된 사본 2026-09-29).md')
+    const original = await readFile(join(vault, '문서', '접수-1.md'), 'utf8')
+    await writeFile(copy, original.replace('담당: 장비', '담당: 총무'))
+    try {
+      await app.click('button', '문서')
+      const listed = () => app.cdp.evaluate(`__e2e.all('nav button').map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`)
+      try {
+        await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.includes('충돌 사본 — 원본: 접수-1'))`, 'the copy, with its original', { timeoutMs: 15_000 })
+      } catch (e) {
+        throw new Error(`${e.message}
+${JSON.stringify(await listed())}`)
+      }
+      assert.ok((await listed()).includes('접수-1 충돌 사본 있음'), 'the original, marked as having a copy')
+
+      // The same request that was suggested 장비 from 접수-1 is now answered only from other records.
+      await app.choose('select#template', '서식/접수.fd.md')
+      await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      const note = await app.cdp.waitFor(
+        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+        'a suggestion for 담당',
+        { timeoutMs: 15_000 },
+      )
+      assert.doesNotMatch(note, /접수-1/, 'the unsettled original is not a similar record')
+      assert.doesNotMatch(note, /총무/, 'nor is its copy')
+
+      await app.click('nav button', '접수-1 충돌 사본 있음')
+      await app.answerUnsaved('편집 버리기')
+      await app.cdp.waitFor(`__e2e.all('p.conflict').some((p) => p.textContent.includes('제안이 이 문서에서 배우지 않습니다'))`, 'what the conflict means')
+      await app.noAlert()
+    } finally {
+      await rm(copy, { force: true })
+    }
+    // Keeping one file settles it.
+    await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
   },
 
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of

@@ -15,6 +15,22 @@ export interface VaultEntry {
   path: string
   name: string
   modifiedMs: number
+  /**
+   * For a copy a sync client made when the file changed on two devices, the path of the file it is a
+   * copy of. Which of the two to keep is the person's to decide.
+   */
+  conflictOf?: string
+}
+
+/** A listing's files apart from their conflict copies, and the paths that have a copy. */
+export function withoutConflictCopies(entries: readonly VaultEntry[]): { files: VaultEntry[]; conflicted: Set<string> } {
+  const conflicted = new Set<string>()
+  const files: VaultEntry[] = []
+  for (const entry of entries) {
+    if (entry.conflictOf === undefined) files.push(entry)
+    else conflicted.add(entry.conflictOf)
+  }
+  return { files, conflicted }
 }
 
 /** A failed command, as the shell reports it. */

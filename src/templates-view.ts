@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { templateInfo } from './documents.js'
+import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import { starterTemplate, strings } from './strings.js'
@@ -37,6 +38,11 @@ export class LlTemplates extends LitElement {
     nav button[aria-current='true'] {
       border-color: var(--dc-color-border, #d0d0d0);
       background: var(--dc-color-bg-subtle, #f4f4f4);
+    }
+    nav button .note {
+      display: block;
+      font-size: 0.85em;
+      color: var(--dc-color-text-muted, #666);
     }
     section {
       display: flex;
@@ -216,6 +222,7 @@ export class LlTemplates extends LitElement {
           : this.entries.map(
               (e) => html`<button aria-current=${e.path === this.selected} @click=${() => this.choose(e.path)}>
                 ${e.name.replace(/\.fd\.md$/, '')}
+                ${noteFor(conflictLabel(e, this.entries, '.fd.md'))}
               </button>`,
             )}
       </nav>
@@ -232,6 +239,7 @@ export class LlTemplates extends LitElement {
                   ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
                   : nothing}
               </div>
+              ${noticeFor(conflictNotice(this.selected, this.entries, '.fd.md', strings.conflictedTemplate))}
               <textarea
                 spellcheck="false"
                 aria-label=${strings.templateSource}
