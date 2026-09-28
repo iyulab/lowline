@@ -99,10 +99,10 @@ export function weeklyCounts(
       .filter((d) => d.template === template.ref && template.suggest.some((f) => isFilled(d.values[f])))
       .map((d) => d.modified)
     const times = saved.filter((m): m is number => m !== undefined && m > 0)
-    const weeks =
-      times.length === 0
-        ? 0
-        : Math.round((Date.parse(weekOf(Math.max(...times))) - Date.parse(weekOf(Math.min(...times)))) / (7 * DAY)) + 1
+    // Folded rather than spread: a spread's arguments are limited, and a vault can hold more documents.
+    const first = times.reduce((a, b) => Math.min(a, b), Infinity)
+    const last = times.reduce((a, b) => Math.max(a, b), -Infinity)
+    const weeks = times.length === 0 ? 0 : Math.round((Date.parse(weekOf(last)) - Date.parse(weekOf(first))) / (7 * DAY)) + 1
     return { form: i + 1, confirmed: saved.length, weeks, perWeek: weeks === 0 ? 0 : Math.round((saved.length / weeks) * 100) / 100 }
   })
 
