@@ -59,4 +59,23 @@ public sealed class CurvesTests
 
         Assert.Equal([("담당", 1), ("긴급", 1)], curves.Select(c => (c.Field, c.Points.Count)));
     }
+
+    [Fact]
+    public async Task Carries_how_the_fields_history_did_on_replay_once_its_threshold_is_chosen()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var documents = Enumerable.Range(1, 15).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}""")!,
+            Modified: i)).ToList();
+        var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake], documents, [Event(1, "문서/15.md", "담당", "accept")]), ct);
+        await vault.ThresholdsSelected.WaitAsync(ct);
+
+        var replay = Assert.Single(await vault.CurvesAsync(ct)).Replay;
+
+        Assert.NotNull(replay);
+        Assert.Equal(14, replay.Lookups); // every document but the first is asked of the ones before it
+        Assert.InRange(replay.AnswerRate, 0, 1);
+        Assert.True(replay.Precision >= Suggestions.TargetPrecision);
+    }
 }

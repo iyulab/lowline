@@ -99,6 +99,12 @@ export interface FieldCurve {
   rejected: number
   /** After the nth decision, the share of the latest ones (up to a window) that were right. */
   points: { n: number; at: string; rate: number }[]
+  /**
+   * The field's saved documents replayed in the order they were saved, each asked of the ones before it:
+   * the share of lookups that got a suggestion and the share of those that were right. Absent until
+   * the history is long enough to choose a threshold from.
+   */
+  replay?: { threshold: number; precision: number; answerRate: number; answered: number; lookups: number } | null
 }
 
 export interface Suggestion {

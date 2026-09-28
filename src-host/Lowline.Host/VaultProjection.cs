@@ -153,13 +153,18 @@ public sealed class VaultProjection
         }
     }
 
-    /// <summary>The correction curve of every judgment field that has had a suggestion decided.</summary>
+    /// <summary>
+    /// The correction curve of every judgment field that has had a suggestion decided, with how its saved
+    /// documents did on replay once its threshold has been chosen.
+    /// </summary>
     public async Task<IReadOnlyList<FieldCurve>> CurvesAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            return _curves;
+            return [.. _curves.Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
+                ? c with { Replay = new FieldReplay(choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups) }
+                : c)];
         }
         finally
         {

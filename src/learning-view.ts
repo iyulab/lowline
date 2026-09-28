@@ -52,6 +52,9 @@ export class LlLearning extends LitElement {
       color: var(--dc-color-text-secondary, #5e5c57);
       font-variant-numeric: tabular-nums;
     }
+    p.replay {
+      margin: 0;
+    }
     svg {
       width: 100%;
       height: auto;
@@ -171,6 +174,11 @@ export class LlLearning extends LitElement {
         ${first ? html`<span class="secondary">${strings.learningFirst(first.rate, WINDOW)}</span>` : nothing}
         <span class="secondary">${strings.learningCounts(curve.accepted, curve.corrected, curve.rejected)}</span>
       </div>
+      ${curve.replay
+        ? html`<p class="secondary replay">
+            ${strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)}
+          </p>`
+        : nothing}
       ${this.renderChart(curve, label)}
       <details>
         <summary>${strings.learningTable}</summary>

@@ -11,7 +11,16 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// A suggestion was right when it was accepted as offered; corrected or rejected, it was not.
 /// </summary>
 public sealed record FieldCurve(
-    string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points);
+    string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
+    FieldReplay? Replay = null);
+
+/// <summary>
+/// How a field's suggestions did when its saved documents were replayed in the order they were saved, each asked
+/// of the ones before it, at the similarity threshold the replay chose: <see cref="AnswerRate"/> of the lookups
+/// got a suggestion, and <see cref="Precision"/> of those were right. Unlike the curve, which counts only
+/// suggestions that were made, this says how often none was.
+/// </summary>
+public sealed record FieldReplay(double Threshold, double Precision, double AnswerRate, int Answered, int Lookups);
 
 /// <summary>
 /// Correction curves from the vault's event files — whether suggestions get better with use.
