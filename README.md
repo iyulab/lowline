@@ -26,7 +26,7 @@ npm run build:e2e && npm run test:e2e              # end-to-end scenarios in the
 
 Layout: `src-tauri/` is the shell — the only code that reads or writes files, all inside the open vault folder and all writes atomic. `src/` is the web UI. `src-host/` is the .NET sidecar for projections and suggestions: the shell starts it with the app and a per-launch token, it listens on a loopback port and never touches vault files.
 
-The UI reads the vault's templates and documents and hands the sidecar a snapshot through the shell. The sidecar projects each template into a table (Formbase, in memory) and remembers the values people saved in judgment fields, so a similar document gets the same value suggested (Gil's character-level memory, no model); when nothing saved is close enough it suggests nothing. It keeps nothing on disk: everything is rebuilt from the vault.
+The UI reads the vault's templates and documents and hands the sidecar a snapshot through the shell. The sidecar projects each template into a table (Formbase, in memory) and remembers the values people saved in judgment fields, so a similar document gets the same value suggested (Gil's character-level memory, no model); when nothing saved is close enough it suggests nothing. A table row opens its document. It keeps nothing on disk: everything is rebuilt from the vault.
 
 A template turns suggestions on for a field by naming it in its front matter:
 

@@ -48,6 +48,8 @@ export class LlApp extends LitElement {
   @state() private sidebarOpen = true
   @state() private vaultInfo?: VaultInfo
   @state() private error = ''
+  /** A document to open in the documents view, asked for from elsewhere (a table row). */
+  @state() private openPath?: string
   @queryAll('ll-mark') private marks!: NodeListOf<LlMark>
 
   connectedCallback() {
@@ -57,6 +59,10 @@ export class LlApp extends LitElement {
     this.addEventListener('pointerdown', () => this.marks.forEach((m) => m.wake()))
     // A save is a confirmation: the mark shows "not yet" becoming "confirmed".
     this.addEventListener('ll-confirmed', () => this.marks.forEach((m) => m.confirm()))
+    this.addEventListener('ll-open-document', (e) => {
+      this.openPath = (e as CustomEvent<{ path: string }>).detail.path
+      this.view = 'documents'
+    })
   }
 
   private async openVault() {
@@ -84,7 +90,10 @@ export class LlApp extends LitElement {
             { id: 'documents', icon: '▦', label: strings.navDocuments },
             { id: 'table', icon: '▥', label: strings.navTable },
           ]}
-          @dp-sidebar-select=${(e: DpSidebarSelectEvent) => (this.view = e.itemId as View)}
+          @dp-sidebar-select=${(e: DpSidebarSelectEvent) => {
+            this.openPath = undefined
+            this.view = e.itemId as View
+          }}
         >
           <ll-mark slot="icon" size="20" label=""></ll-mark>
         </dp-sidebar>
@@ -110,7 +119,7 @@ export class LlApp extends LitElement {
             : this.view === 'templates'
               ? html`<ll-templates .vaultInfo=${info}></ll-templates>`
               : this.view === 'documents'
-                ? html`<ll-documents .vaultInfo=${info}></ll-documents>`
+                ? html`<ll-documents .vaultInfo=${info} .openPath=${this.openPath}></ll-documents>`
                 : html`<ll-table .vaultInfo=${info}></ll-table>`}
         </dp-page>
       </dp-shell>

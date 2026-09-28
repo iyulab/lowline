@@ -108,6 +108,8 @@ export class LlDocuments extends LitElement {
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
+  /** A document to open as soon as the view shows. */
+  @property({ attribute: false }) openPath?: string
 
   @state() private documents: VaultEntry[] = []
   @state() private templates: VaultEntry[] = []
@@ -147,6 +149,7 @@ export class LlDocuments extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this.refresh()
+    if (this.openPath) void this.open(this.openPath)
   }
 
   private async refresh() {

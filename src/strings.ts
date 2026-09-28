@@ -25,6 +25,7 @@ export const strings = {
   tableEmpty: '이 서식으로 만든 문서가 없습니다.',
   tableCount: (n: number) => `문서 ${n}건`,
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,
+  openDocument: '문서 열기',
   hostStarting: '표를 준비하고 있습니다…',
   suggestionFor: (label: string) => `${label} 제안`,
   suggestionSource: (name: string) => `비슷한 기록: ${name}`,

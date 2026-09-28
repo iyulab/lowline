@@ -6,6 +6,11 @@ import { strings } from './strings.js'
 import { host, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 
+/** A document's name as the vault shows it: its file name without the extension. */
+function documentName(path: string): string {
+  return (path.split('/').pop() ?? path).replace(/\.md$/, '')
+}
+
 /** A template's documents as a table, projected by the sidecar from what is in the vault now. */
 @customElement('ll-table')
 export class LlTable extends LitElement {
@@ -48,6 +53,28 @@ export class LlTable extends LitElement {
       top: 0;
       background: var(--dc-color-bg-subtle, #f4f4f4);
       font-weight: 600;
+    }
+    tbody tr {
+      cursor: pointer;
+    }
+    tbody tr:hover {
+      background: var(--dc-color-bg-subtle, #f4f4f4);
+    }
+    th[scope='row'] {
+      position: static;
+      background: none;
+      font-weight: 400;
+    }
+    .open {
+      all: unset;
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-color: var(--dc-color-border, #d0d0d0);
+      text-underline-offset: 3px;
+    }
+    .open:focus-visible {
+      outline: 2px solid var(--dc-color-focus, #3b6fd8);
+      outline-offset: 2px;
     }
     .message {
       color: var(--dc-color-text-muted, #666);
@@ -101,6 +128,15 @@ export class LlTable extends LitElement {
     }
   }
 
+  /**
+   * Asks for a row's document to be opened. A click that ends a text selection in the table is
+   * left to the selection.
+   */
+  private openRow(path: string) {
+    if (getSelection()?.toString()) return
+    this.dispatchEvent(new CustomEvent('ll-open-document', { detail: { path }, bubbles: true, composed: true }))
+  }
+
   /** A column's heading: the field's label in the selected template. */
   private label(field: string): string {
     return this.templates.find((t) => t.ref === this.selected)?.fields.find((f) => f.name === field)?.label ?? field
@@ -133,8 +169,21 @@ export class LlTable extends LitElement {
               </thead>
               <tbody>
                 ${table.rows.map(
-                  (row) => html`<tr data-path=${row.path}>
-                    ${table.columns.map((c) => html`<td>${cellText(row.values[c.name])}</td>`)}
+                  (row) => html`<tr data-path=${row.path} @click=${() => this.openRow(row.path)}>
+                    ${table.columns.map((c, i) =>
+                      i === 0
+                        ? // The row's first cell names it and is how a keyboard opens it.
+                          // No whitespace around the button: cells keep line breaks (pre-line).
+                          html`<th scope="row"><button
+                              class="open"
+                              title=${strings.openDocument}
+                              @click=${(e: Event) => {
+                                e.stopPropagation()
+                                this.openRow(row.path)
+                              }}
+                            >${cellText(row.values[c.name]) || documentName(row.path)}</button></th>`
+                        : html`<td>${cellText(row.values[c.name])}</td>`,
+                    )}
                   </tr>`,
                 )}
               </tbody>

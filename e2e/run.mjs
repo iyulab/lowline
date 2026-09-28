@@ -280,11 +280,11 @@ const scenarios = {
     const [name] = await documentsIn(vault)
     const values = await fileValues(join(vault, '문서', name))
     const rows = await app.cdp.waitFor(
-      `(() => { const rows = __e2e.all('tbody tr'); return rows.length > 0 && rows.map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent)) })()`,
+      `(() => { const rows = __e2e.all('tbody tr'); return rows.length > 0 && rows.map((tr) => [...tr.children].map((cell) => cell.textContent.trim())) })()`,
       'the table rows',
       { timeoutMs: 30_000 },
     )
-    const headers = await app.cdp.evaluate(`__e2e.all('th').map((th) => th.textContent)`)
+    const headers = await app.cdp.evaluate(`__e2e.all('thead th').map((th) => th.textContent)`)
     assert.deepEqual(headers, ['제목', '심각도', '재현 절차', '재현됨', '환경', '메모'])
     assert.equal(rows.length, 1, 'one row per document, however often it was saved')
     const row = Object.fromEntries(headers.map((h, i) => [h, rows[0][i]]))
@@ -292,6 +292,18 @@ const scenarios = {
     assert.equal(row.심각도, values.심각도)
     assert.equal(row.재현됨, values.재현됨 ? '✓' : '')
     assert.equal(row.환경, values.환경)
+    await app.noAlert()
+  },
+  async 'opens a document from its table row'(app, vault) {
+    const [name] = await documentsIn(vault)
+    const values = await fileValues(join(vault, '문서', name))
+    // The row's first cell is a button: a keyboard opens the row the way a click does.
+    await app.click('tbody th button', values.제목)
+    await app.cdp.waitFor(
+      `__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === ${JSON.stringify(name.replace(/\.md$/, ''))}`,
+      "the documents view with the row's document open",
+    )
+    assert.equal(await app.value('select[name="심각도"]'), values.심각도)
     await app.noAlert()
   },
   async 'suggests a judgment value from confirmed documents, and saves it once accepted'(app, vault) {
