@@ -186,6 +186,18 @@ impl Vault {
         })
     }
 
+    /// Reads several files in one go, in order. A file that is gone by the time it is read — removed
+    /// between listing and reading — is `None`; any other failure fails the whole read.
+    pub fn read_many(&self, rels: &[String]) -> Result<Vec<Option<String>>> {
+        rels.iter()
+            .map(|rel| match self.read(rel) {
+                Ok(content) => Ok(Some(content)),
+                Err(VaultError::NotFound(_)) => Ok(None),
+                Err(e) => Err(e),
+            })
+            .collect()
+    }
+
     /// Replaces (or creates) a file atomically.
     pub fn write(&self, rel: &str, content: &str) -> Result<()> {
         let abs = self.prepare(rel)?;
@@ -251,6 +263,21 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = Vault::open(dir.path()).unwrap();
         (dir, vault)
+    }
+
+    #[test]
+    fn reads_many_files_in_order_and_skips_ones_that_are_gone() {
+        let (_dir, v) = vault();
+        v.write("문서/a.md", "A").unwrap();
+        v.write("문서/b.md", "B").unwrap();
+        let read = v
+            .read_many(&["문서/b.md".into(), "문서/gone.md".into(), "문서/a.md".into()])
+            .unwrap();
+        assert_eq!(read, [Some("B".into()), None, Some("A".into())]);
+        assert!(matches!(
+            v.read_many(&["../x.md".into()]),
+            Err(VaultError::OutsideVault(_))
+        ));
     }
 
     #[test]

@@ -22,24 +22,34 @@ export async function readVault(): Promise<ReadVault> {
     vault.listDocuments(),
     vault.listEvents(),
   ])
+  // One call into the shell per kind of file, not one per file: a vault of thousands of documents
+  // would otherwise spend most of a read crossing that boundary. A file removed since it was listed
+  // is left out — the change that removed it reads the vault again.
+  const [templateSources, documentSources, eventSources] = await Promise.all([
+    vault.readMany(templateEntries.map((e) => e.path)),
+    vault.readMany(documentEntries.map((e) => e.path)),
+    vault.readMany(eventEntries.map((e) => e.path)),
+  ])
   const templates: TemplateSnapshot[] = []
   const names = new Map<string, string>()
-  for (const entry of templateEntries) {
+  templateEntries.forEach((entry, i) => {
+    const source = templateSources[i]
+    if (source === null) return
     try {
-      const template = templateSnapshot(await vault.read(entry.path))
+      const template = templateSnapshot(source)
       templates.push(template)
       names.set(template.ref, entry.name.replace(/\.fd\.md$/, ''))
     } catch (e) {
       if (!(e instanceof TemplateError)) throw e // a template without an identity is left out
     }
-  }
+  })
   const documents: DocumentSnapshot[] = []
-  for (const entry of documentEntries) {
-    const document = documentSnapshot(entry.path, await vault.read(entry.path), entry.modifiedMs)
+  documentEntries.forEach((entry, i) => {
+    const source = documentSources[i]
+    const document = source === null ? undefined : documentSnapshot(entry.path, source, entry.modifiedMs)
     if (document) documents.push(document)
-  }
-  const events: SuggestionEvent[] = []
-  for (const entry of eventEntries) events.push(...parseEvents(await vault.read(entry.path)))
+  })
+  const events = eventSources.flatMap((source) => (source === null ? [] : parseEvents(source)))
   return { templates, names, documents, events }
 }
 

@@ -593,6 +593,29 @@ const scenarios = {
     assert.ok(decided.every((e) => e.template === 'intake@1'), 'events name their template')
     await app.noAlert()
   },
+
+  // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of
+  // the vault repeats once per document.
+  ...(process.env.LOWLINE_PERF === '1' && {
+    async 'measures reading files through the shell'(app, vault) {
+      const [name] = await documentsIn(vault)
+      const path = `문서/${name}`
+      const ms = await app.cdp.evaluate(`(async () => {
+        const invoke = window.__TAURI_INTERNALS__.invoke
+        for (let i = 0; i < 50; i++) await invoke('read_file', { path: ${JSON.stringify(path)} })
+        const started = performance.now()
+        for (let i = 0; i < 1000; i++) await invoke('read_file', { path: ${JSON.stringify(path)} })
+        const sequential = performance.now() - started
+        const again = performance.now()
+        await Promise.all(Array.from({ length: 1000 }, () => invoke('read_file', { path: ${JSON.stringify(path)} })))
+        const all = performance.now() - again
+        const batch = performance.now()
+        await invoke('read_files', { paths: Array.from({ length: 1000 }, () => ${JSON.stringify(path)}) })
+        return [Math.round(sequential), Math.round(all), Math.round(performance.now() - batch)]
+      })()`)
+      console.log(`    1000 reads through the shell · one at a time ${ms[0]} ms · all at once ${ms[1]} ms · in one call ${ms[2]} ms`)
+    },
+  }),
 }
 
 /** Waits until nothing answers on the debugging port: the last window's browser has gone. */

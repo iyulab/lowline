@@ -169,6 +169,13 @@ fn read_file(path: String, state: State<AppState>) -> CommandResult<String> {
     with_vault(&state, |v| v.read(&path))
 }
 
+/// Reads several files in one call: a full read of the vault would otherwise cross into the shell
+/// once per file. A file removed since it was listed comes back as `null`.
+#[tauri::command]
+fn read_files(paths: Vec<String>, state: State<AppState>) -> CommandResult<Vec<Option<String>>> {
+    with_vault(&state, |v| v.read_many(&paths))
+}
+
 /// Replaces a file atomically.
 #[tauri::command]
 fn write_file(path: String, content: String, state: State<AppState>) -> CommandResult<()> {
@@ -350,6 +357,7 @@ pub fn run() {
             list_templates,
             list_documents,
             read_file,
+            read_files,
             write_file,
             create_file,
             host_status,

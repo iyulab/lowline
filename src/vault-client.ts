@@ -32,6 +32,8 @@ export const vault = {
   listTemplates: () => invoke<VaultEntry[]>('list_templates'),
   listDocuments: () => invoke<VaultEntry[]>('list_documents'),
   read: (path: string) => invoke<string>('read_file', { path }),
+  /** Several files in one call, in order; `null` for one removed since it was listed. */
+  readMany: (paths: string[]) => invoke<(string | null)[]>('read_files', { paths }),
   /** Replaces the file atomically. */
   write: (path: string, content: string) => invoke<void>('write_file', { path, content }),
   /** Creates the file atomically; rejects with `already-exists` instead of replacing one. */
