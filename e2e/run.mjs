@@ -591,6 +591,22 @@ const scenarios = {
     assert.ok(figures.includes(`수락 ${accepted} · 교정 0 · 거절 ${rejected}`), figures)
     assert.ok(figures.includes('제안이 나온 최근 2건 중 맞음 50%'), figures)
     assert.ok(decided.every((e) => e.template === 'intake@1'), 'events name their template')
+
+    // Weekly counts to hand over by hand: numbers only, the form's name shown beside them but not in them.
+    const counts = JSON.parse(
+      await app.cdp.waitFor(`__e2e.all('details.counts pre')[0]?.textContent`, 'the weekly counts', { timeoutMs: 30_000 }),
+    )
+    assert.equal(counts.format, 'lowline-weekly-counts/1')
+    const intake = counts.counts.filter((c) => c.form === 1 && c.field === 1)
+    assert.deepEqual(
+      [intake.reduce((n, c) => n + c.accepted, 0), intake.reduce((n, c) => n + c.rejected, 0)],
+      [accepted, rejected],
+      'the decisions counted',
+    )
+    const text = JSON.stringify(counts)
+    for (const secret of ['접수', '담당', 'intake', '문서', '장비', '인사']) assert.ok(!text.includes(secret), `no ${secret} in the counts`)
+    const legend = await app.cdp.evaluate(`__e2e.all('details.counts li').map((li) => li.textContent.trim())`)
+    assert.ok(legend[0].startsWith('서식 1 = 접수'), legend[0])
     await app.noAlert()
   },
 

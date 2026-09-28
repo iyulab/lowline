@@ -6,6 +6,7 @@ import type { FieldCurve, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { host, onVaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
+import { numberedForms, weeklyCounts, type WeeklyCounts } from './weekly-counts.js'
 
 /** The decisions each rate is taken over — the sidecar's window. */
 const WINDOW = 10
@@ -104,6 +105,18 @@ export class LlLearning extends LitElement {
       text-align: right;
       padding: 2px var(--dc-space-3, 12px) 2px 0;
     }
+    details.counts pre {
+      max-height: 240px;
+      overflow: auto;
+      font-size: 12px;
+      background: var(--dc-color-surface, #fff);
+      border: 1px solid var(--dc-color-border, #e2ded5);
+      padding: var(--dc-space-2, 8px);
+    }
+    ul.legend {
+      margin: 0;
+      padding-left: 1.2em;
+    }
     .message {
       color: var(--dc-color-text-muted, #666);
       max-width: 60ch;
@@ -119,6 +132,8 @@ export class LlLearning extends LitElement {
   @state() private templates: TemplateSnapshot[] = []
   @state() private names = new Map<string, string>()
   @state() private waiting = true
+  @state() private counts?: WeeklyCounts
+  @state() private copied: 'no' | 'yes' | 'failed' = 'no'
   @state() private error = ''
 
   private unlisten?: Promise<UnlistenFn>
@@ -139,6 +154,8 @@ export class LlLearning extends LitElement {
       const synced = await syncVault()
       this.templates = synced.templates
       this.names = synced.names
+      this.counts = weeklyCounts(synced.templates, synced.documents, synced.events)
+      this.copied = 'no'
       this.curves = await host.curves()
       this.error = ''
     } catch (e) {
@@ -157,7 +174,45 @@ export class LlLearning extends LitElement {
     if (this.error) return html`<p class="error" role="alert">${this.error}</p>`
     if (this.waiting) return html`<p class="message" role="status">${strings.hostStarting}</p>`
     if (this.curves.length === 0) return html`<p class="message">${strings.learningEmpty}</p>`
-    return this.curves.map((c) => this.renderCurve(c))
+    return html`${this.curves.map((c) => this.renderCurve(c))}${this.renderCounts()}`
+  }
+
+  /**
+   * Weekly counts to hand over by hand: numbers only. Which number is which form is shown here, to the
+   * person who can see the vault anyway, and is not part of what is copied.
+   */
+  private renderCounts() {
+    const counts = this.counts
+    if (!counts || counts.counts.length === 0) return nothing
+    const text = JSON.stringify(counts, null, 2)
+    const forms = numberedForms(this.templates)
+    return html`<details class="counts">
+      <summary>${strings.countsTitle}</summary>
+      <p class="message">${strings.countsHelp}</p>
+      <ul class="legend">
+        ${forms.map(
+          (t, i) => html`<li>${strings.countsForm(i + 1, this.names.get(t.ref) ?? t.ref, t.suggest.map((f) => this.fieldLabel(t.ref, f)))}</li>`,
+        )}
+      </ul>
+      <pre>${text}</pre>
+      <dc-button size="sm" variant="secondary" @click=${() => void this.copy(text)}>${strings.countsCopy}</dc-button>
+      ${this.copied === 'no'
+        ? nothing
+        : html`<span class="secondary" role="status">${this.copied === 'yes' ? strings.countsCopied : strings.countsCopyFailed}</span>`}
+    </details>`
+  }
+
+  private fieldLabel(template: string, field: string): string {
+    return this.templates.find((t) => t.ref === template)?.fields.find((f) => f.name === field)?.label ?? field
+  }
+
+  private async copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      this.copied = 'yes'
+    } catch {
+      this.copied = 'failed' // the text is on screen to select and copy by hand
+    }
   }
 
   private renderCurve(curve: FieldCurve) {

@@ -65,6 +65,13 @@ export const strings = {
   learningChart: (field: string) => `${field} — 제안이 나온 칸 중 맞은 비율, 결정 순서대로`,
   learningPoint: (n: number, rate: number) => `${n}번째 결정 뒤 ${Math.round(rate * 100)}%`,
   learningTable: '표로 보기',
+  countsTitle: '주별 집계 (개수만)',
+  countsHelp:
+    '제안이 나아지는지 연구하는 쪽에 직접 건넬 수 있는 집계입니다. 서식과 칸은 번호로만 적고, 문서 내용·값·이름·경로는 담지 않습니다. 결정한 제안만 셉니다.',
+  countsForm: (n: number, name: string, fields: string[]) => `서식 ${n} = ${name} (칸 ${fields.map((f, i) => `${i + 1} = ${f}`).join(', ')}) — 이 대응은 복사되지 않습니다`,
+  countsCopy: '집계 복사',
+  countsCopied: '복사했습니다',
+  countsCopyFailed: '복사하지 못했습니다. 위 글을 선택해 복사하세요.',
   learningN: '결정',
   learningAt: '시각',
   learningShare: '제안이 나온 칸 중 맞은 비율',
