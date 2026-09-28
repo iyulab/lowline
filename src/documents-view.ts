@@ -144,6 +144,8 @@ export class LlDocuments extends LitElement {
   /** Counts requests for suggestions; only the latest one's answers are shown. */
   private suggestRun = 0
   @state() private dirty = false
+  /** The open document changed outside while it had unsaved edits: the person chooses which to keep. */
+  @state() private changedOutside = false
   @state() private message = ''
   @state() private error = ''
 
@@ -174,6 +176,7 @@ export class LlDocuments extends LitElement {
         this.error = strings.removedOutside
       } else if (this.dirty) {
         this.error = strings.changedOutsideDirty
+        this.changedOutside = true
       } else {
         await this.open(draft.path)
         if (!change.rescan) this.message = strings.reloadedOutside
@@ -202,6 +205,7 @@ export class LlDocuments extends LitElement {
 
   private reset() {
     this.error = ''
+    this.changedOutside = false
     this.message = ''
     this.dirty = false
     this.template = undefined
@@ -286,6 +290,13 @@ export class LlDocuments extends LitElement {
     for (const event of events) await vault.recordEvent(event)
   }
 
+  /** Drops the unsaved edits and shows the document as it is on disk now. */
+  private async readOutside() {
+    if (this.draft?.kind !== 'existing') return
+    await this.open(this.draft.path)
+    this.message = strings.reloadedOutside
+  }
+
   private async startNew(templatePath: string) {
     this.reset()
     try {
@@ -330,6 +341,7 @@ export class LlDocuments extends LitElement {
       }
       if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.path)
       this.dirty = false
+      this.changedOutside = false
       this.message = strings.saved
       this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
       // What was just saved is confirmed: the next suggestions learn from it.
@@ -417,6 +429,9 @@ export class LlDocuments extends LitElement {
                 ${this.error
                   ? html`<span class="error" role="alert">${this.error}</span>`
                   : html`<span class="message" role="status">${this.message}</span>`}
+                ${this.changedOutside
+                  ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
+                  : nothing}
               </div>
               ${this.renderSuggestions()}
               ${keyed(

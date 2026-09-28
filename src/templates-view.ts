@@ -82,6 +82,8 @@ export class LlTemplates extends LitElement {
   @state() private selected?: string
   @state() private source = ''
   @state() private dirty = false
+  /** The open template changed outside while it had unsaved edits: the person chooses which to keep. */
+  @state() private changedOutside = false
   @state() private message = ''
   @state() private error = ''
 
@@ -108,6 +110,7 @@ export class LlTemplates extends LitElement {
         this.error = strings.removedOutside
       } else if (this.dirty) {
         this.error = strings.changedOutsideDirty
+        this.changedOutside = true
       } else {
         await this.select(selected)
         if (!change.rescan) this.message = strings.reloadedOutside
@@ -132,6 +135,18 @@ export class LlTemplates extends LitElement {
     this.source = await vault.read(path)
     this.selected = path
     this.dirty = false
+    this.changedOutside = false
+  }
+
+  /** Drops the unsaved edits and shows the template as it is on disk now. */
+  private async readOutside() {
+    if (!this.selected) return
+    try {
+      await this.select(this.selected)
+      this.message = strings.reloadedOutside
+    } catch (e) {
+      this.error = describeError(e)
+    }
   }
 
   private async save() {
@@ -141,6 +156,7 @@ export class LlTemplates extends LitElement {
       templateInfo(this.source) // a template must name itself
       await vault.write(this.selected, this.source)
       this.dirty = false
+      this.changedOutside = false
       this.message = strings.saved
       this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
     } catch (e) {
@@ -191,6 +207,9 @@ export class LlTemplates extends LitElement {
                 ${this.error
                   ? html`<span class="error" role="alert">${this.error}</span>`
                   : html`<span class="message" role="status">${this.message}</span>`}
+                ${this.changedOutside
+                  ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
+                  : nothing}
               </div>
               <textarea
                 spellcheck="false"

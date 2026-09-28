@@ -300,6 +300,15 @@ const scenarios = {
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 1500))`)
     await app.status('저장했습니다')
     await app.noAlert()
+
+    // Or the person keeps what is on disk: reading it again drops the unsaved edit.
+    await app.choose('select[name="심각도"]', '낮음')
+    await severity('높음')
+    await app.click('dc-button', '밖의 내용으로 다시 읽기')
+    await app.status('밖에서 바뀌어 다시 읽었습니다')
+    assert.equal(await app.value('select[name="심각도"]'), '높음', 'the outside edit is shown')
+    assert.equal((await fileValues(path)).심각도, '높음', 'the file is left as the outside edit made it')
+    await app.noAlert()
   },
   async 'shows each document as one row of its template table'(app, vault) {
     await app.click('button', '표')
