@@ -136,6 +136,15 @@ fn slashed(path: &Path) -> String {
         .join("/")
 }
 
+/// Whether a change at `rel` is none of the app's business. The vault folder may be shared with
+/// other programs — another notes app keeps its own files there, a sync client its state — and
+/// only the places the app reads count: templates, documents and other devices' event files. This
+/// device's event file is appended to by this app alone, and its temporary files are its own.
+fn ignored(rel: &Path, own_events: Option<&Path>) -> bool {
+    let read = [TEMPLATES_DIR, DOCUMENTS_DIR, EVENTS_DIR];
+    !read.iter().any(|dir| rel.starts_with(dir)) || own_events == Some(rel)
+}
+
 /// Watches the vault for edits made outside the app — another editor, a sync client, another
 /// device — and tells the UI. This app's own writes are left out, and so is this device's event
 /// file, which only this app appends to.
@@ -147,7 +156,7 @@ fn watch_vault(app: &AppHandle, vault: &Vault) -> std::io::Result<Watcher> {
     let app = app.clone();
     Watch::new(vault.root())
         .own_writes(vault.own_writes())
-        .ignore(move |rel| rel.starts_with(TMP_DIR) || own_events.as_deref() == Some(rel))
+        .ignore(move |rel| ignored(rel, own_events.as_deref()))
         .probe_liveness(TMP_DIR, PROBE_EVERY)
         .start(move |notice| {
             let _ = app.emit("vault-changed", VaultChanged::from(notice));
@@ -381,6 +390,25 @@ pub fn run() {
 mod tests {
     use super::*;
     use tauri_kit_watch::Change;
+
+    #[test]
+    fn watches_only_the_places_the_app_reads() {
+        let own = Path::new(".lowline/events/this-device.jsonl");
+        for rel in ["서식/버그 리포트.fd.md", "문서/2026-09-29 제목.md", ".lowline/events/other-device.jsonl"] {
+            assert!(!ignored(Path::new(rel), Some(own)), "{rel} is read by the app");
+        }
+        for rel in [
+            ".lowline/events/this-device.jsonl",
+            ".lowline/tmp/.tauri-kit-tmp-1",
+            ".textree/tmp/.watcher-canary-3",
+            ".textree/favorites.json",
+            "메모.md",
+            "assets/Pasted-1.png",
+            "문서철/a.md",
+        ] {
+            assert!(ignored(Path::new(rel), Some(own)), "{rel} is not the app's to read");
+        }
+    }
 
     #[test]
     fn a_template_id_stays_one_path_segment() {
