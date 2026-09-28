@@ -18,7 +18,10 @@ export interface SuggestionEvent {
   suggested: string
   /** The value saved; null when the field was left empty after a rejection. */
   value: FieldValue | null
-  /** Where the suggestion came from (`memory`), the record it recalled, and how close it was. */
+  /**
+   * Where the suggestion came from (`memory`: a similar record · `key`: a value settled alongside one this
+   * record has), what it rests on (that record, or that value), and how close the record was.
+   */
   source: string
   recall: string | null
   similarity: number | null

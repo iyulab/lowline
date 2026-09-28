@@ -412,7 +412,11 @@ export class LlDocuments extends LitElement {
         ([field, s]) => html`<div class="suggestion" role="note" data-field=${field}>
           <span>${strings.suggestionFor(label(field))}: <strong>${s.value}</strong></span>
           ${s.source
-            ? html`<span class="source">${strings.suggestionSource(s.source.replace(/^.*\//, '').replace(/\.md$/, ''))}</span>`
+            ? html`<span class="source"
+                >${s.mode === 'key'
+                  ? strings.suggestionKey(s.source)
+                  : strings.suggestionSource(s.source.replace(/^.*\//, '').replace(/\.md$/, ''))}</span
+              >`
             : nothing}
           <dc-button size="sm" variant="secondary" @click=${() => this.accept(field, s.value!)}>${strings.accept}</dc-button>
           <dc-button size="sm" variant="ghost" @click=${() => this.reject(field)}>${strings.reject}</dc-button>

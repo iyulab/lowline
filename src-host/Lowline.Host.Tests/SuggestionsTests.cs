@@ -152,6 +152,27 @@ public sealed class SuggestionsTests
         Assert.True((await Suggestions.BuildAsync(Many(17), Ct, previous: many)).NeedsSelection); // grew by a tenth
     }
 
+    [Fact]
+    public async Task Answers_from_a_field_that_decides_it_once_its_history_shows_it_does()
+    {
+        // 부서 decides 담당 here, while no two requests are alike.
+        string[] words = ["사과", "기차", "구름", "연필", "바다", "시계", "우산", "나무", "모자", "종이"];
+        var owners = new Dictionary<string, string> { ["영업"] = "장비", ["개발"] = "인사", ["인사"] = "총무" };
+        var departments = owners.Keys.ToArray();
+        var vault = new VaultSnapshot([Intake],
+            [.. Enumerable.Range(0, 30).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
+                Values($$"""{"요청": "{{words[i % 10]}} {{words[i / 10 * 3 % 10]}} {{i}}", "부서": "{{departments[i % 3]}}", "담당": "{{owners[departments[i % 3]]}}"}"""),
+                Modified: i))]);
+        var suggestions = await Suggestions.BuildAsync(vault, Ct);
+        var request = new SuggestRequest("intake@1", "담당", Values("""{"요청": "전혀 다른 요청", "부서": "개발"}"""));
+
+        // Until replay shows 부서 decides it, a value settled alongside it is only a guess.
+        Assert.Equal(new Suggestion(null, "abstain", null, null), await suggestions.SuggestAsync(request, Ct));
+
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
+        Assert.Equal(new Suggestion("인사", "key", "부서: 개발", null), await suggestions.SuggestAsync(request, Ct));
+    }
+
     private static VaultSnapshot Many(int count) => new([Intake],
         [.. Enumerable.Range(1, count).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
             Values($$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}"""), Modified: i))]);

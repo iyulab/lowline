@@ -615,6 +615,9 @@ const scenarios = {
     // A sync client kept another device's edit of 접수-1 as a copy.
     const copy = join(vault, '문서', '접수-1 (다른 기기의 충돌된 사본 2026-09-29).md')
     const original = await readFile(join(vault, '문서', '접수-1.md'), 'utf8')
+    // What the shell reports from here on, to tell a missed change from a missed refresh if the end fails.
+    await app.cdp.evaluate(`(() => { window.__changes = []; const T = window.__TAURI_INTERNALS__
+        T.invoke('plugin:event|listen', { event: 'vault-changed', target: { kind: 'Any' }, handler: T.transformCallback((e) => window.__changes.push(e.payload)) }); return true })()`)
     await writeFile(copy, original.replace('담당: 장비', '담당: 총무'))
     try {
       await app.click('button', '문서')
@@ -646,7 +649,13 @@ ${JSON.stringify(await listed())}`)
       await rm(copy, { force: true })
     }
     // Keeping one file settles it.
-    await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
+    try {
+      await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
+    } catch (e) {
+      const shell = await app.cdp.evaluate(`window.__TAURI_INTERNALS__.invoke('list_documents').then((l) => l.map((e) => e.name))`)
+      const changes = await app.cdp.evaluate(`JSON.stringify(window.__changes)`)
+      throw new Error(`${e.message}\n    file still there: ${existsSync(copy)} · the shell lists: ${JSON.stringify(shell)} · changes the window was told of: ${changes}`)
+    }
   },
 
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of

@@ -43,26 +43,15 @@ public sealed class Suggestions
     /// </summary>
     public const int MinimumAnswered = Curves.Window;
 
-    /// <summary>
-    /// The document id suggestions are asked under. Gil suggests only through a session, and a session puts
-    /// its values into memory; unsaved values are not confirmed, so they are put under an id no saved document
-    /// has, and only observed fields — which alone contribute nothing.
-    /// TODO(upstream: docket iyulab/Gil#552) — ask with values, without putting them into memory.
-    /// </summary>
-    private const string QueryId = "\u0000query";
-
-    private readonly LexicalMemory _memory = new();
-
-    /// <summary>Keeps memory: every saved document goes through it.</summary>
-    private readonly FormResolver _keeper;
+    /// <summary>The document a draft is asked about: it has no saved version to leave out of the evidence.</summary>
+    private const string Unsaved = "\u0000unsaved";
 
     /// <summary>
-    /// Answers: the same similar-document memory, and a settled-field memory that stays empty.
-    /// TODO(upstream: docket iyulab/Gil#554) — a value settled alongside another field's value is offered before
-    /// a similar document's, however little it predicts; on a free-text form that turns most suggestions wrong.
-    /// Ask through the keeper once that layer has a threshold of its own.
+    /// Every saved document goes into its memories; asking writes nothing to them. Two layers answer: values
+    /// settled alongside the document's observed values, once replay has shown they decide the field
+    /// (<see cref="FieldDefinition.KeyThreshold"/>), and similar documents at the field's similarity threshold.
     /// </summary>
-    private readonly FormResolver _asker;
+    private readonly FormResolver _resolver = new(new FieldMemory(), new LexicalMemory());
     private readonly Dictionary<string, TemplateSnapshot> _templates;
     private readonly Dictionary<string, List<SettledDocument>> _settled;
     private Dictionary<(string Template, string Field), FieldThreshold> _thresholds;
@@ -76,7 +65,6 @@ public sealed class Suggestions
         IReadOnlyList<SuggestionEvent> events)
     {
         (_templates, _settled, _thresholds) = (templates, settled, thresholds);
-        (_keeper, _asker) = (new FormResolver(new FieldMemory(), _memory), new FormResolver(new FieldMemory(), _memory));
         _rejected = Rejected(events);
         _forms = Forms();
     }
@@ -121,8 +109,8 @@ public sealed class Suggestions
         foreach (var template in templates.Values)
         {
             // Memory is kept for every judgment field; the threshold a field is asked at decides whether it is used.
-            var remembering = Form(template, _ => PriorThreshold)!;
-            await suggestions._keeper.RebuildAsync(remembering, settled[template.Ref], cancellationToken);
+            var remembering = Form(template, _ => new FieldThreshold(null, 0, null))!;
+            await suggestions._resolver.RebuildAsync(remembering, settled[template.Ref], cancellationToken);
         }
         return suggestions;
     }
@@ -135,19 +123,22 @@ public sealed class Suggestions
         t.SelectedAt is not { } at || Math.Abs(t.Confirmed - at) * 10 >= Math.Max(at, 10));
 
     /// <summary>
-    /// Chooses each judgment field's threshold by replaying its confirmed documents in the order they were
-    /// saved. The replay grows with the square of the history, so it runs apart from building memory and
-    /// its result is applied with <see cref="Apply"/>.
+    /// Chooses each judgment field's thresholds — similar documents', and the values settled alongside its
+    /// observed values' — by replaying its confirmed documents in the order they were saved. The replay grows
+    /// with the square of the history, so it runs apart from building memory and its result is applied with
+    /// <see cref="Apply"/>.
     /// </summary>
     public async Task<IReadOnlyDictionary<(string Template, string Field), FieldThreshold>> SelectThresholdsAsync(CancellationToken cancellationToken)
     {
         var chosen = new Dictionary<(string, string), FieldThreshold>();
         foreach (var ((template, field), current) in _thresholds)
         {
-            var bare = Form(_templates[template], _ => null)!;
+            var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
             var choice = await ThresholdSelection.SelectAsync(
                 new LexicalMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered, cancellationToken);
-            chosen[(template, field)] = new FieldThreshold(choice, current.Confirmed, current.Confirmed);
+            var key = ThresholdSelection.SelectKeyThreshold(
+                new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
+            chosen[(template, field)] = new FieldThreshold(choice, current.Confirmed, current.Confirmed, key);
         }
         return chosen;
     }
@@ -170,18 +161,23 @@ public sealed class Suggestions
 
     private Dictionary<string, FormDefinition> Forms() => _templates.Values.ToDictionary(
         t => t.Ref,
-        t => Form(t, field => _thresholds[(t.Ref, field)].Threshold)!,
+        t => Form(t, field => _thresholds[(t.Ref, field)])!,
         StringComparer.Ordinal);
 
     /// <summary>A template as a Gil form, or null when its author turned suggestions on for no field.</summary>
-    private static FormDefinition? Form(TemplateSnapshot template, Func<string, double?> threshold)
+    private static FormDefinition? Form(TemplateSnapshot template, Func<string, FieldThreshold> threshold)
     {
         var judged = template.Suggest ?? [];
         if (!template.Fields.Any(f => judged.Contains(f.Name))) return null;
         // A judgment rests on the fields people fill in, not on other judgments: those are suggested too.
         var observed = template.Fields.Where(f => !judged.Contains(f.Name)).Select(f => f.Name).ToList();
         var fields = template.Fields.Select(f => judged.Contains(f.Name)
-            ? new FieldDefinition(f.Name, FieldRole.Judged) { MemoryThreshold = threshold(f.Name), DependsOn = observed }
+            ? new FieldDefinition(f.Name, FieldRole.Judged)
+            {
+                MemoryThreshold = threshold(f.Name).Threshold,
+                KeyThreshold = threshold(f.Name).KeyThreshold,
+                DependsOn = observed,
+            }
             : new FieldDefinition(f.Name, FieldRole.Observed));
         // No model is called, so the language is never used.
         return new FormDefinition(template.Ref, [.. fields], PromptLanguage.English);
@@ -209,20 +205,22 @@ public sealed class Suggestions
         if (request.Document is { } document && _rejected.Contains((document, request.Field)))
             return new Suggestion(null, "rejected", null, null);
 
-        var session = _asker.Open(form, QueryId);
-        foreach (var (field, value) in Texts(request.Values))
-        {
-            if (form.Fields.Any(f => f.Name == field && f.Role == FieldRole.Observed))
-                await session.ObserveAsync(field, value, cancellationToken);
-        }
-        var suggestion = (await session.SuggestAsync(cancellationToken)).Single(s => s.Field == request.Field);
+        // A judgment rests on the fields people fill in; the document's own saved version is never its evidence.
+        var observed = Texts(request.Values)
+            .Where(v => form.Fields.Any(f => f.Name == v.Key && f.Role == FieldRole.Observed))
+            .ToDictionary(v => v.Key, v => v.Value, StringComparer.Ordinal);
+        var suggestion = (await _resolver.SuggestAsync(form, request.Document ?? Unsaved, observed, cancellationToken))
+            .SingleOrDefault(s => s.Field == request.Field);
 
-        // Never the document's own saved version.
-        var similar = suggestion.Candidates.FirstOrDefault(c =>
-            c.Source == FieldSource.SimilarDocument && c.Evidence != request.Document);
-        return similar is null
-            ? new Suggestion(null, "abstain", null, null)
-            : new Suggestion(similar.Value, "memory", similar.Evidence, similar.Score);
+        // Only a layer that answered is offered: a guess leaves the field to the person.
+        if (suggestion is not { Answered: true }) return new Suggestion(null, "abstain", null, null);
+        var answer = suggestion.Candidates[0];
+        return answer.Source switch
+        {
+            FieldSource.SimilarDocument => new Suggestion(answer.Value, "memory", answer.Evidence, answer.Score),
+            FieldSource.SettledFieldMemory => new Suggestion(answer.Value, "key", answer.Evidence, null),
+            _ => new Suggestion(null, "abstain", null, null),
+        };
     }
 
     /// <summary>A value as text, or null when it holds nothing.</summary>
@@ -238,12 +236,20 @@ public sealed class Suggestions
 }
 
 /// <summary>
-/// A judgment field's similarity threshold: <see cref="Choice"/> is what replaying its history chose, over the
+/// A judgment field's thresholds: <see cref="Choice"/> is the similarity threshold replaying its history chose and
+/// <see cref="KeyChoice"/> the strength at which values settled alongside its observed values answer, over the
 /// <see cref="SelectedAt"/> confirmed documents it had then (null: not yet chosen); <see cref="Confirmed"/> is how
 /// many it has now.
 /// </summary>
-public sealed record FieldThreshold(ThresholdChoice? Choice, int Confirmed, int? SelectedAt)
+public sealed record FieldThreshold(ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? KeyChoice = null)
 {
+    /// <summary>
+    /// The strength at which values settled alongside the observed values answer: the one chosen from the field's
+    /// history, and none — they are guesses, after similar documents — until one has been, or when none was right
+    /// often enough.
+    /// </summary>
+    public double? KeyThreshold => KeyChoice?.Threshold;
+
     /// <summary>
     /// The threshold the field answers from similar documents at: the one chosen from its history; the prior
     /// while it has not been chosen yet or the history is too short to choose from; and none — similar

@@ -115,8 +115,9 @@ export interface FieldCurve {
 export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
   value: string | null
+  /** `memory`: from a similar document · `key`: settled alongside a value this document has · `abstain`. */
   mode: string
-  /** The document the value was confirmed in. */
+  /** What it rests on: the similar document's path, or the other field's value (`부서: 영업`). */
   source: string | null
   similarity: number | null
 }
