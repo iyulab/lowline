@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { suggestionEvents } from '../events.js'
+import { parseEvents, suggestionEvents } from '../events.js'
 import type { Suggestion } from '../projection.js'
 
 const offer = (value: string): Suggestion => ({ value, mode: 'memory', source: '문서/접수-1.md', similarity: 0.8 })
@@ -40,5 +40,20 @@ describe('suggestionEvents', () => {
 
   it('says nothing about a suggestion that was neither taken nor rejected', () => {
     expect(suggestionEvents(offered, new Set(), {}, 'd', at)).toEqual([])
+  })
+})
+
+describe('parseEvents', () => {
+  it('reads one event per line and skips lines that are not events', () => {
+    const [event] = suggestionEvents(new Map([['담당', offer('장비')]]), new Set(['담당']), {}, '문서/a.md', at)
+    const text = [
+      JSON.stringify(event),
+      '',
+      '{"at":"2026-09-28T12:00:00.000Z","doc":"문서/a.md","fi', // cut short
+      JSON.stringify({ ...event, kind: 'ignored' }),
+      '[1, 2]',
+      `${JSON.stringify(event)}\r`,
+    ].join('\n')
+    expect(parseEvents(text)).toEqual([event, event])
   })
 })

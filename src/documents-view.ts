@@ -128,7 +128,10 @@ export class LlDocuments extends LitElement {
   @state() private suggestions = new Map<string, Suggestion>()
   /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
   private offered = new Map<string, Suggestion>()
-  /** Fields whose suggestion was rejected in this draft: not offered again until it is reopened. */
+  /**
+   * Fields whose suggestion was rejected in this draft and not offered again. Once the draft is
+   * saved the rejection is an event, and the sidecar keeps it out of the document after reopening.
+   */
   private rejected = new Set<string>()
   /** Template names (their file names) by `id@version`. */
   @state() private templateNames = new Map<string, string>()
@@ -201,7 +204,8 @@ export class LlDocuments extends LitElement {
     for (const field of template.suggest) {
       if (!isEmpty(values[field])) continue
       try {
-        const suggestion = await host.suggest(template.ref, field, values)
+        const document = this.draft?.kind === 'existing' ? this.draft.path : undefined
+        const suggestion = await host.suggest(template.ref, field, values, document)
         if (suggestion.value !== null && !this.rejected.has(field)) next.set(field, suggestion)
       } catch {
         // no suggestion for this field

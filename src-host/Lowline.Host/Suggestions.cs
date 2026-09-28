@@ -7,8 +7,12 @@ using Gil.Ontology;
 
 namespace Lowline.Host;
 
-/// <summary>What the UI asks: a value for one judgment field, given the document's other values.</summary>
-public sealed record SuggestRequest(string Template, string Field, IReadOnlyDictionary<string, JsonElement> Values);
+/// <summary>
+/// What the UI asks: a value for one judgment field, given the document's other values.
+/// <see cref="Document"/> is the document's vault path once it has been saved.
+/// </summary>
+public sealed record SuggestRequest(
+    string Template, string Field, IReadOnlyDictionary<string, JsonElement> Values, string? Document = null);
 
 /// <summary>
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
@@ -20,7 +24,9 @@ public sealed record Suggestion(string? Value, string Mode, string? Source, doub
 /// <summary>
 /// Suggestions for judgment fields from what people already confirmed in the vault — no model.
 /// Each template's judgment field is a Gil task; a saved document is a confirmed answer to it:
-/// its other fields are the request, the field's value the answer.
+/// its other fields are the request, the field's value the answer. Documents say what the answer is;
+/// events say which suggestions were wrong — a field whose suggestion was last rejected in a
+/// document is not offered there again.
 /// </summary>
 public sealed class Suggestions
 {
@@ -36,17 +42,30 @@ public sealed class Suggestions
     private readonly LexicalMemory _memory = new();
     private readonly Resolver _resolver;
     private readonly Dictionary<string, TemplateSnapshot> _templates;
+    private readonly HashSet<(string Doc, string Field)> _rejected;
 
-    private Suggestions(IReadOnlyList<TemplateSnapshot> templates)
+    private Suggestions(IReadOnlyList<TemplateSnapshot> templates, IReadOnlyList<SuggestionEvent> events)
     {
         _resolver = new Resolver(_memory);
         _templates = templates.ToDictionary(t => t.Ref, StringComparer.Ordinal);
+        _rejected = Rejected(events);
     }
+
+    /// <summary>
+    /// The document fields whose latest event is a rejection. A later accept or correction in the same
+    /// document means the field was filled in since, and lifts it.
+    /// </summary>
+    private static HashSet<(string, string)> Rejected(IReadOnlyList<SuggestionEvent> events) =>
+        events
+            .GroupBy(e => (e.Doc, e.Field))
+            .Where(g => g.MaxBy(e => e.At, StringComparer.Ordinal)!.Kind == "reject")
+            .Select(g => g.Key)
+            .ToHashSet();
 
     /// <summary>Remembers every judgment value the vault's documents hold.</summary>
     public static async Task<Suggestions> BuildAsync(VaultSnapshot vault, CancellationToken cancellationToken)
     {
-        var suggestions = new Suggestions(vault.Templates);
+        var suggestions = new Suggestions(vault.Templates, vault.Events ?? []);
         foreach (var document in vault.Documents)
         {
             if (!suggestions._templates.TryGetValue(document.Template, out var template)) continue;
@@ -68,6 +87,8 @@ public sealed class Suggestions
     {
         if (!_templates.TryGetValue(request.Template, out var template)) return null;
         if (template.Suggest?.Contains(request.Field) != true) return null;
+        if (request.Document is { } document && _rejected.Contains((document, request.Field)))
+            return new Suggestion(null, "rejected", null, null);
         var text = Request(template, request.Field, request.Values);
         if (text.Length == 0) return new Suggestion(null, "abstain", null, null);
 

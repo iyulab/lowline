@@ -1,6 +1,7 @@
 // Reads the vault as the sidecar needs it and hands it over. The sidecar only knows what this sends.
 
 import { TemplateError } from './documents.js'
+import { parseEvents, type SuggestionEvent } from './events.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type TemplateSnapshot } from './projection.js'
 import { host, vault } from './vault-client.js'
 
@@ -11,11 +12,16 @@ export interface ReadVault {
   /** Each template's name as the vault shows it (its file name), by reference. */
   names: Map<string, string>
   documents: DocumentSnapshot[]
+  events: SuggestionEvent[]
 }
 
 /** Every template with an identity and every document that names a template. */
 export async function readVault(): Promise<ReadVault> {
-  const [templateEntries, documentEntries] = await Promise.all([vault.listTemplates(), vault.listDocuments()])
+  const [templateEntries, documentEntries, eventEntries] = await Promise.all([
+    vault.listTemplates(),
+    vault.listDocuments(),
+    vault.listEvents(),
+  ])
   const templates: TemplateSnapshot[] = []
   const names = new Map<string, string>()
   for (const entry of templateEntries) {
@@ -32,7 +38,9 @@ export async function readVault(): Promise<ReadVault> {
     const document = documentSnapshot(entry.path, await vault.read(entry.path))
     if (document) documents.push(document)
   }
-  return { templates, names, documents }
+  const events: SuggestionEvent[] = []
+  for (const entry of eventEntries) events.push(...parseEvents(await vault.read(entry.path)))
+  return { templates, names, documents, events }
 }
 
 /** Why the sidecar is not there, thrown as a string by `sidecarReady`. */
@@ -52,6 +60,6 @@ export async function sidecarReady() {
 export async function syncVault() {
   await sidecarReady()
   const read = await readVault()
-  const ingest = await host.ingest({ templates: read.templates, documents: read.documents })
+  const ingest = await host.ingest({ templates: read.templates, documents: read.documents, events: read.events })
   return { ...read, ingest }
 }

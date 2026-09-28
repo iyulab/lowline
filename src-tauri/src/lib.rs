@@ -132,6 +132,12 @@ fn record_event(
     })
 }
 
+/// Every device's event file in the vault: what suggestions have learned was wrong.
+#[tauri::command]
+fn list_events(state: State<AppState>) -> CommandResult<Vec<Entry>> {
+    with_vault(&state, |v| v.list(EVENTS_DIR, ".jsonl"))
+}
+
 /// This install's id, made on first use and kept outside any vault.
 fn device_id(app: &tauri::AppHandle) -> std::io::Result<String> {
     let dir = app.path().app_config_dir().map_err(std::io::Error::other)?;
@@ -267,7 +273,8 @@ pub fn run() {
             host_ingest,
             host_projection,
             host_suggest,
-            record_event
+            record_event,
+            list_events
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")

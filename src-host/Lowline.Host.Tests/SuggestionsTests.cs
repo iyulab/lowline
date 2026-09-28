@@ -78,4 +78,45 @@ public sealed class SuggestionsTests
     public void The_request_is_the_other_filled_fields_in_template_order() =>
         Assert.Equal("요청: 배터리\n부서: 영업",
             Suggestions.Request(Intake, "담당", Values("""{"부서": "영업", "담당": "장비", "요청": "배터리"}""")));
+
+    private static readonly DocumentSnapshot[] Confirmed =
+    [
+        Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
+        Document("문서/2.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업"}"""),
+        Document("문서/3.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업"}"""),
+    ];
+
+    private static SuggestionEvent Event(string at, string doc, string kind) => new(at, doc, "담당", kind, "장비");
+
+    private static async Task<string?> SuggestedIn(VaultProjection vault, string document)
+    {
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업"}"""), document), Ct);
+        return suggestion!.Value;
+    }
+
+    [Fact]
+    public async Task Does_not_offer_again_what_was_rejected_in_a_document()
+    {
+        var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake], Confirmed, [Event("2026-09-28T10:00:00.000Z", "문서/2.md", "reject")]), Ct);
+
+        Assert.Null(await SuggestedIn(vault, "문서/2.md"));
+        Assert.Equal("장비", await SuggestedIn(vault, "문서/3.md"));
+        Assert.Equal("rejected", (await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요"}"""), "문서/2.md"), Ct))!.Mode);
+    }
+
+    [Fact]
+    public async Task A_later_confirmation_in_the_document_lifts_a_rejection()
+    {
+        var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake], Confirmed,
+        [
+            Event("2026-09-28T11:00:00.000Z", "문서/2.md", "correct"),
+            Event("2026-09-28T10:00:00.000Z", "문서/2.md", "reject"),
+        ]), Ct);
+
+        Assert.Equal("장비", await SuggestedIn(vault, "문서/2.md"));
+    }
 }

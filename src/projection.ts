@@ -3,6 +3,7 @@
 
 import { parseFormdown } from '@formdown/core'
 import { documentTemplateRef, documentValues, templateInfo } from './documents.js'
+import type { SuggestionEvent } from './events.js'
 
 export interface TemplateField {
   name: string
@@ -30,6 +31,8 @@ export interface DocumentSnapshot {
 export interface VaultSnapshot {
   templates: TemplateSnapshot[]
   documents: DocumentSnapshot[]
+  /** What people did with suggestions, from every device's event file. */
+  events: SuggestionEvent[]
 }
 
 /** A template's reference and fields in template order. Throws `TemplateError` if it has no identity. */

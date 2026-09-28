@@ -64,3 +64,37 @@ export function suggestionEvents(
   }
   return events
 }
+
+const KINDS: readonly string[] = ['accept', 'correct', 'reject']
+
+/**
+ * The events in one device's event file. A line that is not an event — cut short by a sync
+ * conflict, or written by a later version — is skipped rather than failing the whole file.
+ */
+export function parseEvents(text: string): SuggestionEvent[] {
+  const events: SuggestionEvent[] = []
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    let event: unknown
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (isEvent(event)) events.push(event)
+  }
+  return events
+}
+
+function isEvent(e: unknown): e is SuggestionEvent {
+  if (typeof e !== 'object' || e === null) return false
+  const { at, doc, field, kind, suggested } = e as Record<string, unknown>
+  return (
+    typeof at === 'string' &&
+    typeof doc === 'string' &&
+    typeof field === 'string' &&
+    typeof kind === 'string' &&
+    KINDS.includes(kind) &&
+    typeof suggested === 'string'
+  )
+}

@@ -20,8 +20,20 @@ public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> F
 /// <summary>A document: where it lives in the vault, its template, and its recorded values.</summary>
 public sealed record DocumentSnapshot(string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values);
 
-/// <summary>Everything the sidecar knows about a vault: what the shell read and the UI parsed.</summary>
-public sealed record VaultSnapshot(IReadOnlyList<TemplateSnapshot> Templates, IReadOnlyList<DocumentSnapshot> Documents);
+/// <summary>
+/// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the
+/// vault's event files. <see cref="Doc"/> is the document's vault path.
+/// </summary>
+public sealed record SuggestionEvent(string At, string Doc, string Field, string Kind, string Suggested);
+
+/// <summary>
+/// Everything the sidecar knows about a vault: what the shell read and the UI parsed — templates,
+/// documents, and what people did with suggestions.
+/// </summary>
+public sealed record VaultSnapshot(
+    IReadOnlyList<TemplateSnapshot> Templates,
+    IReadOnlyList<DocumentSnapshot> Documents,
+    IReadOnlyList<SuggestionEvent>? Events = null);
 
 public sealed record IngestResult(int Ingested, IReadOnlyList<string> Projections, IReadOnlyList<SkippedDocument> Skipped);
 

@@ -350,6 +350,13 @@ const scenarios = {
     const all = await events(vault)
     assert.equal(all.length, 2, 'one event per confirmation, not per save')
     assert.deepEqual([all[1].kind, all[1].suggested, all[1].value], ['reject', '인사', null])
+
+    // Reopened, the document still has the rejection: the sidecar learned it from the event file.
+    // Opening it again starts a fresh draft: nothing of the last one is kept in the window.
+    await app.click('nav button', all[1].doc.split('/').pop().replace(/\.md$/, ''))
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent.includes('급여')`, 'the reopened document')
+    await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2000))`)
+    assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion is not offered on reopening')
   },
   async 'rebuilds the same table and the same suggestion after a restart, with nothing kept but the vault'(app, vault) {
     const tableNow = async () => {

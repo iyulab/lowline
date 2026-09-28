@@ -37,6 +37,8 @@ export const vault = {
   create: (path: string, content: string) => invoke<void>('create_file', { path, content }),
   /** Appends a suggestion event to this device's event file in the vault. */
   recordEvent: (event: object) => invoke<void>('record_event', { event }),
+  /** Every device's event file. */
+  listEvents: () => invoke<VaultEntry[]>('list_events'),
 }
 
 /** Whether the sidecar is up. */
@@ -47,6 +49,7 @@ export const host = {
   status: () => invoke<HostStatus>('host_status'),
   ingest: (snapshot: VaultSnapshot) => invoke<IngestResult>('host_ingest', { snapshot }),
   projection: (template: string) => invoke<ProjectionTable>('host_projection', { template }),
-  suggest: (template: string, field: string, values: Record<string, unknown>) =>
-    invoke<Suggestion>('host_suggest', { request: { template, field, values } }),
+  /** `document` is the draft's vault path once it has been saved; a rejection there is not offered again. */
+  suggest: (template: string, field: string, values: Record<string, unknown>, document?: string) =>
+    invoke<Suggestion>('host_suggest', { request: { template, field, values, document } }),
 }
