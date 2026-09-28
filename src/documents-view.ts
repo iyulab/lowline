@@ -342,6 +342,7 @@ export class LlDocuments extends LitElement {
     const draft = this.draft
     if (!draft) return
     this.error = ''
+    this.message = '' // "saved" is said again only once this save has landed
     try {
       if (draft.kind === 'existing') {
         const source = updateDocument(draft.source, this.values)

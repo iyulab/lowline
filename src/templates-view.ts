@@ -168,6 +168,7 @@ export class LlTemplates extends LitElement {
   private async save() {
     if (!this.selected) return
     this.error = ''
+    this.message = '' // "saved" is said again only once this save has landed
     try {
       templateInfo(this.source) // a template must name itself
       await vault.write(this.selected, this.source)
