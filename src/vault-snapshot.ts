@@ -35,7 +35,7 @@ export async function readVault(): Promise<ReadVault> {
   }
   const documents: DocumentSnapshot[] = []
   for (const entry of documentEntries) {
-    const document = documentSnapshot(entry.path, await vault.read(entry.path))
+    const document = documentSnapshot(entry.path, await vault.read(entry.path), entry.modifiedMs)
     if (document) documents.push(document)
   }
   const events: SuggestionEvent[] = []

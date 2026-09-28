@@ -26,6 +26,8 @@ export interface DocumentSnapshot {
   path: string
   template: string
   values: Record<string, unknown>
+  /** When the file was last saved (ms since the epoch): its values were last confirmed then. */
+  modified?: number
 }
 
 export interface VaultSnapshot {
@@ -62,10 +64,10 @@ function suggestFields(data: Record<string, unknown> | undefined, fields: Templa
 }
 
 /** A document's template and values, or undefined when it names no template. */
-export function documentSnapshot(path: string, source: string): DocumentSnapshot | undefined {
+export function documentSnapshot(path: string, source: string, modified?: number): DocumentSnapshot | undefined {
   const template = documentTemplateRef(source)
   if (!template) return undefined
-  return { path, template, values: documentValues(source) }
+  return { path, template, values: documentValues(source), ...(modified ? { modified } : {}) }
 }
 
 export interface ProjectionTable {

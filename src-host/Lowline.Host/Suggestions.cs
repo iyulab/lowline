@@ -62,19 +62,28 @@ public sealed class Suggestions
             .Select(g => g.Key)
             .ToHashSet();
 
-    /// <summary>Remembers every judgment value the vault's documents hold.</summary>
+    /// <summary>
+    /// Remembers the judgment values the vault's documents hold. The same field is answered by its
+    /// latest confirmation: documents are taken newest first, and a case already answered by a newer
+    /// document is not remembered again — its older answer was corrected since.
+    /// </summary>
     public static async Task<Suggestions> BuildAsync(VaultSnapshot vault, CancellationToken cancellationToken)
     {
         var suggestions = new Suggestions(vault.Templates, vault.Events ?? []);
-        foreach (var document in vault.Documents)
+        var answered = new HashSet<(string Task, string Request)>();
+        var newestFirst = vault.Documents
+            .OrderByDescending(d => d.Modified ?? long.MinValue)
+            .ThenBy(d => d.Path, StringComparer.Ordinal);
+        foreach (var document in newestFirst)
         {
             if (!suggestions._templates.TryGetValue(document.Template, out var template)) continue;
             foreach (var field in template.Suggest ?? [])
             {
                 if (!document.Values.TryGetValue(field, out var value) || Answer(value) is not { } answer) continue;
                 var task = TaskId(template.Ref, field);
-                await suggestions._memory.RememberAsync(
-                    task, document.Path, Request(template, field, document.Values), answer, document.Path, cancellationToken);
+                var request = Request(template, field, document.Values);
+                if (!answered.Add((task, request))) continue;
+                await suggestions._memory.RememberAsync(task, document.Path, request, answer, document.Path, cancellationToken);
             }
         }
         return suggestions;

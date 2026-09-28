@@ -17,8 +17,12 @@ public sealed record TemplateField(string Name, string Type, bool Multiple = fal
 /// </summary>
 public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> Fields, IReadOnlyList<string>? Suggest = null);
 
-/// <summary>A document: where it lives in the vault, its template, and its recorded values.</summary>
-public sealed record DocumentSnapshot(string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values);
+/// <summary>
+/// A document: where it lives in the vault, its template, its recorded values, and when it was last
+/// saved (ms since the epoch — its values were last confirmed then), if known.
+/// </summary>
+public sealed record DocumentSnapshot(
+    string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values, long? Modified = null);
 
 /// <summary>
 /// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the
