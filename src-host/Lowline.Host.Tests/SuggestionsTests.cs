@@ -151,6 +151,21 @@ public sealed class SuggestionsTests
         Assert.True(vault.ThresholdsSelected.IsCompleted); // nothing grew: no replay started
     }
 
+    [Fact]
+    public async Task Asking_teaches_nothing()
+    {
+        // Only saved documents teach. A request carrying a value for the judgment field — an unsaved
+        // draft that already holds one — must not become something later requests are answered from.
+        var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
+        await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "사내 동호회 가입 신청서 양식", "담당": "총무"}"""), "문서/2.md"), Ct);
+
+        var later = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "사내 동호회 가입 신청서 양식!"}""")), Ct);
+
+        Assert.Equal(new Suggestion(null, "abstain", null, null), later);
+    }
+
     private static readonly DocumentSnapshot[] Confirmed =
     [
         Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
