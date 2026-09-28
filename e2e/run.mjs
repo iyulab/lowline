@@ -436,6 +436,58 @@ const scenarios = {
     assert.equal(await suggestionNow(), suggestion, 'the same suggestion')
     await app.noAlert()
   },
+  async 'imports rows copied from a spreadsheet, and suggests from them'(app, vault) {
+    const before = new Set(await documentsIn(vault))
+    await app.click('button', '문서')
+    await app.click('dc-button', '가져오기')
+    await app.choose('select#import-template', '서식/접수.fd.md')
+    const rows = [
+      ['요청', '부서', '담당', '비고'],
+      ['프린터 토너가 떨어졌어요', '영업', '총무', '지난달'],
+      ['회의실 프로젝터가 안 켜져요', '개발', '경비', ''],
+      ['', '', '', '비고만 있는 행'],
+    ]
+    const text = rows.map((r) => r.join('\t')).join('\n')
+    const zone = `__e2e.all('textarea').find((t) => t.getRootNode().host?.localName === 'dc-paste-rows-zone')`
+    await app.cdp.waitFor(`Boolean(${zone})`, 'the paste zone')
+    await app.cdp.evaluate(`(() => {
+      const data = new DataTransfer()
+      data.setData('text/plain', ${q(text)})
+      ${zone}.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+      return true
+    })()`)
+    await app.status('문서 2건을 만듭니다 · 빈 행 1개는 건너뜁니다')
+    assert.ok(
+      await app.cdp.evaluate(`__e2e.all('li').some((li) => li.textContent.trim() === '3행 담당: 경비')`),
+      'a value the field does not offer is shown',
+    )
+    assert.ok(
+      await app.cdp.evaluate(`__e2e.all('td').some((td) => td.textContent.trim() === '가져오지 않음')`),
+      'an unmatched column is shown',
+    )
+    await app.click('dc-button', '2건 가져오기')
+    await app.status('2건을 가져왔습니다')
+    await app.noAlert()
+
+    const created = (await documentsIn(vault)).filter((n) => !before.has(n))
+    assert.equal(created.length, 2, 'one document per row that fills a field')
+    const values = await Promise.all(created.map((n) => fileValues(join(vault, '문서', n))))
+    const toner = values.find((v) => v.요청 === '프린터 토너가 떨어졌어요')
+    assert.deepEqual([toner?.template, toner?.부서, toner?.담당], ['intake@1', '영업', '총무'])
+    assert.equal(values.find((v) => v.요청 === '회의실 프로젝터가 안 켜져요')?.담당, '경비', 'kept as written')
+
+    // Imported records are confirmed values: a similar new record gets the imported answer suggested.
+    await app.choose('select#template', '서식/접수.fd.md')
+    await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
+    await app.choose('select[name="부서"]', '영업')
+    const suggestion = await app.cdp.waitFor(
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      'a suggestion for 담당',
+      { timeoutMs: 30_000 },
+    )
+    assert.ok(suggestion.includes('총무'), `suggested from the import: ${suggestion}`)
+    await app.noAlert()
+  },
 }
 
 /** With E2E_SCREENSHOTS=<dir>, each passed scenario leaves a picture of the window. */

@@ -3,7 +3,6 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { guard } from 'lit/directives/guard.js'
 import { keyed } from 'lit/directives/keyed.js'
 import {
-  documentFileName,
   documentTitle,
   documentTemplateRef,
   documentValues,
@@ -21,6 +20,8 @@ import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { syncVault } from './vault-snapshot.js'
+import { createDocumentFile } from './document-files.js'
+import './import-view.js'
 
 /** How long typing pauses before suggestions are asked for again. */
 const SUGGEST_DELAY_MS = 300
@@ -144,6 +145,8 @@ export class LlDocuments extends LitElement {
   /** Counts requests for suggestions; only the latest one's answers are shown. */
   private suggestRun = 0
   @state() private dirty = false
+  /** The import panel is showing instead of a document. */
+  @state() private importing = false
   /** The open document changed outside while it had unsaved edits: the person chooses which to keep. */
   @state() private changedOutside = false
   @state() private message = ''
@@ -205,6 +208,7 @@ export class LlDocuments extends LitElement {
 
   private reset() {
     this.error = ''
+    this.importing = false
     this.changedOutside = false
     this.message = ''
     this.dirty = false
@@ -352,17 +356,20 @@ export class LlDocuments extends LitElement {
   }
 
   /** Creates the document under a free name; never replaces an existing file. */
-  private async createDocument(source: string, title: string | undefined): Promise<string> {
-    const now = new Date()
-    for (let attempt = 1; ; attempt++) {
-      const path = `${this.vaultInfo.documentsDir}/${documentFileName(now, title, attempt)}`
-      try {
-        await vault.create(path, source)
-        return path
-      } catch (e) {
-        if ((e as { kind?: string }).kind !== 'already-exists' || attempt >= 99) throw e
-      }
-    }
+  private createDocument(source: string, title: string | undefined): Promise<string> {
+    return createDocumentFile(this.vaultInfo.documentsDir, source, title)
+  }
+
+  private startImport() {
+    this.reset()
+    this.draft = undefined
+    this.importing = true
+  }
+
+  private async imported(created: number) {
+    this.importing = false
+    await this.refresh()
+    this.message = strings.imported(created)
   }
 
   private onData(e: CustomEvent<{ formData: Record<string, unknown> }>) {
@@ -406,6 +413,7 @@ export class LlDocuments extends LitElement {
             <option value="">${strings.pickTemplate}</option>
             ${this.templates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
           </select>
+          <dc-button size="sm" variant="ghost" @click=${this.startImport}>${strings.import}</dc-button>
         </div>
         ${this.documents.length === 0
           ? html`<p class="message">${strings.noDocuments}</p>`
@@ -419,7 +427,14 @@ export class LlDocuments extends LitElement {
             )}
       </nav>
       <section>
-        ${draft
+        ${this.importing
+          ? html`<ll-import
+              .vaultInfo=${this.vaultInfo}
+              .templates=${this.templates}
+              @ll-imported=${(e: CustomEvent<{ created: number }>) => void this.imported(e.detail.created)}
+              @ll-import-cancel=${() => (this.importing = false)}
+            ></ll-import>`
+          : draft
           ? html`
               <div class="bar">
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
@@ -446,7 +461,9 @@ export class LlDocuments extends LitElement {
             `
           : this.error
             ? html`<p class="error" role="alert">${this.error}</p>`
-            : nothing}
+            : this.message
+              ? html`<p class="message" role="status">${this.message}</p>`
+              : nothing}
       </section>
     `
   }
