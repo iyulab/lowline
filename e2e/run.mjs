@@ -101,6 +101,10 @@ class App {
     return this.cdp.evaluate(`(() => { const el = __e2e.one(${q(selector)}); return el?.isContentEditable ? el.textContent : el?.value })()`)
   }
 
+  checked(selector) {
+    return this.cdp.evaluate(`__e2e.one(${q(selector)})?.checked`)
+  }
+
   status(text) {
     return this.cdp.waitFor(`__e2e.all('[role=status]').some((el) => el.textContent.trim() === ${q(text)})`, `status "${text}"`)
   }
@@ -144,6 +148,8 @@ const scenarios = {
     await app.type(TITLE, '저장 후 멈춤')
     await app.choose('select[name="심각도"]', '높음')
     await app.type('textarea[name="재현_절차"]', '1. 문서를 연다\n2. 저장한다')
+    await app.click('input[name="재현됨"]')
+    await app.click('input[name="환경"][value="맥"]')
     await app.click('dc-button', '저장')
     await app.status('저장했습니다')
     await app.noAlert()
@@ -154,7 +160,7 @@ const scenarios = {
     assert.match(created[0], /^\d{4}-\d{2}-\d{2}-저장 후 멈춤\.md$/, 'named after the first text field')
     assert.deepEqual(
       { ...(await fileValues(path)) },
-      { template: 'bug-report@1', 제목: '저장 후 멈춤', 심각도: '높음', 재현_절차: '1. 문서를 연다\n2. 저장한다' },
+      { template: 'bug-report@1', 제목: '저장 후 멈춤', 심각도: '높음', 재현_절차: '1. 문서를 연다\n2. 저장한다', 재현됨: true, 환경: '맥' },
     )
     const bodyBefore = await fileBody(path)
     assert.match(bodyBefore, /# 버그 리포트/)
@@ -167,6 +173,8 @@ const scenarios = {
     const values = await fileValues(path)
     assert.equal(values.제목, '저장 후 화면이 멈춤')
     assert.equal(values.심각도, '높음')
+    assert.equal(values.재현됨, true, 'an untouched checkbox keeps its value through a save')
+    assert.equal(values.환경, '맥')
     assert.equal(await app.value(TITLE), values.제목, 'screen = file')
     const bodyAfter = await fileBody(path)
     assert.equal(bodyAfter, bodyBefore, 'the body is untouched by a value change')
@@ -183,6 +191,21 @@ const scenarios = {
     await app.cdp.waitFor(`__e2e.one(${q(TITLE)})?.textContent === ${q(values.제목)}`, 'the title from the file')
     assert.equal(await app.value('select[name="심각도"]'), values.심각도)
     assert.equal(await app.value('textarea[name="재현_절차"]'), values.재현_절차)
+    assert.equal(await app.checked('input[name="재현됨"]'), true, 'the checkbox reopens checked')
+    assert.equal(await app.checked('input[name="환경"][value="맥"]'), true, 'the radio reopens on its value')
+
+    // Unchecking is a value too: it must reach the file and come back unchecked.
+    await app.click('input[name="재현됨"]')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal((await fileValues(join(vault, '문서', name))).재현됨, false)
+    await app.cdp.send('Page.reload')
+    await app.ready()
+    await app.openVault(vault)
+    await app.click('button', '문서')
+    await app.click('button', name.replace(/\.md$/, ''))
+    await app.cdp.waitFor(`__e2e.one(${q(TITLE)})?.textContent === ${q(values.제목)}`, 'the document again')
+    assert.equal(await app.checked('input[name="재현됨"]'), false, 'the checkbox reopens unchecked')
     await app.noAlert()
   },
 }

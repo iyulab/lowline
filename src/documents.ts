@@ -4,7 +4,8 @@
 
 import { parseFormdown, updateFrontMatter } from '@formdown/core'
 
-export type FieldValue = string | string[]
+/** A field's value: text, a list of texts (checkbox group), or a boolean (single checkbox). */
+export type FieldValue = string | string[] | boolean
 export type FieldValues = Record<string, FieldValue>
 
 export interface TemplateInfo {
@@ -40,7 +41,10 @@ export function templateBody(source: string): string {
   return source.slice(span.end).replace(/^\r?\n/, '')
 }
 
-/** Front matter changes that record `values`; an empty value removes its key. */
+/**
+ * Front matter changes that record `values`; empty text or an empty list removes its key.
+ * A boolean is always recorded — an unchecked box is `false`, not a missing value.
+ */
 function valueChanges(values: FieldValues): Record<string, unknown> {
   const changes: Record<string, unknown> = {}
   for (const [name, value] of Object.entries(values)) {
@@ -48,6 +52,22 @@ function valueChanges(values: FieldValues): Record<string, unknown> {
     changes[name] = empty ? undefined : value
   }
   return changes
+}
+
+/**
+ * Field values from front matter or form data. Text, lists and booleans keep their type — a
+ * checkbox written as text ("true") would read back as a different value. Other scalars
+ * (numbers, dates) are read as text; missing values are dropped.
+ */
+export function fieldValues(data: Record<string, unknown>): FieldValues {
+  const values: FieldValues = {}
+  for (const [name, value] of Object.entries(data)) {
+    if (value === undefined || value === null) continue
+    if (typeof value === 'boolean') values[name] = value
+    else if (Array.isArray(value)) values[name] = value.map(String)
+    else values[name] = String(value)
+  }
+  return values
 }
 
 /** A new document filled in from `templateSource`. */

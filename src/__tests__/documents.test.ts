@@ -6,6 +6,7 @@ import {
   documentTitle,
   documentTemplateRef,
   documentValues,
+  fieldValues,
   newDocument,
   templateBody,
   templateInfo,
@@ -69,6 +70,28 @@ describe('newDocument', () => {
   it('keeps values that YAML would read as another type as strings', () => {
     const doc = newDocument(template, { title: 'true', severity: '007' })
     expect(documentValues(doc)).toEqual({ title: 'true', severity: '007' })
+  })
+})
+
+describe('checkbox values', () => {
+  const withCheckbox = template.replace('Expected result', '@reproduced: [checkbox]\n\nExpected result')
+
+  it('records a checkbox as a boolean, false included, and reads it back as one', () => {
+    const doc = newDocument(withCheckbox, { title: 'A', reproduced: true })
+    expect(documentValues(doc)).toEqual({ title: 'A', reproduced: true })
+    const unchecked = updateDocument(doc, { reproduced: false })
+    expect(documentValues(unchecked)).toEqual({ title: 'A', reproduced: false })
+    expect(fieldValues(documentValues(unchecked))).toEqual({ title: 'A', reproduced: false })
+  })
+})
+
+describe('fieldValues', () => {
+  it('keeps text, lists and booleans as they are', () => {
+    expect(fieldValues({ a: 'x', b: ['p', 'q'], c: true, d: false })).toEqual({ a: 'x', b: ['p', 'q'], c: true, d: false })
+  })
+
+  it('reads other scalars as text and drops missing values', () => {
+    expect(fieldValues({ n: 7, when: null, gone: undefined, list: [1, 'two'] })).toEqual({ n: '7', list: ['1', 'two'] })
   })
 })
 

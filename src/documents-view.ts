@@ -6,6 +6,7 @@ import {
   documentTitle,
   documentTemplateRef,
   documentValues,
+  fieldValues,
   newDocument,
   templateBody,
   templateInfo,
@@ -137,7 +138,7 @@ export class LlDocuments extends LitElement {
     this.reset()
     try {
       const source = await vault.read(path)
-      this.values = this.initialValues = toFieldValues(documentValues(source))
+      this.values = this.initialValues = fieldValues(documentValues(source))
       this.draft = { kind: 'existing', path, source, templateRef: documentTemplateRef(source) }
       this.opened++
     } catch (e) {
@@ -183,7 +184,7 @@ export class LlDocuments extends LitElement {
   }
 
   private onData(e: CustomEvent<{ formData: Record<string, unknown> }>) {
-    this.values = toFieldValues(e.detail.formData)
+    this.values = fieldValues(e.detail.formData)
     this.dirty = true
     this.message = ''
   }
@@ -240,16 +241,6 @@ export class LlDocuments extends LitElement {
       </section>
     `
   }
-}
-
-/** Field values as recorded in front matter: text, or a list of texts. */
-function toFieldValues(data: Record<string, unknown>): FieldValues {
-  const values: FieldValues = {}
-  for (const [name, value] of Object.entries(data)) {
-    if (value === undefined || value === null) continue
-    values[name] = Array.isArray(value) ? value.map(String) : String(value)
-  }
-  return values
 }
 
 declare global {
