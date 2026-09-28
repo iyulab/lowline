@@ -49,7 +49,7 @@ fi
 cat >&2 <<MESSAGE
 No CLA signature on record for $login.
 
-Formwork is dual-licensed (AGPL-3.0 + commercial), so a contribution can only be merged once the
+Lowline is dual-licensed (AGPL-3.0 + commercial), so a contribution can only be merged once the
 rights to distribute it under both sets of terms have been granted. Signing takes one file:
 
   1. Read CLA.md.

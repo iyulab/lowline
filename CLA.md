@@ -1,6 +1,6 @@
-# Formwork Individual Contributor License Agreement (v1)
+# Lowline Individual Contributor License Agreement (v1)
 
-Formwork is dual-licensed: AGPL-3.0 for open-source use, and a separate commercial license for
+Lowline is dual-licensed: AGPL-3.0 for open-source use, and a separate commercial license for
 organizations that cannot adopt AGPL-3.0 terms. Offering both requires that the project hold, for
 every line it ships, the rights to distribute that line under either set of terms. A contribution
 whose rights were never granted can keep the file it touches out of the commercial offering — so
@@ -21,9 +21,9 @@ before you sign — this individual agreement may not be enough on its own.
 - **"You"** means the individual who signs this agreement.
 - **"Contribution"** means any original work of authorship — including any modification of, or
   addition to, an existing work — that You intentionally submit to iyulab for inclusion in
-  Formwork.
+  Lowline.
 - **"Submit"** means any form of communication sent to iyulab or its representatives, including
-  pull requests, issues, patches and discussion on any medium used to manage Formwork, excluding
+  pull requests, issues, patches and discussion on any medium used to manage Lowline, excluding
   communication You conspicuously mark "Not a Contribution".
 
 ## 1. Copyright license
@@ -36,7 +36,7 @@ Contributions and such derivative works.
 ## 2. Distribution under both sets of license terms
 
 For the avoidance of doubt, the license granted in section 1 expressly includes the right for
-iyulab to distribute and sublicense Your Contribution — on its own or as part of Formwork, in
+iyulab to distribute and sublicense Your Contribution — on its own or as part of Lowline, in
 source or object form, with or without modification — under any license terms iyulab chooses,
 including both the GNU Affero General Public License version 3 and proprietary commercial license
 terms, and to do so without any obligation of accounting or payment to You.
@@ -51,10 +51,10 @@ non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this se
 license to make, have made, use, offer to sell, sell, import and otherwise transfer Your
 Contribution, where such license applies only to those patent claims licensable by You that are
 necessarily infringed by Your Contribution alone or by combination of Your Contribution with
-Formwork.
+Lowline.
 
 If any entity institutes patent litigation against You or any other entity alleging that Your
-Contribution, or Formwork to which You contributed, constitutes direct or contributory patent
+Contribution, or Lowline to which You contributed, constitutes direct or contributory patent
 infringement, then any patent licenses granted to that entity under this agreement for that
 Contribution or work terminate as of the date such litigation is filed.
 
@@ -94,8 +94,8 @@ create.
    ```markdown
    # CLA signature
 
-   I have read the Formwork Individual Contributor License Agreement v1 (`CLA.md`) and I agree to
-   it for all of my contributions to Formwork, past and future.
+   I have read the Lowline Individual Contributor License Agreement v1 (`CLA.md`) and I agree to
+   it for all of my contributions to Lowline, past and future.
 
    - GitHub login: <your-login>
    - Name: <your full name>
