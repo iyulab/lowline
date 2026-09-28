@@ -11,8 +11,11 @@ namespace Lowline.Host;
 /// <summary>A field of a template, as the UI's Formdown parser reports it.</summary>
 public sealed record TemplateField(string Name, string Type, bool Multiple = false);
 
-/// <summary>A template: its `id@version` and its fields in template order.</summary>
-public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> Fields);
+/// <summary>
+/// A template: its `id@version`, its fields in template order, and the judgment fields its author
+/// turned suggestions on for (none unless named).
+/// </summary>
+public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> Fields, IReadOnlyList<string>? Suggest = null);
 
 /// <summary>A document: where it lives in the vault, its template, and its recorded values.</summary>
 public sealed record DocumentSnapshot(string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values);
@@ -41,8 +44,12 @@ public sealed class VaultProjection
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Snapshot? _current;
+    private Suggestions? _suggestions;
 
     public bool Indexed => _current is not null;
+
+    /// <summary>Whether suggestions have been built from the vault's confirmed values.</summary>
+    public bool MemoryReady => _suggestions is not null;
 
     /// <summary>
     /// Replaces what the sidecar knows with this snapshot.
@@ -57,11 +64,13 @@ public sealed class VaultProjection
     public async Task<IngestResult> IngestAsync(VaultSnapshot vault, CancellationToken cancellationToken)
     {
         var snapshot = await Snapshot.BuildAsync(vault, cancellationToken);
+        var suggestions = await Suggestions.BuildAsync(vault, cancellationToken);
         await _gate.WaitAsync(cancellationToken);
         try
         {
             var previous = _current;
             _current = snapshot;
+            _suggestions = suggestions;
             if (previous is not null) await previous.DisposeAsync();
         }
         finally
@@ -78,6 +87,20 @@ public sealed class VaultProjection
         try
         {
             return _current is null ? null : await _current.TableAsync(template, cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>A suggestion for a judgment field, or null when the template has no such judgment field.</summary>
+    public async Task<Suggestion?> SuggestAsync(SuggestRequest request, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return _suggestions is null ? null : await _suggestions.SuggestAsync(request, cancellationToken);
         }
         finally
         {

@@ -26,6 +26,9 @@ export const strings = {
   tableCount: (n: number) => `문서 ${n}건`,
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,
   hostStarting: '표를 준비하고 있습니다…',
+  suggestionFor: (label: string) => `${label} 제안`,
+  suggestionSource: (name: string) => `비슷한 기록: ${name}`,
+  accept: '수락',
   hostFailed: (message: string) => `표를 만드는 도우미가 시작되지 않았습니다: ${message}`,
   errors: {
     'missing-id': '서식 front matter에 id가 없습니다.',

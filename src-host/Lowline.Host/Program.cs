@@ -26,13 +26,16 @@ if (string.IsNullOrEmpty(token))
 
 app.Use(HostAuth.RequireToken(token));
 
-app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: false));
+app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: vault.MemoryReady));
 
 app.MapPost("/vault/ingest", (VaultSnapshot snapshot, VaultProjection vault, CancellationToken ct) =>
     vault.IngestAsync(snapshot, ct));
 
 app.MapGet("/projection/{**template}", async (string template, VaultProjection vault, CancellationToken ct) =>
     await vault.TableAsync(template, ct) is { } table ? Results.Ok(table) : Results.NotFound());
+
+app.MapPost("/suggest", async (SuggestRequest request, VaultProjection vault, CancellationToken ct) =>
+    await vault.SuggestAsync(request, ct) is { } suggestion ? Results.Ok(suggestion) : Results.NotFound());
 
 app.MapPost("/shutdown", (HttpContext context, IHostApplicationLifetime lifetime) =>
 {

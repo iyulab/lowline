@@ -5,6 +5,8 @@ import { newDocument } from '../documents.js'
 const template = `---
 id: bug-report
 version: 2
+lowline:
+  suggest: [심각도, 없는칸]
 ---
 # 버그 리포트
 
@@ -30,7 +32,13 @@ describe('templateSnapshot', () => {
         { name: '재현_절차', label: '재현 절차', type: 'textarea', multiple: false },
         { name: '태그', label: '태그', type: 'checkbox', multiple: true },
       ],
+      suggest: ['심각도'],
     })
+  })
+
+  it('turns suggestions on only for fields the author names', () => {
+    expect(templateSnapshot(template.replace(/lowline:\n  suggest: .*\n/, '')).suggest).toEqual([])
+    expect(templateSnapshot(template.replace('suggest: [심각도, 없는칸]', 'suggest: 심각도')).suggest).toEqual([])
   })
 })
 

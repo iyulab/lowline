@@ -14,8 +14,13 @@ import {
   type FieldValues,
 } from './documents.js'
 import { describeError } from './errors.js'
+import type { Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
-import { vault, type VaultEntry, type VaultInfo } from './vault-client.js'
+import { host, vault, type VaultEntry, type VaultInfo } from './vault-client.js'
+import { syncVault } from './vault-snapshot.js'
+
+/** How long typing pauses before suggestions are asked for again. */
+const SUGGEST_DELAY_MS = 300
 
 /** What is open in the editor: a new document from a template, or an existing document. */
 type Draft =
@@ -78,6 +83,23 @@ export class LlDocuments extends LitElement {
     .message {
       color: var(--dc-color-text-muted, #666);
     }
+    .suggestions {
+      display: flex;
+      flex-direction: column;
+      gap: var(--dc-space-1, 4px);
+    }
+    .suggestion {
+      display: flex;
+      align-items: center;
+      gap: var(--dc-space-2, 8px);
+      padding: var(--dc-space-2, 8px);
+      border: 1px dashed var(--dc-color-border, #d0d0d0);
+      border-radius: var(--dc-radius-md, 6px);
+    }
+    .suggestion .source {
+      color: var(--dc-color-text-muted, #666);
+      font-size: 12px;
+    }
     .error {
       color: var(--dc-color-danger, #b00020);
     }
@@ -98,6 +120,13 @@ export class LlDocuments extends LitElement {
   @state() private opened = 0
   /** The form's current values, as it reports them. */
   private values: FieldValues = {}
+  /** The open draft's template as the sidecar knows it; undefined when suggestions are unavailable. */
+  private template?: TemplateSnapshot
+  /** Suggestions for the draft's empty judgment fields, by field name. */
+  @state() private suggestions = new Map<string, Suggestion>()
+  /** Counts accepted suggestions, so the form is handed its values again. */
+  @state() private applied = 0
+  private suggestTimer?: ReturnType<typeof setTimeout>
   @state() private dirty = false
   @state() private message = ''
   @state() private error = ''
@@ -119,6 +148,61 @@ export class LlDocuments extends LitElement {
     this.error = ''
     this.message = ''
     this.dirty = false
+    this.template = undefined
+    this.suggestions = new Map()
+  }
+
+  /**
+   * Hands the sidecar the vault as it is now — its saved documents are what suggestions learn
+   * from — and finds the draft's template. Suggestions are an aid: without the sidecar the
+   * document is filled in by hand as before.
+   */
+  private async prepareSuggestions(templateRef: string | undefined) {
+    if (!templateRef) return
+    try {
+      const synced = await syncVault()
+      const template = synced.templates.find((t) => t.ref === templateRef)
+      if (this.draft?.templateRef !== templateRef) return // another draft opened meanwhile
+      this.template = template?.suggest.length ? template : undefined
+      await this.suggest()
+    } catch {
+      this.template = undefined
+    }
+  }
+
+  /** Asks for a value for each empty judgment field, given what the other fields hold. */
+  private async suggest() {
+    const template = this.template
+    if (!template) return
+    const values = { ...this.values }
+    const next = new Map<string, Suggestion>()
+    for (const field of template.suggest) {
+      if (!isEmpty(values[field])) continue
+      try {
+        const suggestion = await host.suggest(template.ref, field, values)
+        if (suggestion.value !== null) next.set(field, suggestion)
+      } catch {
+        // no suggestion for this field
+      }
+    }
+    if (this.template === template) this.suggestions = next
+  }
+
+  private scheduleSuggest() {
+    clearTimeout(this.suggestTimer)
+    if (this.template) this.suggestTimer = setTimeout(() => void this.suggest(), SUGGEST_DELAY_MS)
+  }
+
+  /** Puts a suggested value into the form. It is a value like any other until the document is saved. */
+  private accept(field: string, value: string) {
+    this.values = { ...this.values, [field]: value }
+    this.initialValues = this.values
+    this.applied++
+    this.dirty = true
+    this.message = ''
+    const rest = new Map(this.suggestions)
+    rest.delete(field)
+    this.suggestions = rest
   }
 
   private async startNew(templatePath: string) {
@@ -129,6 +213,7 @@ export class LlDocuments extends LitElement {
       this.values = this.initialValues = {}
       this.draft = { kind: 'new', templateSource, templateRef: ref }
       this.opened++
+      void this.prepareSuggestions(ref)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -141,6 +226,7 @@ export class LlDocuments extends LitElement {
       this.values = this.initialValues = fieldValues(documentValues(source))
       this.draft = { kind: 'existing', path, source, templateRef: documentTemplateRef(source) }
       this.opened++
+      void this.prepareSuggestions(this.draft.templateRef)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -164,6 +250,8 @@ export class LlDocuments extends LitElement {
       this.dirty = false
       this.message = strings.saved
       this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
+      // What was just saved is confirmed: the next suggestions learn from it.
+      void this.prepareSuggestions(this.draft?.templateRef)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -187,6 +275,23 @@ export class LlDocuments extends LitElement {
     this.values = fieldValues(e.detail.formData)
     this.dirty = true
     this.message = ''
+    this.scheduleSuggest()
+  }
+
+  private renderSuggestions() {
+    if (this.suggestions.size === 0) return nothing
+    const label = (name: string) => this.template?.fields.find((f) => f.name === name)?.label ?? name
+    return html`<div class="suggestions">
+      ${[...this.suggestions].map(
+        ([field, s]) => html`<div class="suggestion" role="note" data-field=${field}>
+          <span>${strings.suggestionFor(label(field))}: <strong>${s.value}</strong></span>
+          ${s.source
+            ? html`<span class="source">${strings.suggestionSource(s.source.replace(/^.*\//, '').replace(/\.md$/, ''))}</span>`
+            : nothing}
+          <dc-button size="sm" variant="secondary" @click=${() => this.accept(field, s.value!)}>${strings.accept}</dc-button>
+        </div>`,
+      )}
+    </div>`
   }
 
   render() {
@@ -228,9 +333,10 @@ export class LlDocuments extends LitElement {
                   ? html`<span class="error" role="alert">${this.error}</span>`
                   : html`<span class="message" role="status">${this.message}</span>`}
               </div>
+              ${this.renderSuggestions()}
               <formdown-ui
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
-                .data=${guard([this.opened], () => this.initialValues)}
+                .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .showSubmitButton=${false}
                 @formdown-data-update=${this.onData}
               ></formdown-ui>
@@ -241,6 +347,10 @@ export class LlDocuments extends LitElement {
       </section>
     `
   }
+}
+
+function isEmpty(value: FieldValues[string] | undefined): boolean {
+  return value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
 }
 
 declare global {

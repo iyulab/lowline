@@ -143,6 +143,14 @@ async fn blocking(
         .map_err(|e| e.to_string())
 }
 
+/// A suggestion for one judgment field of a document being filled in.
+#[tauri::command]
+async fn host_suggest(request: serde_json::Value, state: State<'_, HostState>) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let body = request.to_string();
+    host_json(blocking(move || client.post_json("/suggest", &body)).await?)
+}
+
 fn host_json(body: String) -> Result<serde_json::Value, String> {
     serde_json::from_str(&body)
         .map_err(|e| format!("the sidecar answered with something else than JSON: {e}"))
@@ -195,7 +203,8 @@ pub fn run() {
             create_file,
             host_status,
             host_ingest,
-            host_projection
+            host_projection,
+            host_suggest
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")

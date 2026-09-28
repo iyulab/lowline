@@ -1,20 +1,10 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import { TemplateError } from './documents.js'
 import { describeError } from './errors.js'
-import {
-  cellText,
-  documentSnapshot,
-  templateSnapshot,
-  type DocumentSnapshot,
-  type IngestResult,
-  type ProjectionTable,
-  type TemplateSnapshot,
-} from './projection.js'
+import { cellText, type IngestResult, type ProjectionTable, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
-import { host, vault, type VaultInfo } from './vault-client.js'
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+import { host, type VaultInfo } from './vault-client.js'
+import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 
 /** A template's documents as a table, projected by the sidecar from what is in the vault now. */
 @customElement('ll-table')
@@ -87,48 +77,17 @@ export class LlTable extends LitElement {
   private async load() {
     this.error = ''
     try {
-      await this.sidecarReady()
-      const snapshot = await this.snapshot()
-      this.templates = snapshot.templates
-      this.ingest = await host.ingest(snapshot)
+      const synced = await syncVault()
+      this.templates = synced.templates
+      this.names = synced.names
+      this.ingest = synced.ingest
       this.waiting = false
       const first = this.selected ?? this.templates[0]?.ref
       if (first) await this.show(first)
     } catch (e) {
       this.waiting = false
-      this.error = typeof e === 'string' ? strings.hostFailed(e) : describeError(e)
+      this.error = e instanceof SidecarUnavailable ? strings.hostFailed(e.message) : describeError(e)
     }
-  }
-
-  private async sidecarReady() {
-    for (;;) {
-      const status = await host.status()
-      if (status.state === 'ready') return
-      if (status.state === 'failed') throw status.message
-      await sleep(200)
-    }
-  }
-
-  private async snapshot() {
-    const [templateEntries, documentEntries] = await Promise.all([vault.listTemplates(), vault.listDocuments()])
-    const templates: TemplateSnapshot[] = []
-    const names = new Map<string, string>()
-    for (const entry of templateEntries) {
-      try {
-        const template = templateSnapshot(await vault.read(entry.path))
-        templates.push(template)
-        names.set(template.ref, entry.name.replace(/\.fd\.md$/, ''))
-      } catch (e) {
-        if (!(e instanceof TemplateError)) throw e // a template without an identity has no table
-      }
-    }
-    const documents: DocumentSnapshot[] = []
-    for (const entry of documentEntries) {
-      const document = documentSnapshot(entry.path, await vault.read(entry.path))
-      if (document) documents.push(document)
-    }
-    this.names = names
-    return { templates, documents }
   }
 
   private async show(template: string) {

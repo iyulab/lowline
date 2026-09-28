@@ -1,6 +1,6 @@
 // The UI's only way to the vault: commands handled by the shell, which owns every file.
 import { invoke } from '@tauri-apps/api/core'
-import type { IngestResult, ProjectionTable, VaultSnapshot } from './projection.js'
+import type { IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
 
 export interface VaultInfo {
   root: string
@@ -45,4 +45,6 @@ export const host = {
   status: () => invoke<HostStatus>('host_status'),
   ingest: (snapshot: VaultSnapshot) => invoke<IngestResult>('host_ingest', { snapshot }),
   projection: (template: string) => invoke<ProjectionTable>('host_projection', { template }),
+  suggest: (template: string, field: string, values: Record<string, unknown>) =>
+    invoke<Suggestion>('host_suggest', { request: { template, field, values } }),
 }

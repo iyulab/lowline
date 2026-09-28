@@ -116,8 +116,12 @@ class App {
   }
 }
 
+/** Documents the fixture vault ships with: confirmed intake records suggestions learn from. */
+const FIXTURE_DOCUMENT = /^접수-\d+\.md$/
+
+/** The documents the scenarios created. */
 async function documentsIn(vault) {
-  return (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md'))
+  return (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md') && !FIXTURE_DOCUMENT.test(n))
 }
 
 const fileValues = async (path) => parseFormdown(await readFile(path, 'utf8')).frontMatter?.data ?? {}
@@ -254,6 +258,33 @@ const scenarios = {
     assert.equal(row.재현됨, values.재현됨 ? '✓' : '')
     assert.equal(row.환경, values.환경)
     await app.noAlert()
+  },
+  async 'suggests a judgment value from confirmed documents, and saves it once accepted'(app, vault) {
+    const before = new Set(await documentsIn(vault))
+    await app.click('button', '문서')
+    await app.choose('select#template', '서식/접수.fd.md')
+    await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+    await app.choose('select[name="부서"]', '영업')
+    const note = await app.cdp.waitFor(
+      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\s+/g, ' ').trim())[0]`,
+      'a suggestion for 담당',
+      { timeoutMs: 15_000 },
+    )
+    assert.match(note, /담당 제안: 장비/)
+    assert.match(note, /비슷한 기록: 접수-1/)
+    assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in before it is accepted')
+
+    await app.click('dc-button', '수락')
+    await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '장비'`, 'the accepted value in the form')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    await app.noAlert()
+
+    const created = (await documentsIn(vault)).filter((n) => !before.has(n))
+    assert.equal(created.length, 1)
+    const values = await fileValues(join(vault, '문서', created[0]))
+    assert.equal(values.담당, '장비')
+    assert.equal(values.요청, '노트북 배터리가 금방 닳아요')
   },
 }
 
