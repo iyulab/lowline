@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
-import { parseFormdown, readFrontMatter } from '@formdown/core'
+import { parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
 import { setSuggest, templateInfo } from './documents.js'
 import { conflictNotice, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
@@ -54,6 +54,16 @@ export class LlTemplates extends LitElement {
     }
     .error {
       color: var(--dc-color-danger, #b00020);
+    }
+    .options {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      align-items: center;
+      gap: var(--dc-space-1, 4px) var(--dc-space-2, 8px);
+    }
+    .options h3,
+    .options p {
+      grid-column: 1 / -1;
     }
     .judgment {
       display: flex;
@@ -193,6 +203,62 @@ export class LlTemplates extends LitElement {
     }
   }
 
+  /** The source's choice fields — a select, or a radio or checkbox group — with their options. */
+  private choiceFields(): { name: string; label: string; options: string[] }[] {
+    try {
+      return parseFormdown(this.source)
+        .forms.filter((f) => ['select', 'radio', 'checkbox'].includes(f.type) && f.options?.length)
+        .map((f) => ({ name: f.name, label: f.label ?? f.name, options: f.options! }))
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * Writes a field's options, as typed (split at commas), into its place in the source: an edit of the
+   * source like any other, kept by saving. A field is left with at least one option.
+   */
+  private setOptions(field: string, typed: string, input: HTMLInputElement & { value: string }) {
+    const current = this.choiceFields().find((f) => f.name === field)?.options ?? []
+    const options = typed.split(',').map((o) => o.trim()).filter(Boolean)
+    if (options.length === 0 || options.join(',') === current.join(',')) {
+      input.value = current.join(', ') // nothing to write: show what the source holds
+      return
+    }
+    try {
+      this.source = setFieldAttribute(this.source, field, 'options', options.join(','))
+      this.dirty = true
+      this.message = ''
+      this.error = ''
+    } catch (e) {
+      this.error = describeError(e)
+    }
+  }
+
+  private renderChoices() {
+    const fields = this.choiceFields()
+    if (fields.length === 0) return nothing
+    const commit = (field: string) => (e: Event) => {
+      const input = e.currentTarget as HTMLInputElement
+      this.setOptions(field, input.value, input)
+    }
+    return html`<div class="options" role="group" aria-label=${strings.optionsTitle}>
+      <h3>${strings.optionsTitle}</h3>
+      <p class="message">${strings.optionsHelp}</p>
+      ${fields.map(
+        (f) => html`<span>${f.label}</span>
+          <dc-input
+            aria-label=${strings.optionsOf(f.label)}
+            .value=${f.options.join(', ')}
+            @focusout=${commit(f.name)}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key === 'Enter') commit(f.name)(e)
+            }}
+          ></dc-input>`,
+      )}
+    </div>`
+  }
+
   /** Saves the template as it is on screen; the app's save shortcut calls this too. */
   async save() {
     if (!this.selected) return
@@ -264,6 +330,7 @@ export class LlTemplates extends LitElement {
               <div class="preview">
                 <formdown-ui .content=${this.source}></formdown-ui>
               </div>
+              ${this.renderChoices()}
               ${this.renderJudgment()}
             </section>
           `

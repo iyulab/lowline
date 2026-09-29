@@ -345,6 +345,43 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'edits the options of a choice field from the template page, in its place in the source'(app, vault) {
+    const path = join(vault, TEMPLATE)
+    await app.templateOf(BUG)
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
+    const before = await app.value('textarea')
+    const enter = () => app.cdp.press('Enter', { code: 'Enter', keyCode: 13 })
+    assert.equal(await app.value('input[aria-label="심각도 선택지"]'), '낮음, 보통, 높음')
+
+    await app.type('input[aria-label="심각도 선택지"]', '낮음, 보통, 높음, 긴급')
+    await enter()
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('options="낮음,보통,높음,긴급"')`, 'the options written into the field')
+    assert.equal(
+      await app.value('textarea'),
+      before.replace('options="낮음,보통,높음"', 'options="낮음,보통,높음,긴급"'),
+      'nothing else in the source changed',
+    )
+    await app.cdp.waitFor(`__e2e.all('select[name="심각도"] option').some((o) => o.value === '긴급')`, 'the new option in the preview')
+
+    // A field keeps at least one option: clearing them writes nothing and shows the source's again.
+    await app.type('input[aria-label="환경 선택지"]', ' , ')
+    await enter()
+    await app.cdp.waitFor(`__e2e.one('input[aria-label="환경 선택지"]')?.value === '윈도우, 맥'`, 'the options as the source holds them')
+    assert.ok((await app.value('textarea')).includes('@환경: [radio options="윈도우,맥"]'))
+
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal(await readFile(path, 'utf8'), await app.value('textarea'), 'file = editor text')
+
+    // As it was, for the scenarios after this one.
+    await app.type('input[aria-label="심각도 선택지"]', '낮음, 보통, 높음')
+    await enter()
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal(await readFile(path, 'utf8'), before)
+    await app.noAlert()
+  },
+
   async 'creates a template from the starter, labelled in Korean'(app, vault) {
     await app.newTemplate()
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')
