@@ -248,7 +248,7 @@ export class LlTemplates extends LitElement {
             <section>
               <h3>${strings.preview}</h3>
               <div class="preview">
-                <formdown-ui .content=${this.source} .showSubmitButton=${false}></formdown-ui>
+                <formdown-ui .content=${this.source}></formdown-ui>
               </div>
               ${this.renderJudgment()}
             </section>

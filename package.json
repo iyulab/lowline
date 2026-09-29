@@ -27,10 +27,10 @@
     "brand": "npm run brand:glyphs && npm run brand:icons && npm run brand:og -- --site ../lowline.site && npm run brand:motion && npm run brand:installer"
   },
   "dependencies": {
-    "@formdown/core": "0.6.0",
-    "@formdown/ui": "0.6.0",
-    "@iyulab/desktop-compact": "0.7.0",
-    "@iyulab/desktop-patterns": "0.3.3",
+    "@formdown/core": "0.7.0",
+    "@formdown/ui": "0.7.0",
+    "@iyulab/desktop-compact": "0.8.0",
+    "@iyulab/desktop-patterns": "0.3.4",
     "@tauri-apps/api": "^2.12.0",
     "@tauri-apps/plugin-dialog": "^2.8.0",
     "lit": "^3.3.3"

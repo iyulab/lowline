@@ -550,7 +550,6 @@ export class LlDocuments extends LitElement {
                 html`<formdown-ui
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
-                .showSubmitButton=${false}
                 @formdown-data-update=${this.onData}
               ></formdown-ui>`,
               )}

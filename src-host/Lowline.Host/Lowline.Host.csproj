@@ -17,7 +17,7 @@
     <PackageReference Include="Formbase.Core" Version="0.14.0" />
     <PackageReference Include="Formbase.Sqlite" Version="0.14.0" />
     <PackageReference Include="Formbase.DependencyInjection" Version="0.14.0" />
-    <PackageReference Include="Gil" Version="0.5.0" />
+    <PackageReference Include="Gil" Version="0.5.1" />
   </ItemGroup>
 
 </Project>
