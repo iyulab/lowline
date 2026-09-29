@@ -20,6 +20,8 @@ import { Cdp, findPage } from './cdp.mjs'
 const here = dirname(fileURLToPath(import.meta.url))
 const exe = join(here, '..', 'src-tauri', 'target', 'debug', process.platform === 'win32' ? 'lowline.exe' : 'lowline')
 const PORT = 9223
+/** The e2e build's identifier (src-tauri/tauri.e2e.conf.json), which names its WebView2 profile. */
+const IDENTIFIER = 'com.iyulab.lowline.e2e'
 const TEMPLATE = '서식/버그 리포트.fd.md'
 /** The template's inline title field (`제목: ___@제목`). */
 const TITLE = '[data-field-name="제목"]'
@@ -73,9 +75,11 @@ class App {
     child.kill()
     await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)))
     this.child = undefined
-    // WebView2's browser process outlives the app by a moment. The next launch must start a browser
-    // of its own: one that joins a browser still shutting down never opens the debugging port.
+    // WebView2's browser process outlives the app by seconds, and closes its debugging port before
+    // it exits. The next launch must start a browser of its own: one that joins a browser still
+    // shutting down never opens the debugging port. So wait for the processes, not just the port.
     await portClosed(PORT)
+    await webviewGone()
   }
 
   /** Ends the app and starts it again on the same vault, in the same App. */
@@ -716,6 +720,19 @@ async function screenshot(cdp, dir, name) {
   await mkdir(dir, { recursive: true })
   const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' })
   await writeFile(join(dir, `${name.replace(/[^\p{L}\p{N}]+/gu, '-')}.png`), Buffer.from(data, 'base64'))
+}
+
+/** Waits until no WebView2 process runs on the e2e app's profile. */
+async function webviewGone(timeoutMs = 30_000) {
+  const { execFileSync } = await import('node:child_process')
+  const query = `@(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Where-Object { $_.CommandLine -like '*${IDENTIFIER}*' }).Count`
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const out = execFileSync('powershell', ['-NoProfile', '-Command', query], { encoding: 'utf8' })
+    if (Number(out.trim()) === 0) return
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  throw new Error(`WebView2 on the ${IDENTIFIER} profile did not exit`)
 }
 
 async function sidecarsRunning() {
