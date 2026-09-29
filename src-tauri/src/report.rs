@@ -97,6 +97,90 @@ impl Reporter {
     }
 }
 
+/// Where reports go: an Application Insights resource, named by its connection string.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sink {
+    pub instrumentation_key: String,
+    /// The ingestion endpoint's track URL.
+    pub track_url: String,
+}
+
+// Nothing calls this until sending is switched on: that waits on choosing the HTTPS client.
+#[allow(dead_code)]
+impl Sink {
+    /// The sink a connection string names, if it names one.
+    pub fn parse(connection_string: &str) -> Option<Self> {
+        let field = |name: &str| {
+            connection_string
+                .split(';')
+                .find_map(|part| part.trim().strip_prefix(name)?.strip_prefix('='))
+                .filter(|value| !value.is_empty())
+        };
+        let key = field("InstrumentationKey")?;
+        let endpoint = field("IngestionEndpoint").filter(|e| e.starts_with("https://"))?;
+        Some(Sink {
+            instrumentation_key: key.to_string(),
+            track_url: format!("{}/v2.1/track", endpoint.trim_end_matches('/')),
+        })
+    }
+
+    /// The sink this build was made with. A build made without one — every development and test
+    /// build — sends nothing.
+    pub fn of_build() -> Option<Self> {
+        option_env!("LOWLINE_APPINSIGHTS_CONNECTION_STRING").and_then(Self::parse)
+    }
+
+    /// A report as Application Insights takes it: one exception telemetry item, whose type and
+    /// message are both the report's kind and whose stack is the report's frames.
+    pub fn envelope(&self, report: &Report, at: std::time::SystemTime) -> serde_json::Value {
+        serde_json::json!({
+            "name": "Microsoft.ApplicationInsights.Exception",
+            "time": utc(at),
+            "iKey": self.instrumentation_key,
+            "tags": {
+                "ai.cloud.role": report.layer,
+                "ai.application.ver": report.version,
+                "ai.device.osVersion": format!("{} {}", report.os, report.arch),
+            },
+            "data": {
+                "baseType": "ExceptionData",
+                "baseData": {
+                    "ver": 2,
+                    "exceptions": [{
+                        "typeName": report.kind,
+                        "message": report.kind,
+                        "hasFullStack": false,
+                        "stack": report.frames.join("\n"),
+                    }],
+                    "severityLevel": 3,
+                },
+            },
+        })
+    }
+}
+
+/// `time` as ISO 8601 in UTC, to the second.
+fn utc(at: std::time::SystemTime) -> String {
+    let secs = at.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let (days, rest) = (secs / 86_400, secs % 86_400);
+    // Days since the epoch to a civil date (Howard Hinnant's algorithm).
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rest / 3_600,
+        rest % 3_600 / 60,
+        rest % 60
+    )
+}
+
 /// Enough of a stack to tell one failure from another.
 const MAX_FRAMES: usize = 20;
 
@@ -234,6 +318,50 @@ mod tests {
         let lines = written(&dir);
         assert_eq!(lines.len(), MAX_REPORTS + 1);
         assert_eq!(lines[MAX_REPORTS]["kind"], "ReportsCapped");
+    }
+
+    #[test]
+    fn reads_the_sink_from_a_connection_string() {
+        let sink = Sink::parse(
+            "InstrumentationKey=00000000-1111-2222-3333-444444444444;IngestionEndpoint=https://koreacentral-0.in.applicationinsights.azure.com/;LiveEndpoint=https://live/;ApplicationId=x",
+        )
+        .unwrap();
+        assert_eq!(sink.instrumentation_key, "00000000-1111-2222-3333-444444444444");
+        assert_eq!(sink.track_url, "https://koreacentral-0.in.applicationinsights.azure.com/v2.1/track");
+    }
+
+    #[test]
+    fn a_connection_string_without_a_key_or_an_https_endpoint_names_no_sink() {
+        assert_eq!(Sink::parse(""), None);
+        assert_eq!(Sink::parse("IngestionEndpoint=https://x/"), None);
+        assert_eq!(Sink::parse("InstrumentationKey=k;IngestionEndpoint=http://x/"), None);
+        assert_eq!(Sink::parse("InstrumentationKey=;IngestionEndpoint=https://x/"), None);
+    }
+
+    #[test]
+    fn a_report_goes_out_as_one_exception_item() {
+        let sink = Sink { instrumentation_key: "k".into(), track_url: "https://x/v2.1/track".into() };
+        let report = Report::new(Layer::Ui, "TypeError", "at save (http://tauri.localhost/assets/index-a.js:1:2)");
+        let at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_790_673_991);
+        let item = sink.envelope(&report, at);
+        assert_eq!(item["name"], "Microsoft.ApplicationInsights.Exception");
+        assert_eq!(item["time"], "2026-09-29T09:26:31Z");
+        assert_eq!(item["iKey"], "k");
+        assert_eq!(item["tags"]["ai.cloud.role"], "ui");
+        assert_eq!(item["data"]["baseType"], "ExceptionData");
+        let exception = &item["data"]["baseData"]["exceptions"][0];
+        assert_eq!(exception["typeName"], "TypeError");
+        assert_eq!(exception["message"], "TypeError");
+        assert_eq!(exception["stack"], "save index-a.js:1:2");
+        // Still nothing but the report: the envelope adds no field that could carry content.
+        assert!(item.to_string().is_ascii());
+    }
+
+    #[test]
+    fn writes_utc_time() {
+        let at = |s| std::time::UNIX_EPOCH + std::time::Duration::from_secs(s);
+        assert_eq!(utc(at(0)), "1970-01-01T00:00:00Z");
+        assert_eq!(utc(at(951_782_400)), "2000-02-29T00:00:00Z");
     }
 
     #[test]
