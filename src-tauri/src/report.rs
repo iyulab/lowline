@@ -183,20 +183,26 @@ impl Sink {
     /// or the endpoint being busy or down — and leaves the rest for the next launch. Returns how
     /// many reports were sent.
     pub fn send_pending(&self, agent: &ureq::Agent, file: &std::path::Path, sent: &std::path::Path) -> std::io::Result<usize> {
-        let bytes = match std::fs::read(file) {
-            Ok(bytes) => bytes,
+        use std::io::{Read, Seek};
+        let mut pending = match std::fs::File::open(file) {
+            Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
             Err(e) => return Err(e),
         };
+        let len = usize::try_from(pending.metadata()?.len()).map_err(std::io::Error::other)?;
         // A file shorter than what was sent is a new file: the old one was deleted.
         let mut offset = std::fs::read_to_string(sent)
             .ok()
             .and_then(|s| s.trim().parse::<usize>().ok())
-            .filter(|&offset| offset <= bytes.len())
+            .filter(|&offset| offset <= len)
             .unwrap_or(0);
+        // Only what follows what was sent is read: the file is kept, so it only grows.
+        pending.seek(std::io::SeekFrom::Start(offset as u64))?;
+        let mut bytes = Vec::new();
+        pending.read_to_end(&mut bytes)?;
         // Only whole lines: a launch may still be writing the last one.
-        let end = bytes.iter().rposition(|&b| b == b'\n').map_or(0, |i| i + 1).max(offset);
-        let lines: Vec<&[u8]> = bytes[offset..end].split_inclusive(|&b| b == b'\n').collect();
+        let end = bytes.iter().rposition(|&b| b == b'\n').map_or(0, |i| i + 1);
+        let lines: Vec<&[u8]> = bytes[..end].split_inclusive(|&b| b == b'\n').collect();
         let mut count = 0;
         for batch in lines.chunks(BATCH) {
             let reports: Vec<Report> = batch.iter().filter_map(|line| serde_json::from_slice(line).ok()).collect();
