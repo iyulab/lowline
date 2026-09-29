@@ -77,6 +77,10 @@ export const vault = {
   },
   /** Every device's event file. */
   listEvents: () => invoke<VaultEntry[]>('list_events'),
+  /** Keeps a suggestion shown on this device, outside the vault (see `Presentation`). */
+  recordPresentation: (presentation: object) => invoke<void>('record_presentation', { presentation }),
+  /** This device's record of the suggestions it has shown for the open vault. */
+  readPresentations: () => invoke<string>('read_presentations'),
 }
 
 /** What changed in the vault outside the app. Paths are relative to the vault, `/`-separated. */

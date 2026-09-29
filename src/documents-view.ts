@@ -13,7 +13,7 @@ import {
   type FieldValues,
 } from './documents.js'
 import { describeError } from './errors.js'
-import { suggestionEvents } from './events.js'
+import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import type { Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -138,7 +138,9 @@ export class LlDocuments extends LitElement {
   /** Suggestions for the draft's empty judgment fields, by field name. */
   @state() private suggestions = new Map<string, Suggestion>()
   /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
-  private offered = new Map<string, Suggestion>()
+  private offered = new Map<string, Offer>()
+  /** The draft's filled fields in the order they were filled (see `fillOrder`). */
+  private filled: string[] = []
   /**
    * Fields whose suggestion was rejected in this draft and not offered again. Once the draft is
    * saved the rejection is an event, and the sidecar keeps it out of the document after reopening.
@@ -235,6 +237,7 @@ export class LlDocuments extends LitElement {
     this.template = undefined
     this.suggestions = new Map()
     this.offered = new Map()
+    this.filled = []
     this.rejected = new Set()
   }
 
@@ -276,7 +279,14 @@ export class LlDocuments extends LitElement {
     // Values may have changed (or another draft opened) while these were asked for.
     if (run !== this.suggestRun || this.template !== template) return
     this.suggestions = next
-    for (const [field, suggestion] of next) this.offered.set(field, suggestion)
+    const filled = fillOrder(this.filled, values)
+    for (const [field, suggestion] of next) {
+      // Asked again after each pause in typing: the same value still showing is the same presentation.
+      if (this.offered.get(field)?.suggestion.value === suggestion.value) continue
+      const offer: Offer = { suggestion, shown: new Date(), filled }
+      this.offered.set(field, offer)
+      void vault.recordPresentation(presentation(template.ref, field, offer)).catch(() => {})
+    }
   }
 
   private scheduleSuggest() {
@@ -286,7 +296,8 @@ export class LlDocuments extends LitElement {
 
   /** Puts a suggested value into the form. It is a value like any other until the document is saved. */
   private accept(field: string, value: string) {
-    this.values = { ...this.values, [field]: value }
+    this.decided(field)
+    this.setValues({ ...this.values, [field]: value })
     this.initialValues = this.values
     this.applied++
     this.dirty = true
@@ -296,8 +307,20 @@ export class LlDocuments extends LitElement {
 
   /** Sets a suggestion aside. The rejection is recorded if the field is still empty when saved. */
   private reject(field: string) {
+    this.decided(field)
     this.rejected.add(field)
     this.dismiss(field)
+  }
+
+  private decided(field: string) {
+    const offer = this.offered.get(field)
+    if (offer) offer.decided = new Date()
+  }
+
+  /** The form's values, and the order its fields were filled in. */
+  private setValues(values: FieldValues) {
+    this.values = values
+    this.filled = fillOrder(this.filled, values)
   }
 
   private dismiss(field: string) {
@@ -309,8 +332,9 @@ export class LlDocuments extends LitElement {
   /** Records what the save confirmed about the suggestions offered for this draft. */
   private async recordSuggestionEvents(path: string) {
     const events = suggestionEvents(this.offered, this.rejected, this.values, path, new Date(), this.template?.ref)
-    // Each event is recorded once; a rejection stays in force while the draft is open.
-    this.offered = new Map()
+    // Each event is recorded once; a rejection stays in force while the draft is open. A suggestion
+    // the save said nothing about is still the one showing, not a new presentation.
+    for (const event of events) this.offered.delete(event.field)
     for (const event of events) await vault.recordEvent(event)
   }
 
@@ -326,7 +350,8 @@ export class LlDocuments extends LitElement {
     try {
       const templateSource = await vault.read(templatePath)
       const { ref } = templateInfo(templateSource)
-      this.values = this.initialValues = {}
+      this.setValues({})
+      this.initialValues = this.values
       this.draft = { kind: 'new', templateSource, templateRef: ref }
       this.opened++
       void this.prepareSuggestions(ref)
@@ -340,7 +365,8 @@ export class LlDocuments extends LitElement {
     try {
       const source = await vault.read(path)
       const { template, values } = documentFrontMatter(source)
-      this.values = this.initialValues = fieldValues(values)
+      this.setValues(fieldValues(values))
+      this.initialValues = this.values
       this.draft = { kind: 'existing', path, source, templateRef: template }
       this.opened++
       void this.prepareSuggestions(this.draft.templateRef)
@@ -402,7 +428,7 @@ export class LlDocuments extends LitElement {
   }
 
   private onData(e: CustomEvent<{ formData: Record<string, unknown> }>) {
-    this.values = fieldValues(e.detail.formData)
+    this.setValues(fieldValues(e.detail.formData))
     this.dirty = true
     this.message = ''
     this.scheduleSuggest()

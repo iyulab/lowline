@@ -1,5 +1,6 @@
 // Suggestion events: what a person did with a suggestion, recorded when the document is saved —
 // saving is when a value is confirmed. The only learning signals are these explicit ones (D-28).
+// Suggestions shown and never saved are kept apart, on the device (see `Presentation`).
 
 import type { FieldValue, FieldValues } from './documents.js'
 import type { Suggestion } from './projection.js'
@@ -11,7 +12,10 @@ export interface SuggestionEvent {
   at: string
   /** The document, relative to the vault. */
   doc: string
-  /** The document's template, so the event still says where it belongs if the document is renamed. */
+  /**
+   * The document's template as `id@version`, so the event still says where it belongs if the document
+   * is renamed, and a field of one version is not read as the same-named field of another.
+   */
   template?: string
   field: string
   kind: EventKind
@@ -25,6 +29,31 @@ export interface SuggestionEvent {
   source: string
   recall: string | null
   similarity: number | null
+  /** The fields that held a value when the suggestion was made — names only, in the order they were filled. */
+  filled?: string[]
+  /** When the suggestion was first shown; `at` is when the save confirmed what became of it. */
+  shownAt?: string
+  /** When it was taken or rejected; absent when the field was changed without either. */
+  decidedAt?: string
+}
+
+/** A suggestion as it was shown in a draft, and what the person did with it before saving. */
+export interface Offer {
+  suggestion: Suggestion
+  shown: Date
+  /** See {@link SuggestionEvent.filled}. */
+  filled: string[]
+  decided?: Date
+}
+
+/**
+ * The fields holding a value, in the order they were filled: those still filled keep their place,
+ * newly filled ones follow in `values`' order, emptied ones drop out.
+ */
+export function fillOrder(previous: readonly string[], values: FieldValues): string[] {
+  const kept = previous.filter((name) => !isEmpty(values[name]))
+  const added = Object.keys(values).filter((name) => !isEmpty(values[name]) && !kept.includes(name))
+  return [...kept, ...added]
 }
 
 function isEmpty(value: FieldValue | undefined): boolean {
@@ -41,7 +70,7 @@ function same(value: FieldValue, suggested: string): boolean {
  * reject. A suggestion neither taken nor rejected, on a field left empty, says nothing.
  */
 export function suggestionEvents(
-  offered: ReadonlyMap<string, Suggestion>,
+  offered: ReadonlyMap<string, Offer>,
   rejected: ReadonlySet<string>,
   saved: FieldValues,
   doc: string,
@@ -49,7 +78,7 @@ export function suggestionEvents(
   template?: string,
 ): SuggestionEvent[] {
   const events: SuggestionEvent[] = []
-  for (const [field, suggestion] of offered) {
+  for (const [field, { suggestion, shown, filled, decided }] of offered) {
     if (suggestion.value === null) continue
     const value = saved[field]
     let kind: EventKind | undefined
@@ -67,6 +96,9 @@ export function suggestionEvents(
       source: suggestion.mode,
       recall: suggestion.source,
       similarity: suggestion.similarity,
+      filled,
+      shownAt: shown.toISOString(),
+      ...(decided ? { decidedAt: decided.toISOString() } : {}),
     })
   }
   return events
@@ -104,4 +136,39 @@ function isEvent(e: unknown): e is SuggestionEvent {
     KINDS.includes(kind) &&
     typeof suggested === 'string'
   )
+}
+
+/**
+ * One suggestion shown, as this device keeps it outside the vault: whether or not the document was
+ * then saved. Nothing learns from it — it is counted, so decisions can be read against what was shown.
+ */
+export interface Presentation {
+  at: string
+  template: string
+  field: string
+  /** Where the suggestion came from, as in {@link SuggestionEvent.source}. */
+  source: string
+}
+
+export function presentation(template: string, field: string, offer: Offer): Presentation {
+  return { at: offer.shown.toISOString(), template, field, source: offer.suggestion.mode }
+}
+
+/** The presentations in this device's file; a line that is not one is skipped. */
+export function parsePresentations(text: string): Presentation[] {
+  const shown: Presentation[] = []
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue
+    let p: unknown
+    try {
+      p = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (typeof p !== 'object' || p === null) continue
+    const { at, template, field, source } = p as Record<string, unknown>
+    if (typeof at === 'string' && typeof template === 'string' && typeof field === 'string' && typeof source === 'string')
+      shown.push({ at, template, field, source })
+  }
+  return shown
 }

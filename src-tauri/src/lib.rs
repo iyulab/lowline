@@ -231,6 +231,68 @@ fn list_events(state: State<AppState>) -> CommandResult<Vec<Entry>> {
     with_vault(&state, |v| v.list(EVENTS_DIR, ".jsonl"))
 }
 
+/// Where this device keeps the suggestions it has shown, one file per vault. Outside the vault: they
+/// are counted, never learned from, and a draft let go leaves nothing of itself in a shared vault.
+fn presentations_file(app: &tauri::AppHandle, root: &Path) -> std::io::Result<PathBuf> {
+    let dir = app.path().app_local_data_dir().map_err(std::io::Error::other)?;
+    let name = format!("{:016x}.jsonl", fnv1a(root.to_string_lossy().as_bytes()));
+    Ok(dir.join("presentations").join(name))
+}
+
+/// FNV-1a: a name for a vault that stays the same from one build to the next, which std's hasher
+/// does not promise.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+fn io_error(e: std::io::Error) -> CommandError {
+    CommandError {
+        kind: "io",
+        message: e.to_string(),
+    }
+}
+
+/// Appends one suggestion shown to this device's record of them for the open vault.
+#[tauri::command]
+fn record_presentation(
+    presentation: serde_json::Value,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> CommandResult<()> {
+    if !presentation.is_object() {
+        return Err(CommandError {
+            kind: "io",
+            message: "a presentation is a JSON object".into(),
+        });
+    }
+    let root = with_vault(&state, |v| Ok(v.root().to_path_buf()))?;
+    let file = presentations_file(&app, &root).map_err(io_error)?;
+    append_line(&file, &presentation.to_string()).map_err(io_error)
+}
+
+fn append_line(file: &Path, line: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(file)?;
+    f.write_all(format!("{line}
+").as_bytes())
+}
+
+/// This device's record of the suggestions it has shown for the open vault; empty before the first.
+#[tauri::command]
+fn read_presentations(app: tauri::AppHandle, state: State<AppState>) -> CommandResult<String> {
+    let root = with_vault(&state, |v| Ok(v.root().to_path_buf()))?;
+    let file = presentations_file(&app, &root).map_err(io_error)?;
+    match std::fs::read_to_string(&file) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        other => other.map_err(io_error),
+    }
+}
+
 /// This install's id, made on first use and kept outside any vault.
 fn device_id(app: &tauri::AppHandle) -> std::io::Result<String> {
     let dir = app.path().app_config_dir().map_err(std::io::Error::other)?;
@@ -461,7 +523,9 @@ pub fn run() {
             host_suggest,
             report_error,
             record_event,
-            list_events
+            list_events,
+            record_presentation,
+            read_presentations
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")
@@ -532,5 +596,23 @@ mod tests {
         assert_eq!(changed.removed, vec!["서식/b.fd.md"]);
         assert!(!changed.rescan);
         assert!(VaultChanged::from(Notice::Rescan).rescan);
+    }
+
+    #[test]
+    fn names_a_vault_the_same_way_every_build() {
+        // FNV-1a's published test vectors: a changed name would orphan every device's record.
+        assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+    }
+
+    #[test]
+    fn appends_presentations_line_by_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("presentations").join("v.jsonl");
+        append_line(&file, r#"{"a":1}"#).unwrap();
+        append_line(&file, r#"{"a":2}"#).unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{\"a\":1}
+{\"a\":2}
+");
     }
 }

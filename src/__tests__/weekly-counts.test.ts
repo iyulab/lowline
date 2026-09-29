@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SuggestionEvent } from '../events.js'
+import type { Presentation, SuggestionEvent } from '../events.js'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
 import { weekOf, weeklyCounts } from '../weekly-counts.js'
 
@@ -86,5 +86,22 @@ describe('weeklyCounts', () => {
   it('carries no name, value or path', () => {
     const text = JSON.stringify(counts)
     for (const secret of ['intake', 'bug', '담당', '긴급', '장비', '비밀', '환자', '문서', '.md']) expect(text).not.toContain(secret)
+  })
+
+  it('counts suggestions shown on this device beside the decisions', () => {
+    const shown = (at: string, tpl: string, field: string): Presentation => ({ at, template: tpl, field, source: 'memory' })
+    const withShown = weeklyCounts([notes, intake, bug], documents, events, [
+      shown('2026-09-29T09:59:00.000Z', 'intake@1', '담당'),
+      shown('2026-09-30T09:00:00.000Z', 'intake@1', '담당'), // shown, then rejected
+      shown('2026-09-30T09:30:00.000Z', 'intake@1', '담당'), // shown, the draft let go
+      shown('2026-10-20T09:00:00.000Z', 'bug@2', '원인'), // shown only
+      shown('2026-10-20T09:00:00.000Z', 'intake@2', '담당'), // a version not in the vault: left out
+    ])
+    expect(withShown.counts.map(({ week, form, field, presented, accepted }) => [week, form, field, presented, accepted])).toEqual([
+      ['2026-09-28', 2, 1, 3, 1],
+      ['2026-09-28', 2, 2, 0, 0],
+      ['2026-10-05', 2, 1, 0, 1],
+      ['2026-10-19', 1, 1, 1, 0],
+    ])
   })
 })

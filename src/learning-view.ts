@@ -4,7 +4,8 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { describeError } from './errors.js'
 import type { FieldCurve, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
-import { host, onVaultChanged, type VaultChanged, type VaultInfo } from './vault-client.js'
+import { parsePresentations } from './events.js'
+import { host, onVaultChanged, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 import { numberedForms, weeklyCounts, type WeeklyCounts } from './weekly-counts.js'
 
@@ -154,7 +155,9 @@ export class LlLearning extends LitElement {
       const synced = await syncVault(change)
       this.templates = synced.templates
       this.names = synced.names
-      this.counts = weeklyCounts(synced.templates, synced.documents, synced.events)
+      // What this device showed is an aid to the counts: without it they are decisions alone.
+      const shown = parsePresentations(await vault.readPresentations().catch(() => ''))
+      this.counts = weeklyCounts(synced.templates, synced.documents, synced.events, shown)
       this.copied = 'no'
       this.curves = await host.curves()
       this.error = ''

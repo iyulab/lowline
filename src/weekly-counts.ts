@@ -2,7 +2,7 @@
 // studies whether suggestions improve with use. Nothing that says what a document is about leaves in
 // it: forms and fields are numbered, and no value, name or path is written (constitution §3).
 
-import type { SuggestionEvent } from './events.js'
+import type { Presentation, SuggestionEvent } from './events.js'
 import type { DocumentSnapshot, TemplateSnapshot } from './projection.js'
 
 export const WEEKLY_COUNTS_FORMAT = 'lowline-weekly-counts/1'
@@ -15,6 +15,11 @@ export interface WeekCounts {
   form: number
   /** The judgment field's number within its form, in the order the form names them. */
   field: number
+  /**
+   * Suggestions shown on this device, saved or not. Decisions come from every device that shares the
+   * vault, so on a shared vault they can outnumber what this device showed.
+   */
+  presented: number
   accepted: number
   corrected: number
   rejected: number
@@ -33,7 +38,6 @@ export interface FormCounts {
 
 export interface WeeklyCounts {
   format: typeof WEEKLY_COUNTS_FORMAT
-  /** Only decisions are recorded: a suggestion shown and left undecided leaves no trace to count. */
   counts: WeekCounts[]
   forms: FormCounts[]
 }
@@ -63,26 +67,36 @@ export function weeklyCounts(
   templates: readonly TemplateSnapshot[],
   documents: readonly DocumentSnapshot[],
   events: readonly SuggestionEvent[],
+  presentations: readonly Presentation[] = [],
 ): WeeklyCounts {
   const forms = numberedForms(templates)
   const formNumber = new Map(forms.map((t, i) => [t.ref, i + 1]))
   const templateOf = new Map(documents.map((d) => [d.path, d.template]))
 
   const cells = new Map<string, WeekCounts>()
-  for (const event of events) {
-    // An event names its template; older ones are placed through their document, if it is still there.
-    const ref = event.template ?? templateOf.get(event.doc)
-    const form = ref === undefined ? undefined : forms[(formNumber.get(ref) ?? 0) - 1]
-    const field = form ? form.suggest.indexOf(event.field) + 1 : 0
-    const at = Date.parse(event.at)
-    if (!form || field === 0 || Number.isNaN(at)) continue
+  /** The week's counts for a judgment field of a counted form; undefined for anything else. */
+  const cellOf = (ref: string | undefined, name: string, when: string): WeekCounts | undefined => {
+    const form = ref === undefined ? undefined : formNumber.get(ref)
+    const field = form ? forms[form - 1].suggest.indexOf(name) + 1 : 0
+    const at = Date.parse(when)
+    if (!form || field === 0 || Number.isNaN(at)) return undefined
     const week = weekOf(at)
-    const key = `${week}|${formNumber.get(form.ref)}|${field}`
+    const key = `${week}|${form}|${field}`
     let cell = cells.get(key)
     if (!cell) {
-      cell = { week, form: formNumber.get(form.ref)!, field, accepted: 0, corrected: 0, rejected: 0, bySimilarity: {} }
+      cell = { week, form, field, presented: 0, accepted: 0, corrected: 0, rejected: 0, bySimilarity: {} }
       cells.set(key, cell)
     }
+    return cell
+  }
+  for (const shown of presentations) {
+    const cell = cellOf(shown.template, shown.field, shown.at)
+    if (cell) cell.presented++
+  }
+  for (const event of events) {
+    // An event names its template; older ones are placed through their document, if it is still there.
+    const cell = cellOf(event.template ?? templateOf.get(event.doc), event.field, event.at)
+    if (!cell) continue
     if (event.kind === 'accept') cell.accepted++
     else if (event.kind === 'correct') cell.corrected++
     else cell.rejected++

@@ -257,6 +257,15 @@ async function events(vault) {
   return lines.map((l) => JSON.parse(l))
 }
 
+/** This device's record of the suggestions it showed, outside the vault (one file per vault). */
+async function presentations() {
+  const dir = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'presentations')
+  const files = existsSync(dir) ? await readdir(dir) : []
+  const lines = []
+  for (const f of files) lines.push(...(await readFile(join(dir, f), 'utf8')).split('\n').filter(Boolean))
+  return lines.map((l) => JSON.parse(l))
+}
+
 const fileValues = async (path) => parseFormdown(await readFile(path, 'utf8')).frontMatter?.data ?? {}
 
 /** Everything after the front matter. */
@@ -504,6 +513,15 @@ const scenarios = {
       { doc: `문서/${created[0]}`, field: '담당', kind: 'accept', suggested: '장비', value: '장비' },
     )
     assert.equal(accepted.recall, '문서/접수-1.md')
+    // When it was shown and taken, and what was filled by then — names only.
+    assert.equal(accepted.template, 'intake@1')
+    assert.deepEqual(accepted.filled, ['요청', '부서'], 'in the order they were filled')
+    assert.ok(Date.parse(accepted.shownAt) <= Date.parse(accepted.decidedAt), 'shown before it was taken')
+    assert.ok(Date.parse(accepted.decidedAt) <= Date.parse(accepted.at), 'taken before the save confirmed it')
+    // What was shown is kept on this device, outside the vault, without the value.
+    const shown = await presentations()
+    assert.ok(shown.some((p) => p.template === 'intake@1' && p.field === '담당' && p.at === accepted.shownAt), JSON.stringify(shown))
+    assert.ok(!JSON.stringify(shown).includes('장비'), 'no value in the record of what was shown')
   },
 
   async 'records a rejected suggestion when the document is saved without it'(app, vault) {
@@ -691,6 +709,8 @@ const scenarios = {
       [accepted, rejected],
       'the decisions counted',
     )
+    const presented = intake.reduce((n, c) => n + c.presented, 0)
+    assert.ok(presented >= accepted + rejected, `each decision was shown first (${presented} shown)`)
     const text = JSON.stringify(counts)
     for (const secret of ['접수', '담당', 'intake', '문서', '장비', '인사']) assert.ok(!text.includes(secret), `no ${secret} in the counts`)
     const legend = await app.cdp.evaluate(`__e2e.all('details.counts li').map((li) => li.textContent.trim())`)
@@ -915,8 +935,10 @@ async function main() {
   if (!existsSync(exe)) throw new Error(`no e2e build at ${exe} — run \`npm run build:e2e\` first`)
   const vault = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
   await cp(join(here, 'fixtures', 'vault'), vault, { recursive: true })
-  // Each run's vault is a new folder, so an earlier run's projection cache would only pile up.
-  await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'projections'), { recursive: true, force: true })
+  // Each run's vault is a new folder, so an earlier run's projection cache and record of suggestions
+  // shown would only pile up.
+  for (const dir of ['projections', 'presentations'])
+    await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, dir), { recursive: true, force: true })
 
   let app
   let failed = 0
