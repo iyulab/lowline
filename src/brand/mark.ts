@@ -2,7 +2,7 @@ import { LitElement, css, svg, html, nothing, unsafeCSS, type PropertyValues } f
 import { customElement, property, state } from 'lit/decorators.js'
 import { SYMBOL, WORDMARK, type Rect } from './geometry.ts'
 import { WORDMARK_GLYPHS } from './wordmark-glyphs.ts'
-import { BLINK_MS, CONFIRM_MS, CONFIRM_STAGGER_MS, KEYFRAMES_CSS, REST_AFTER_MS } from './motion.ts'
+import { BLINK_MS, CONFIRM_MS, CONFIRM_STAGGER_MS, INTRO_MS, KEYFRAMES_CSS, REST_AFTER_MS, introState, type IntroState } from './motion.ts'
 
 export type MarkVariant = 'symbol' | 'wordmark'
 
@@ -77,6 +77,10 @@ export class LlMark extends LitElement {
   @property({ type: Boolean, reflect: true }) blinking = false
   @property({ type: Boolean, reflect: true }) inactive = false
   @state() private confirming = false
+  /** Plays the intro when connected: the word is typed onto the empty line. Wordmark only. */
+  @property({ type: Boolean }) intro = false
+  @state() private introAt?: IntroState
+  private introFrame?: number
 
   private restTimer?: ReturnType<typeof setTimeout>
   private holdTimer?: ReturnType<typeof setTimeout>
@@ -96,7 +100,8 @@ export class LlMark extends LitElement {
     window.addEventListener('focus', this.onFocus)
     window.addEventListener('blur', this.onBlur)
     this.inactive = !document.hasFocus()
-    if (!this.inactive) this.wake()
+    if (this.intro && this.variant === 'wordmark') this.playIntro()
+    else if (!this.inactive) this.wake()
   }
 
   disconnectedCallback() {
@@ -106,6 +111,9 @@ export class LlMark extends LitElement {
     clearTimeout(this.restTimer)
     clearTimeout(this.holdTimer)
     clearTimeout(this.confirmTimer)
+    if (this.introFrame) cancelAnimationFrame(this.introFrame)
+    this.introFrame = undefined
+    this.introAt = undefined
   }
 
   protected willUpdate(changed: PropertyValues<this>) {
@@ -146,6 +154,26 @@ export class LlMark extends LitElement {
     this.wake()
   }
 
+  /** Types the word onto the empty line, then leaves the caret blinking. Skipped for reduced motion. */
+  private playIntro() {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const start = performance.now()
+    this.blinking = false
+    const step = (now: number) => {
+      const t = now - start
+      if (t >= INTRO_MS) {
+        this.introAt = undefined
+        this.introFrame = undefined
+        this.wake()
+        return
+      }
+      this.introAt = introState(t)
+      this.introFrame = requestAnimationFrame(step)
+    }
+    this.introAt = introState(0)
+    this.introFrame = requestAnimationFrame(step)
+  }
+
   private rest() {
     clearTimeout(this.restTimer)
     this.blinking = false
@@ -153,6 +181,7 @@ export class LlMark extends LitElement {
 
   render() {
     const g = this.variant === 'symbol' ? SYMBOL : WORDMARK
+    const s = this.variant === 'wordmark' ? this.introAt : undefined
     const [, , w, h] = g.viewBox.split(' ').map(Number)
     const rect = (r: Rect, cls: string, i = 0) =>
       svg`<rect class=${cls} style="--i:${i}" x=${r.x} y=${r.y} width=${r.w} height=${r.h}></rect>`
@@ -164,12 +193,21 @@ export class LlMark extends LitElement {
       role=${this.label ? 'img' : 'presentation'}
       aria-label=${this.label || nothing}
       aria-hidden=${this.label ? nothing : 'true'}
-      class=${this.confirming ? 'confirming' : ''}
+      class=${this.confirming && !s ? 'confirming' : ''}
     >
       ${this.variant === 'wordmark'
-        ? WORDMARK_GLYPHS.map((g) => svg`<path class="word" transform="translate(${g.x} 0)" d=${g.d}></path>`)
+        ? WORDMARK_GLYPHS.slice(0, s ? s.glyphs : undefined).map((gl) => svg`<path class="word" transform="translate(${gl.x} 0)" d=${gl.d}></path>`)
         : nothing}
-      ${rect(g.line, 'line')} ${g.dashes.map((d, i) => rect(d, 'dash', i))} ${rect(g.caret, 'caret')}
+      ${rect(g.line, 'line')}
+      ${s
+        ? g.dashes.map(
+            (d, i) =>
+              svg`<rect class="dash" x=${d.x} y=${d.y} width=${d.w} height=${d.h} style="fill: color-mix(in srgb, var(--_ink) ${s.dashInk[i] * 100}%, var(--_pending))"></rect>`,
+          )
+        : g.dashes.map((d, i) => rect(d, 'dash', i))}
+      ${s
+        ? svg`<rect class="caret" x=${s.caretX} y=${g.caret.y} width=${g.caret.w} height=${g.caret.h} opacity=${s.caretOn ? 1 : 0}></rect>`
+        : rect(g.caret, 'caret')}
     </svg>`
   }
 }

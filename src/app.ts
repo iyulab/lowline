@@ -143,7 +143,7 @@ export class LlApp extends LitElement {
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : ''}
           ${!info
             ? html`<div class="welcome">
-                <ll-mark variant="wordmark" size="96"></ll-mark>
+                <ll-mark variant="wordmark" size="96" intro></ll-mark>
                 <p class="tagline">${strings.tagline}</p>
                 <p>${strings.noVault}</p>
                 <dc-button @click=${this.openVault}>${strings.openVault}</dc-button>
