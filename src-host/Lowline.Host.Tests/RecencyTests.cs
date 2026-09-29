@@ -21,7 +21,7 @@ public sealed class RecencyTests
         var ct = TestContext.Current.CancellationToken;
         var older = new DocumentSnapshot(olderPath, "intake@1", Values("""{"요청": "프린터 토너가 떨어졌어요", "담당": "장비"}"""), Modified: 1_000);
         var newer = new DocumentSnapshot(newerPath, "intake@1", Values("""{"요청": "프린터 토너가 떨어졌어요", "담당": "총무"}"""), Modified: 2_000);
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(new VaultSnapshot([Intake], [older, newer]), ct);
 
         var suggestion = await vault.SuggestAsync(

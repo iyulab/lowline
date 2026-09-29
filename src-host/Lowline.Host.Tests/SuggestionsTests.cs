@@ -28,7 +28,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task Suggests_the_value_confirmed_for_a_similar_document()
     {
-        var vault = await Vault(
+        await using var vault = await Vault(
             Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
             Document("문서/2.md", """{"요청": "급여 명세서를 다시 받고 싶어요", "부서": "개발", "담당": "인사"}"""));
 
@@ -47,7 +47,7 @@ public sealed class SuggestionsTests
     public async Task Does_not_offer_a_value_only_another_fields_value_backs()
     {
         // 인사 was confirmed with 부서 개발, but the request itself resembles nothing confirmed.
-        var vault = await Vault(
+        await using var vault = await Vault(
             Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
             Document("문서/2.md", """{"요청": "급여 명세서를 다시 받고 싶어요", "부서": "개발", "담당": "인사"}"""));
 
@@ -61,7 +61,7 @@ public sealed class SuggestionsTests
     public async Task Does_not_offer_a_value_nothing_in_the_document_backs()
     {
         // 장비 is the field's most frequent value, but nothing in this document points to it.
-        var vault = await Vault(
+        await using var vault = await Vault(
             Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
             Document("문서/2.md", """{"요청": "모니터가 깜빡여요", "부서": "영업", "담당": "장비"}"""));
 
@@ -74,7 +74,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task A_document_is_not_its_own_similar_document()
     {
-        var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
+        await using var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
 
         var suggestion = await vault.SuggestAsync(
             new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요!"}"""), "문서/1.md"), Ct);
@@ -86,7 +86,7 @@ public sealed class SuggestionsTests
     public async Task Does_not_learn_from_a_document_with_a_conflict_copy()
     {
         // A sync client kept both devices' edits: which values hold is not settled yet.
-        var vault = await Vault(
+        await using var vault = await Vault(
             Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}""") with { Conflicted = true });
 
         var suggestion = await vault.SuggestAsync(
@@ -100,7 +100,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task Abstains_when_nothing_confirmed_is_close_enough()
     {
-        var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
+        await using var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
 
         var suggestion = await vault.SuggestAsync(
             new SuggestRequest("intake@1", "담당", Values("""{"요청": "회의실 예약 방법이 궁금합니다"}""")), Ct);
@@ -111,11 +111,11 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task Abstains_on_an_empty_document_and_with_an_empty_memory()
     {
-        var empty = await Vault();
+        await using var empty = await Vault();
         var none = await empty.SuggestAsync(new SuggestRequest("intake@1", "담당", Values("""{"요청": "무엇이든"}""")), Ct);
         Assert.Null(none!.Value);
 
-        var vault = await Vault(Document("문서/1.md", """{"요청": "배터리", "담당": "장비"}"""));
+        await using var vault = await Vault(Document("문서/1.md", """{"요청": "배터리", "담당": "장비"}"""));
         var blank = await vault.SuggestAsync(new SuggestRequest("intake@1", "담당", Values("{}")), Ct);
         Assert.Equal(new Suggestion(null, "abstain", null, null), blank);
     }
@@ -123,7 +123,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task Offers_nothing_for_a_field_the_author_did_not_turn_suggestions_on_for()
     {
-        var vault = await Vault(Document("문서/1.md", """{"요청": "배터리", "부서": "영업", "담당": "장비"}"""));
+        await using var vault = await Vault(Document("문서/1.md", """{"요청": "배터리", "부서": "영업", "담당": "장비"}"""));
         Assert.Null(await vault.SuggestAsync(new SuggestRequest("intake@1", "부서", Values("""{"요청": "배터리"}""")), Ct));
         Assert.Null(await vault.SuggestAsync(new SuggestRequest("other@1", "담당", Values("{}")), Ct));
     }
@@ -180,7 +180,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task A_vault_ingest_chooses_thresholds_in_the_background()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(Many(15), Ct);
         await vault.ThresholdsSelected.WaitAsync(Ct);
         await vault.IngestAsync(Many(15), Ct);
@@ -192,7 +192,7 @@ public sealed class SuggestionsTests
     {
         // Only saved documents teach. A request carrying a value for the judgment field — an unsaved
         // draft that already holds one — must not become something later requests are answered from.
-        var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
+        await using var vault = await Vault(Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "장비"}"""));
         await vault.SuggestAsync(
             new SuggestRequest("intake@1", "담당", Values("""{"요청": "사내 동호회 가입 신청서 양식", "담당": "총무"}"""), "문서/2.md"), Ct);
 
@@ -221,7 +221,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task Does_not_offer_again_what_was_rejected_in_a_document()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(new VaultSnapshot([Intake], Confirmed, [Event("2026-09-28T10:00:00.000Z", "문서/2.md", "reject")]), Ct);
 
         Assert.Null(await SuggestedIn(vault, "문서/2.md"));
@@ -233,7 +233,7 @@ public sealed class SuggestionsTests
     [Fact]
     public async Task A_later_confirmation_in_the_document_lifts_a_rejection()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(new VaultSnapshot([Intake], Confirmed,
         [
             Event("2026-09-28T11:00:00.000Z", "문서/2.md", "correct"),

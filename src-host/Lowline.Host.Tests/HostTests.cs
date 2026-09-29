@@ -49,7 +49,7 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
              "documents": [{"path": "문서/a.md", "template": "bug-report@1", "values": {"제목": "멈춤", "재현됨": true}}]}
             """, System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
         ingest.EnsureSuccessStatusCode();
-        Assert.Equal("""{"ingested":1,"projections":["bug-report@1"],"skipped":[]}""",
+        Assert.Equal("""{"appended":1,"retired":0,"projections":["bug-report@1"],"skipped":[]}""",
             await ingest.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         var table = await client.GetStringAsync("/projection/bug-report@1", TestContext.Current.CancellationToken);

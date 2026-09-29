@@ -1,8 +1,9 @@
 // Lowline's sidecar: projections and suggestions over what the shell hands it. It never reads or
 // writes vault files — the shell owns every file, and hands documents over as parsed values.
 //
-// Started by the shell with a per-launch token in LOWLINE_HOST_TOKEN. It listens on a loopback port
-// the OS picks and prints one ready line with its address; every request must carry the token.
+// Started by the shell with a per-launch token in LOWLINE_HOST_TOKEN and the projection cache file in
+// LOWLINE_HOST_CACHE. It listens on a loopback port the OS picks and prints one ready line with its
+// address; every request must carry the token.
 using Lowline.Host;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -13,7 +14,9 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
     builder.WebHost.UseUrls("http://127.0.0.1:0");
 }
 
-builder.Services.AddSingleton<VaultProjection>();
+// The projection cache lives where the shell says, outside the vault; without a place it lasts one run.
+builder.Services.AddSingleton(services =>
+    new VaultProjection(services.GetRequiredService<IConfiguration>()[VaultProjection.CacheVariable]));
 
 var app = builder.Build();
 

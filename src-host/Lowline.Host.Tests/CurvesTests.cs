@@ -67,7 +67,7 @@ public sealed class CurvesTests
         var documents = Enumerable.Range(1, 15).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
             JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}""")!,
             Modified: i)).ToList();
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(new VaultSnapshot([Intake], documents, [Event(1, "문서/15.md", "담당", "accept")]), ct);
         await vault.ThresholdsSelected.WaitAsync(ct);
 

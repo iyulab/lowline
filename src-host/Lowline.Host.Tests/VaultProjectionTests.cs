@@ -22,14 +22,14 @@ public sealed class VaultProjectionTests
     [Fact]
     public async Task Projects_one_row_per_document_with_korean_columns()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         var result = await vault.IngestAsync(new VaultSnapshot([BugReport],
         [
             Document("문서/b.md", """{"제목": "저장 후 멈춤", "심각도": "높음", "재현됨": true, "태그": ["UI"], "점수": 3}"""),
             Document("문서/a.md", """{"제목": "열기 실패", "재현됨": false}"""),
         ]), Ct);
 
-        Assert.Equal(2, result.Ingested);
+        Assert.Equal(2, result.Appended);
         Assert.Equal(["bug-report@1"], result.Projections);
         Assert.Empty(result.Skipped);
         Assert.True(vault.Indexed);
@@ -49,7 +49,7 @@ public sealed class VaultProjectionTests
     [Fact]
     public async Task A_new_snapshot_replaces_the_old_one()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(new VaultSnapshot([BugReport], [Document("문서/a.md", """{"제목": "첫 값"}""")]), Ct);
         await vault.IngestAsync(new VaultSnapshot([BugReport], [Document("문서/a.md", """{"제목": "고친 값"}""")]), Ct);
 
@@ -61,11 +61,11 @@ public sealed class VaultProjectionTests
     [Fact]
     public async Task Documents_of_a_template_missing_from_the_vault_are_reported()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         var result = await vault.IngestAsync(new VaultSnapshot([BugReport],
             [new DocumentSnapshot("문서/x.md", "gone@1", new Dictionary<string, JsonElement>())]), Ct);
 
-        Assert.Equal(0, result.Ingested);
+        Assert.Equal(0, result.Appended);
         var skipped = Assert.Single(result.Skipped);
         Assert.Equal("문서/x.md", skipped.Path);
     }
@@ -73,7 +73,7 @@ public sealed class VaultProjectionTests
     [Fact]
     public async Task An_unknown_template_has_no_table()
     {
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         Assert.Null(await vault.TableAsync("bug-report@1", Ct));
         await vault.IngestAsync(new VaultSnapshot([BugReport], []), Ct);
         Assert.Null(await vault.TableAsync("other@1", Ct));

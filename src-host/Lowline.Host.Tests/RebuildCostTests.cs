@@ -4,8 +4,8 @@ using System.Text.Json;
 namespace Lowline.Host.Tests;
 
 /// <summary>
-/// What a rebuild from the vault costs at 1,000 and 10,000 documents. Every outside edit rebuilds
-/// the whole snapshot until records can be corrected in place, so this is the price of one edit.
+/// What ingesting the vault costs at 1,000 and 10,000 documents: filling an empty cache, a snapshot with
+/// nothing changed, one outside edit, and a later launch over the filled cache.
 /// Runs only with <c>LOWLINE_PERF=1</c>; writes its figures to <c>LOWLINE_PERF_OUT</c> when set.
 /// </summary>
 public sealed class RebuildCostTests
@@ -54,47 +54,87 @@ public sealed class RebuildCostTests
     [Theory]
     [InlineData(1_000)]
     [InlineData(10_000)]
-    public async Task Measures_a_full_rebuild(int count)
+    public async Task Measures_ingests(int count)
     {
         Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
         var snapshot = Synthetic(count);
-        var vault = new VaultProjection();
+        var edited = snapshot with { Documents = [Edited(snapshot.Documents[0]), .. snapshot.Documents.Skip(1)] };
+        var directory = Directory.CreateTempSubdirectory("lowline-perf-").FullName;
+        var cacheFile = Path.Combine(directory, "projection.db");
+        try
+        {
+            string line;
+            await using (var vault = new VaultProjection(cacheFile))
+            {
+                // The first ingest fills an empty cache and pays for loading the embedder and warming the runtime.
+                var first = Stopwatch.StartNew();
+                Assert.Equal(count, (await vault.IngestAsync(snapshot, Ct)).Appended);
+                first.Stop();
+                // Thresholds are chosen apart from the ingest, by replaying the history once.
+                var thresholds = Stopwatch.StartNew();
+                await vault.ThresholdsSelected.WaitAsync(Ct);
+                thresholds.Stop();
+                var unchanged = Stopwatch.StartNew();
+                Assert.Equal(0, (await vault.IngestAsync(snapshot, Ct)).Appended);
+                unchanged.Stop();
+                // What one outside edit costs.
+                var edit = Stopwatch.StartNew();
+                Assert.Equal(1, (await vault.IngestAsync(edited, Ct)).Appended);
+                edit.Stop();
 
-        // The first ingest pays for loading the embedder and warming the runtime; the second is what
-        // each later outside edit costs.
-        var first = Stopwatch.StartNew();
-        await vault.IngestAsync(snapshot, Ct);
-        first.Stop();
-        // Thresholds are chosen apart from the ingest, by replaying the history once.
-        var thresholds = Stopwatch.StartNew();
-        await vault.ThresholdsSelected.WaitAsync(Ct);
-        thresholds.Stop();
-        var again = Stopwatch.StartNew();
-        var result = await vault.IngestAsync(snapshot, Ct);
-        again.Stop();
-        Assert.Equal(count, result.Ingested);
+                var table = Stopwatch.StartNew();
+                var rows = (await vault.TableAsync("intake@1", Ct))!.Rows.Count;
+                table.Stop();
+                Assert.Equal(count, rows);
 
-        var table = Stopwatch.StartNew();
-        var rows = (await vault.TableAsync("intake@1", Ct))!.Rows.Count;
-        table.Stop();
-        Assert.Equal(count, rows);
+                var request = new SuggestRequest("intake@1", "담당",
+                    JsonSerializer.Deserialize<Dictionary<string, JsonElement>>("""{"요청": "노트북이 고장났어요", "부서": "영업"}""")!);
+                var suggest = Stopwatch.StartNew();
+                Assert.NotNull(await vault.SuggestAsync(request, Ct));
+                suggest.Stop();
 
-        var request = new SuggestRequest("intake@1", "담당",
-            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>("""{"요청": "노트북이 고장났어요", "부서": "영업"}""")!);
-        var suggest = Stopwatch.StartNew();
-        var suggestion = await vault.SuggestAsync(request, Ct);
-        suggest.Stop();
-        Assert.NotNull(suggestion);
+                var curves = Stopwatch.StartNew();
+                await vault.CurvesAsync(Ct);
+                curves.Stop();
 
-        var curves = Stopwatch.StartNew();
-        await vault.CurvesAsync(Ct);
-        curves.Stop();
+                // The share of an edit that is the suggestions' own rebuild, apart from the projection.
+                var built = await Suggestions.BuildAsync(snapshot, Ct);
+                var suggestions = Stopwatch.StartNew();
+                await Suggestions.BuildAsync(edited, Ct, built);
+                suggestions.Stop();
 
-        var line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms · thresholds {thresholds.ElapsedMilliseconds} ms · rebuild {again.ElapsedMilliseconds} ms · "
-            + $"table {table.ElapsedMilliseconds} ms · suggest {suggest.ElapsedMilliseconds} ms · curves {curves.ElapsedMilliseconds} ms · "
-            + $"managed heap {GC.GetTotalMemory(forceFullCollection: true) / (1024 * 1024)} MB";
-        TestContext.Current.TestOutputHelper?.WriteLine(line);
-        if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
-            await File.AppendAllTextAsync(output, line + Environment.NewLine, Ct);
+                line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms · thresholds {thresholds.ElapsedMilliseconds} ms · "
+                    + $"unchanged {unchanged.ElapsedMilliseconds} ms · one edit {edit.ElapsedMilliseconds} ms (suggestions {suggestions.ElapsedMilliseconds} ms) · "
+                    + $"table {table.ElapsedMilliseconds} ms · suggest {suggest.ElapsedMilliseconds} ms · curves {curves.ElapsedMilliseconds} ms · "
+                    + $"managed heap {GC.GetTotalMemory(forceFullCollection: true) / (1024 * 1024)} MB";
+            }
+
+            // A later launch finds the cache filled.
+            await using (var restarted = new VaultProjection(cacheFile))
+            {
+                var start = Stopwatch.StartNew();
+                Assert.Equal(0, (await restarted.IngestAsync(edited, Ct)).Appended);
+                start.Stop();
+                line += $" · restart {start.ElapsedMilliseconds} ms · cache {new FileInfo(cacheFile).Length / (1024 * 1024)} MB";
+            }
+
+            TestContext.Current.TestOutputHelper?.WriteLine(line);
+            if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
+                await File.AppendAllTextAsync(output, line + Environment.NewLine, Ct);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static DocumentSnapshot Edited(DocumentSnapshot document)
+    {
+        var values = new Dictionary<string, JsonElement>(document.Values)
+        {
+            ["요청"] = JsonSerializer.SerializeToElement("노트북 충전기가 고장났어요 (고침)"),
+        };
+        return document with { Values = values };
     }
 }

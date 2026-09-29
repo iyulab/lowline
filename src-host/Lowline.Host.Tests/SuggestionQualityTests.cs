@@ -19,7 +19,7 @@ public sealed class SuggestionQualityTests
         Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
         var ct = TestContext.Current.CancellationToken;
         var all = RebuildCostTests.Synthetic(confirmed + Asked);
-        var vault = new VaultProjection();
+        await using var vault = new VaultProjection();
         await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(confirmed)]), ct);
         await vault.ThresholdsSelected.WaitAsync(ct);
 

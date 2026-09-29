@@ -81,8 +81,10 @@ export interface ProjectionTable {
   rows: { path: string; values: Record<string, unknown> }[]
 }
 
+/** What an ingest changed in the sidecar's projection cache. */
 export interface IngestResult {
-  ingested: number
+  appended: number
+  retired: number
   projections: string[]
   skipped: { path: string; reason: string }[]
 }
