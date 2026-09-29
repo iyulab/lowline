@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Formbase.Core.Schema;
 
@@ -57,29 +59,38 @@ public sealed record ProjectionRow(string Path, IReadOnlyDictionary<string, obje
 /// The vault projected through Formbase — tables in a cache outside the vault — and the suggestions and
 /// correction curves learned from its confirmed values.
 /// </summary>
-/// <param name="cacheFile">
-/// Where the projection cache lives. Without one it lives in a temporary file for as long as this projection.
+/// <param name="cacheDirectory">
+/// Where projection caches live, one file per vault. Without one they live in a temporary directory for as
+/// long as this projection.
 /// </param>
-public sealed class VaultProjection(string? cacheFile = null) : IAsyncDisposable
+public sealed class VaultProjection(string? cacheDirectory = null) : IAsyncDisposable
 {
-    /// <summary>The setting that names the cache file.</summary>
+    /// <summary>The setting that names the cache directory.</summary>
     public const string CacheVariable = "LOWLINE_HOST_CACHE";
 
     /// <summary>The column that carries a document's vault path. `$` cannot start a Formdown field name.</summary>
     public const string PathColumn = "$path";
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly bool _ownsFile = string.IsNullOrEmpty(cacheFile);
+    private readonly bool _ownsDirectory = string.IsNullOrEmpty(cacheDirectory);
     private ProjectionCache? _cache;
+    private string? _vault;
     private Dictionary<string, TemplateSnapshot>? _templates;
     private Suggestions? _suggestions;
     private CancellationTokenSource? _selecting;
     private IReadOnlyList<FieldCurve> _curves = [];
 
-    /// <summary>The cache file in use.</summary>
-    public string CacheFile { get; } = string.IsNullOrEmpty(cacheFile)
-        ? Path.Combine(Path.GetTempPath(), $"lowline-projection-{Guid.NewGuid():N}.db")
-        : cacheFile;
+    /// <summary>The directory the caches live in.</summary>
+    public string CacheDirectory { get; } = string.IsNullOrEmpty(cacheDirectory)
+        ? Path.Combine(Path.GetTempPath(), $"lowline-projection-{Guid.NewGuid():N}")
+        : cacheDirectory;
+
+    /// <summary>
+    /// The cache file of the vault at <paramref name="vault"/> (its root, as the shell names it): named by a
+    /// hash of the root, so moving a vault starts a new cache and nothing of the path shows in the name.
+    /// </summary>
+    public string CacheFileOf(string vault) => Path.Combine(CacheDirectory,
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(vault.Normalize(NormalizationForm.FormC))))[..32].ToLowerInvariant() + ".db");
 
     public bool Indexed => _templates is not null;
 
@@ -92,15 +103,32 @@ public sealed class VaultProjection(string? cacheFile = null) : IAsyncDisposable
     /// </summary>
     public Task ThresholdsSelected { get; private set; } = Task.CompletedTask;
 
-    /// <summary>Brings the projection, suggestions and curves up to this snapshot.</summary>
-    public async Task<IngestResult> IngestAsync(VaultSnapshot vault, CancellationToken cancellationToken)
+    /// <summary>Brings the projection, suggestions and curves up to this snapshot of an unnamed vault.</summary>
+    public Task<IngestResult> IngestAsync(VaultSnapshot vault, CancellationToken cancellationToken) =>
+        IngestAsync(vault, "", cancellationToken);
+
+    /// <summary>
+    /// Brings the projection, suggestions and curves up to this snapshot of the vault at <paramref name="root"/>.
+    /// Another vault than the last one switches to that vault's cache.
+    /// </summary>
+    public async Task<IngestResult> IngestAsync(VaultSnapshot vault, string root, CancellationToken cancellationToken)
     {
         var suggestions = await Suggestions.BuildAsync(vault, cancellationToken, _suggestions);
         var curves = Curves.Compute(vault);
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            _cache ??= await ProjectionCache.OpenAsync(CacheFile, cancellationToken);
+            if (_cache is not null && _vault != root)
+            {
+                await _cache.DisposeAsync();
+                _cache = null;
+            }
+            if (_cache is null)
+            {
+                Directory.CreateDirectory(CacheDirectory);
+                _cache = await ProjectionCache.OpenAsync(CacheFileOf(root), cancellationToken);
+                _vault = root;
+            }
             var result = await _cache.IngestAsync(vault, cancellationToken);
             _templates = vault.Templates.ToDictionary(t => t.Ref, StringComparer.Ordinal);
             _suggestions = suggestions;
@@ -207,7 +235,7 @@ public sealed class VaultProjection(string? cacheFile = null) : IAsyncDisposable
     {
         _selecting?.Cancel();
         if (_cache is not null) await _cache.DisposeAsync();
-        if (_ownsFile) ProjectionCache.Delete(CacheFile);
+        if (_ownsDirectory && Directory.Exists(CacheDirectory)) Directory.Delete(CacheDirectory, recursive: true);
     }
 }
 

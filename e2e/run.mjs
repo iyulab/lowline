@@ -82,10 +82,14 @@ class App {
     await webviewGone()
   }
 
-  /** Ends the app and starts it again on the same vault, in the same App. */
-  async restart(vault) {
+  /**
+   * Ends the app and starts it again on the same vault, in the same App — with the device's projection
+   * caches dropped in between when `dropCaches`, so only the vault is left to rebuild from.
+   */
+  async restart(vault, { dropCaches = false } = {}) {
     await this.quit()
     assert.equal(await sidecarsRunning(), 0, 'the sidecar went with the app')
+    if (dropCaches) await rm(join(process.env.LOCALAPPDATA, IDENTIFIER, 'projections'), { recursive: true, force: true })
     const next = await App.launch()
     this.child = next.child
     this.cdp = next.cdp
@@ -482,7 +486,7 @@ const scenarios = {
     assert.ok(!(await fileValues(join(vault, '문서', saved))).담당, 'the file has no 담당 either')
     await app.noAlert()
   },
-  async 'rebuilds the same table and the same suggestion after a restart, with nothing kept but the vault'(app, vault) {
+  async 'rebuilds the same table and the same suggestion after a restart, from its cache or from the vault alone'(app, vault) {
     const tableNow = async () => {
       await app.click('button', '표')
       await app.choose('select#template', 'intake@1')
@@ -508,8 +512,12 @@ const scenarios = {
     assert.equal(table.length, 5, 'two fixture records and the three made above')
 
     await app.restart(vault)
-    assert.deepEqual(await tableNow(), table, 'the same table')
+    assert.deepEqual(await tableNow(), table, 'the same table from the cache')
     assert.equal(await suggestionNow(), suggestion, 'the same suggestion')
+
+    await app.restart(vault, { dropCaches: true })
+    assert.deepEqual(await tableNow(), table, 'the same table from the vault alone')
+    assert.equal(await suggestionNow(), suggestion, 'the same suggestion from the vault alone')
     await app.noAlert()
   },
   async 'asks before dropping unsaved edits'(app) {

@@ -1,8 +1,8 @@
 // Lowline's sidecar: projections and suggestions over what the shell hands it. It never reads or
 // writes vault files — the shell owns every file, and hands documents over as parsed values.
 //
-// Started by the shell with a per-launch token in LOWLINE_HOST_TOKEN and the projection cache file in
-// LOWLINE_HOST_CACHE. It listens on a loopback port the OS picks and prints one ready line with its
+// Started by the shell with a per-launch token in LOWLINE_HOST_TOKEN and the directory for projection caches
+// in LOWLINE_HOST_CACHE. It listens on a loopback port the OS picks and prints one ready line with its
 // address; every request must carry the token.
 using Lowline.Host;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -14,7 +14,7 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
     builder.WebHost.UseUrls("http://127.0.0.1:0");
 }
 
-// The projection cache lives where the shell says, outside the vault; without a place it lasts one run.
+// Projection caches live where the shell says, outside any vault; without a place they last one run.
 builder.Services.AddSingleton(services =>
     new VaultProjection(services.GetRequiredService<IConfiguration>()[VaultProjection.CacheVariable]));
 
@@ -31,8 +31,9 @@ app.Use(HostAuth.RequireToken(token));
 
 app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: vault.MemoryReady));
 
-app.MapPost("/vault/ingest", (VaultSnapshot snapshot, VaultProjection vault, CancellationToken ct) =>
-    vault.IngestAsync(snapshot, ct));
+// `vault` is the vault's root as the shell names it: it picks the vault's cache, nothing is read from it.
+app.MapPost("/vault/ingest", (VaultSnapshot snapshot, string? vault, VaultProjection projection, CancellationToken ct) =>
+    projection.IngestAsync(snapshot, vault ?? "", ct));
 
 app.MapGet("/projection/{**template}", async (string template, VaultProjection vault, CancellationToken ct) =>
     await vault.TableAsync(template, ct) is { } table ? Results.Ok(table) : Results.NotFound());

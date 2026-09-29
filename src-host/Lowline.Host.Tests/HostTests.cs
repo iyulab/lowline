@@ -44,7 +44,7 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         await using var factory = new Factory();
         var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
-        var ingest = await client.PostAsync("/vault/ingest", new StringContent("""
+        var ingest = await client.PostAsync("/vault/ingest?vault=D%3A%2F%EB%B3%BC%ED%8A%B8", new StringContent("""
             {"templates": [{"ref": "bug-report@1", "fields": [{"name": "제목", "type": "text"}, {"name": "재현됨", "type": "checkbox"}]}],
              "documents": [{"path": "문서/a.md", "template": "bug-report@1", "values": {"제목": "멈춤", "재현됨": true}}]}
             """, System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);

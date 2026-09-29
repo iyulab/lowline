@@ -1,7 +1,7 @@
 //! The .NET sidecar: started with the app, stopped with it.
 //!
 //! The shell starts `host/Lowline.Host` from its resources with a fresh token in
-//! `LOWLINE_HOST_TOKEN`. The host listens on a loopback port the OS picks and prints one line with
+//! `LOWLINE_HOST_TOKEN` and the directory for its projection caches in `LOWLINE_HOST_CACHE`. The host listens on a loopback port the OS picks and prints one line with
 //! its address; every request carries the token. The sidecar never touches vault files — the
 //! shell hands it what it needs.
 
@@ -15,6 +15,8 @@ use serde::Serialize;
 use tauri_kit_sidecar::{LineReadiness, Output, Sidecar};
 
 pub const TOKEN_VARIABLE: &str = "LOWLINE_HOST_TOKEN";
+/// Must match `VaultProjection.CacheVariable` in `src-host/Lowline.Host`.
+pub const CACHE_VARIABLE: &str = "LOWLINE_HOST_CACHE";
 /// Must match `ReadyLine.Prefix` in `src-host/Lowline.Host`.
 const READY_PREFIX: &str = "lowline-host listening ";
 const START_DEADLINE: Duration = Duration::from_secs(30);
@@ -34,11 +36,12 @@ pub struct HostClient {
 }
 
 impl Host {
-    /// Starts the host at `exe` and waits until it has said where it listens and answered `/health`.
-    pub fn start(exe: &Path, stderr_log: PathBuf) -> Result<Self, String> {
+    /// Starts the host at `exe`, keeping its projection caches in `cache`, and waits until it has
+    /// said where it listens and answered `/health`.
+    pub fn start(exe: &Path, stderr_log: PathBuf, cache: &Path) -> Result<Self, String> {
         let token = new_token().map_err(|e| format!("cannot make a token: {e}"))?;
         let mut cmd = Command::new(exe);
-        cmd.env(TOKEN_VARIABLE, &token);
+        cmd.env(TOKEN_VARIABLE, &token).env(CACHE_VARIABLE, cache);
         let mut sidecar = Sidecar::spawn(
             cmd,
             Output::Lines {

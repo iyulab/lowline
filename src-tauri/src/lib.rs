@@ -268,15 +268,25 @@ fn host_status(state: State<HostState>) -> HostStatus {
     state.status()
 }
 
-/// Hands the sidecar a snapshot of the vault, as the UI parsed it. Returns what it ingested.
+/// Hands the sidecar a snapshot of the open vault, as the UI parsed it. Returns what it changed.
 #[tauri::command]
 async fn host_ingest(
     snapshot: serde_json::Value,
+    vault: State<'_, AppState>,
     state: State<'_, HostState>,
 ) -> Result<serde_json::Value, String> {
+    let path = {
+        let guard = vault.vault.lock().expect("vault state poisoned");
+        ingest_path(guard.as_ref().ok_or("no vault is open")?.root())
+    };
     let client = state.client()?;
     let body = snapshot.to_string();
-    host_json(blocking(move || client.post_json("/vault/ingest", &body)).await?)
+    host_json(blocking(move || client.post_json(&path, &body)).await?)
+}
+
+/// The ingest request for the vault at `root`: the sidecar keeps one projection cache per vault.
+fn ingest_path(root: &Path) -> String {
+    format!("/vault/ingest?vault={}", encode_segment(&root.to_string_lossy()))
 }
 
 /// A template's documents as a table.
@@ -346,7 +356,13 @@ fn start_host(app: &tauri::AppHandle) {
                 .app_log_dir()
                 .map_err(|e| e.to_string())?
                 .join("host.stderr.log");
-            host::Host::start(&exe, log)
+            // Projection caches are this device's, outside any vault, and can always be rebuilt.
+            let cache = app
+                .path()
+                .app_local_data_dir()
+                .map_err(|e| e.to_string())?
+                .join("projections");
+            host::Host::start(&exe, log, &cache)
         })();
         app.state::<HostState>().set(result);
     });
@@ -416,6 +432,14 @@ mod tests {
         assert_eq!(
             encode_segment("상담/기록 1"),
             "%EC%83%81%EB%8B%B4%2F%EA%B8%B0%EB%A1%9D%201"
+        );
+    }
+
+    #[test]
+    fn an_ingest_names_the_vault_it_is_for() {
+        assert_eq!(
+            ingest_path(Path::new("D:/볼트 1")),
+            "/vault/ingest?vault=D%3A%2F%EB%B3%BC%ED%8A%B8%201"
         );
     }
 
