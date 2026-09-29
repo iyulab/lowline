@@ -60,11 +60,10 @@ public sealed class RebuildCostTests
         var snapshot = Synthetic(count);
         var edited = snapshot with { Documents = [Edited(snapshot.Documents[0]), .. snapshot.Documents.Skip(1)] };
         var directory = Directory.CreateTempSubdirectory("lowline-perf-").FullName;
-        var cacheFile = Path.Combine(directory, "projection.db");
         try
         {
             string line;
-            await using (var vault = new VaultProjection(cacheFile))
+            await using (var vault = new VaultProjection(directory))
             {
                 // The first ingest fills an empty cache and pays for loading the embedder and warming the runtime.
                 var first = Stopwatch.StartNew();
@@ -98,24 +97,32 @@ public sealed class RebuildCostTests
                 curves.Stop();
 
                 // The share of an edit that is the suggestions' own rebuild, apart from the projection.
+                var fresh = Stopwatch.StartNew();
                 var built = await Suggestions.BuildAsync(snapshot, Ct);
+                fresh.Stop();
                 var suggestions = Stopwatch.StartNew();
                 await Suggestions.BuildAsync(edited, Ct, built);
                 suggestions.Stop();
 
-                line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms · thresholds {thresholds.ElapsedMilliseconds} ms · "
+                // Projection alone: a changed field list rebuilds the table with nothing appended.
+                var widened = edited with { Templates = [Intake with { Fields = [.. Intake.Fields, new TemplateField("비고", "text")] }] };
+                var project = Stopwatch.StartNew();
+                Assert.Equal(0, (await vault.IngestAsync(widened, Ct)).Appended);
+                project.Stop();
+
+                line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms (suggestions from nothing {fresh.ElapsedMilliseconds} ms, projection {project.ElapsedMilliseconds} ms) · thresholds {thresholds.ElapsedMilliseconds} ms · "
                     + $"unchanged {unchanged.ElapsedMilliseconds} ms · one edit {edit.ElapsedMilliseconds} ms (suggestions {suggestions.ElapsedMilliseconds} ms) · "
                     + $"table {table.ElapsedMilliseconds} ms · suggest {suggest.ElapsedMilliseconds} ms · curves {curves.ElapsedMilliseconds} ms · "
                     + $"managed heap {GC.GetTotalMemory(forceFullCollection: true) / (1024 * 1024)} MB";
             }
 
             // A later launch finds the cache filled.
-            await using (var restarted = new VaultProjection(cacheFile))
+            await using (var restarted = new VaultProjection(directory))
             {
                 var start = Stopwatch.StartNew();
                 Assert.Equal(0, (await restarted.IngestAsync(edited, Ct)).Appended);
                 start.Stop();
-                line += $" · restart {start.ElapsedMilliseconds} ms · cache {new FileInfo(cacheFile).Length / (1024 * 1024)} MB";
+                line += $" · restart {start.ElapsedMilliseconds} ms · cache {new FileInfo(restarted.CacheFileOf("")).Length / (1024 * 1024)} MB";
             }
 
             TestContext.Current.TestOutputHelper?.WriteLine(line);
