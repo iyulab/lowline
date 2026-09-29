@@ -1,66 +1,6 @@
 import { LitElement, css, svg, html, nothing, type PropertyValues } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-
-/**
- * The Lowline mark: a solid line (confirmed), a caret standing on the baseline where the
- * line breaks, and dashes after it (not yet). Solid means confirmed; dashed means not yet.
- *
- * Geometry is built from units, not traced: on the 16-unit symbol grid the line is 7u long
- * and 2u thick, the caret 1u wide and 10u tall, each dash 2u with 1u gaps.
- */
-
-interface Rect {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
-interface Geometry {
-  viewBox: string
-  line: Rect
-  caret: Rect
-  dashes: Rect[]
-}
-
-/** Lays out line, caret and dashes left to right on one baseline. */
-function layout(o: {
-  x: number
-  baseline: number
-  thickness: number
-  line: number
-  gapBeforeCaret: number
-  caretWidth: number
-  caretHeight: number
-  dash: number
-  gap: number
-  dashes: number
-}): Omit<Geometry, 'viewBox'> {
-  const top = o.baseline - o.thickness
-  const line = { x: o.x, y: top, w: o.line, h: o.thickness }
-  const caretX = o.x + o.line + o.gapBeforeCaret
-  const caret = { x: caretX, y: o.baseline - o.caretHeight, w: o.caretWidth, h: o.caretHeight }
-  const dashes = Array.from({ length: o.dashes }, (_, i) => ({
-    x: caretX + o.caretWidth + o.gap + i * (o.dash + o.gap),
-    y: top,
-    w: o.dash,
-    h: o.thickness,
-  }))
-  return { line, caret, dashes }
-}
-
-/** 16 × 16 grid; the caret meets the line with no gap. */
-const SYMBOL: Geometry = {
-  viewBox: '0 0 16 16',
-  ...layout({ x: 1, baseline: 13, thickness: 2, line: 7, gapBeforeCaret: 0, caretWidth: 1, caretHeight: 10, dash: 2, gap: 1, dashes: 2 }),
-}
-
-/** The word rests directly on its line ("lowline" has no descenders). */
-const WORD = { x: 0, baseline: 100, size: 100, length: 322 }
-const WORDMARK: Geometry = {
-  viewBox: '4 16 424 110',
-  ...layout({ x: 6, baseline: 122, thickness: 10, line: 326, gapBeforeCaret: 0, caretWidth: 5, caretHeight: 98, dash: 20, gap: 10, dashes: 3 }),
-}
+import { SYMBOL, WORD, WORDMARK, type Rect } from './geometry.js'
 
 export type MarkVariant = 'symbol' | 'wordmark'
 
@@ -71,6 +11,7 @@ const BLINK_MS = 530
 /** Like a system caret, stop blinking after a while without input, and rest visible. */
 const REST_AFTER_MS = 5000
 
+/** The Lowline mark as an element; what it is drawn from, and why, is in `geometry.ts`. */
 @customElement('ll-mark')
 export class LlMark extends LitElement {
   static styles = css`

@@ -17,7 +17,8 @@
     "build:e2e": "tauri build --debug --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "test:e2e": "node e2e/run.mjs",
     "tauri": "tauri",
-    "test:host": "dotnet test --project src-host/Lowline.Host.Tests"
+    "test:host": "dotnet test --project src-host/Lowline.Host.Tests",
+    "brand:icons": "node scripts/brand-icons.ts"
   },
   "dependencies": {
     "@fontsource/instrument-sans": "5.3.0",
