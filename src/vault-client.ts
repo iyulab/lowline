@@ -43,6 +43,16 @@ export function isVaultFailure(e: unknown): e is VaultFailure {
   return typeof e === 'object' && e !== null && 'kind' in e && 'message' in e
 }
 
+/**
+ * Told of each file the app itself writes — the watch does not report those back — with the vault
+ * path, or `null` for this device's event file.
+ */
+export const onWritten = new Set<(path: string | null) => void>()
+
+const wrote = (path: string | null) => {
+  for (const listener of onWritten) listener(path)
+}
+
 export const vault = {
   open: (path: string) => invoke<VaultInfo>('open_vault', { path }),
   listTemplates: () => invoke<VaultEntry[]>('list_templates'),
@@ -51,11 +61,20 @@ export const vault = {
   /** Several files in one call, in order; `null` for one removed since it was listed. */
   readMany: (paths: string[]) => invoke<(string | null)[]>('read_files', { paths }),
   /** Replaces the file atomically. */
-  write: (path: string, content: string) => invoke<void>('write_file', { path, content }),
+  write: async (path: string, content: string) => {
+    await invoke<void>('write_file', { path, content })
+    wrote(path)
+  },
   /** Creates the file atomically; rejects with `already-exists` instead of replacing one. */
-  create: (path: string, content: string) => invoke<void>('create_file', { path, content }),
+  create: async (path: string, content: string) => {
+    await invoke<void>('create_file', { path, content })
+    wrote(path)
+  },
   /** Appends a suggestion event to this device's event file in the vault. */
-  recordEvent: (event: object) => invoke<void>('record_event', { event }),
+  recordEvent: async (event: object) => {
+    await invoke<void>('record_event', { event })
+    wrote(null)
+  },
   /** Every device's event file. */
   listEvents: () => invoke<VaultEntry[]>('list_events'),
 }

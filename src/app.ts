@@ -6,7 +6,8 @@ import type { DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
 import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
 import { strings } from './strings.js'
-import { vault, type VaultInfo } from './vault-client.js'
+import { type VaultInfo } from './vault-client.js'
+import { openVault } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
 import './templates-view.js'
 import './documents-view.js'
@@ -103,7 +104,7 @@ export class LlApp extends LitElement {
     const path = await open({ directory: true, title: strings.openVaultTitle })
     if (typeof path !== 'string') return
     try {
-      this.vaultInfo = await vault.open(path)
+      this.vaultInfo = await openVault(path)
       this.error = ''
     } catch (e) {
       this.error = describeError(e)

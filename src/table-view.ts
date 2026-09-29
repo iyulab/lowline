@@ -4,7 +4,7 @@ import { describeError } from './errors.js'
 import { cellText, type IngestResult, type ProjectionTable, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { host, onVaultChanged, type VaultInfo } from './vault-client.js'
+import { host, onVaultChanged, type VaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 
 /** A document's name as the vault shows it: its file name without the extension. */
@@ -59,7 +59,7 @@ export class LlTable extends LitElement {
     super.connectedCallback()
     void this.load()
     // Another program changed the vault: the table is projected again from what is there now.
-    this.unlisten = onVaultChanged(() => void this.load())
+    this.unlisten = onVaultChanged((change) => void this.load(change))
   }
 
   disconnectedCallback() {
@@ -68,10 +68,10 @@ export class LlTable extends LitElement {
   }
 
   /** Reads the vault, hands it to the sidecar, and shows the first template's table. */
-  private async load() {
+  private async load(change?: VaultChanged) {
     this.error = ''
     try {
-      const synced = await syncVault()
+      const synced = await syncVault(change)
       this.templates = synced.templates
       this.names = synced.names
       this.ingest = synced.ingest

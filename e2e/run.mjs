@@ -89,7 +89,7 @@ class App {
   async restart(vault, { dropCaches = false } = {}) {
     await this.quit()
     assert.equal(await sidecarsRunning(), 0, 'the sidecar went with the app')
-    if (dropCaches) await rm(join(process.env.LOCALAPPDATA, IDENTIFIER, 'projections'), { recursive: true, force: true })
+    if (dropCaches) await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'projections'), { recursive: true, force: true })
     const next = await App.launch()
     this.child = next.child
     this.cdp = next.cdp
@@ -686,6 +686,38 @@ const scenarios = {
       })()`)
       console.log(`    1000 reads through the shell · one at a time ${ms[0]} ms · all at once ${ms[1]} ms · in one call ${ms[2]} ms`)
     },
+    async 'measures one outside edit in a vault of 10,000 documents'(app, vault) {
+      const COUNT = 10_000
+      const file = (i) => join(vault, '문서', `perf-${String(i).padStart(5, '0')}.md`)
+      const source = await readFile(join(vault, '문서', '접수-1.md'), 'utf8')
+      for (let i = 0; i < COUNT; i += 500) {
+        await Promise.all(
+          Array.from({ length: Math.min(500, COUNT - i) }, (_, j) =>
+            writeFile(file(i + j), source.replace('노트북 배터리가 금방 닳아요', `노트북 배터리가 금방 닳아요 (${i + j})`)),
+          ),
+        )
+      }
+      // A fresh start reads the full vault once, filling the cache.
+      const filled = Date.now()
+      await app.restart(vault)
+      await app.click('button', '표')
+      await app.cdp.waitFor(`[...(__e2e.one('select#template')?.options ?? [])].some((o) => o.value === 'intake@1')`, 'the large vault read', { timeoutMs: 300_000 })
+      await app.choose('select#template', 'intake@1')
+      await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(0)'))`, 'the large table', { timeoutMs: 300_000 })
+      const first = Date.now() - filled
+
+      await app.cdp.evaluate(`performance.clearMeasures()`)
+      const edited = Date.now()
+      await writeFile(file(0), source.replace('노트북 배터리가 금방 닳아요', '노트북 충전기가 고장났어요 (고침)'))
+      await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(고침)'))`, 'the edit in the table', { timeoutMs: 120_000 })
+      const edit = Date.now() - edited
+      const steps = await app.cdp.evaluate(
+        `Object.fromEntries(performance.getEntriesByType('measure').filter((m) => m.name.startsWith('vault:')).map((m) => [m.name.slice(6), Math.round(m.duration)]))`,
+      )
+      console.log(
+        `    ${COUNT} documents · restart to table ${first} ms · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
+      )
+    },
   }),
 }
 
@@ -768,6 +800,8 @@ async function main() {
   if (!existsSync(exe)) throw new Error(`no e2e build at ${exe} — run \`npm run build:e2e\` first`)
   const vault = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
   await cp(join(here, 'fixtures', 'vault'), vault, { recursive: true })
+  // Each run's vault is a new folder, so an earlier run's projection cache would only pile up.
+  await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'projections'), { recursive: true, force: true })
 
   let app
   let failed = 0

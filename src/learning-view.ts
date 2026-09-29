@@ -4,7 +4,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { describeError } from './errors.js'
 import type { FieldCurve, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
-import { host, onVaultChanged, type VaultInfo } from './vault-client.js'
+import { host, onVaultChanged, type VaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 import { numberedForms, weeklyCounts, type WeeklyCounts } from './weekly-counts.js'
 
@@ -141,7 +141,7 @@ export class LlLearning extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this.load()
-    this.unlisten = onVaultChanged(() => void this.load())
+    this.unlisten = onVaultChanged((change) => void this.load(change))
   }
 
   disconnectedCallback() {
@@ -149,9 +149,9 @@ export class LlLearning extends LitElement {
     void this.unlisten?.then((stop) => stop())
   }
 
-  private async load() {
+  private async load(change?: VaultChanged) {
     try {
-      const synced = await syncVault()
+      const synced = await syncVault(change)
       this.templates = synced.templates
       this.names = synced.names
       this.counts = weeklyCounts(synced.templates, synced.documents, synced.events)
