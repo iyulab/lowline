@@ -382,6 +382,48 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'completes a field as it is typed into the source, and one undo takes the completion away'(app, vault) {
+    const path = join(vault, TEMPLATE)
+    await app.templateOf(BUG)
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
+    const before = await app.value('textarea')
+    const source = () => app.value('textarea')
+    await app.cdp.evaluate(`(() => { const t = __e2e.one('textarea'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); return true })()`)
+
+    // Three underscores after text start an inline field: its name follows the @ put after them.
+    await app.cdp.insertText('\n요청자: ___')
+    await app.cdp.waitFor(`__e2e.one('textarea').value.endsWith('요청자: ___@')`, 'the @ after the underscores')
+    await app.cdp.insertText('요청자')
+    assert.ok((await source()).endsWith('\n요청자: ___@요청자'))
+
+    // One undo takes the completion away and leaves what was typed.
+    await app.cdp.insertText('\n비고: ___')
+    await app.cdp.waitFor(`__e2e.one('textarea').value.endsWith('비고: ___@')`, 'the @ after the underscores')
+    await app.cdp.press('z', { code: 'KeyZ', modifiers: 2, keyCode: 90 })
+    await app.cdp.waitFor(`__e2e.one('textarea').value.endsWith('비고: ___')`, 'the completion undone')
+
+    // A block field's brackets open after its name, with the caret inside for the type.
+    await app.cdp.insertText('\n@분류: ')
+    await app.cdp.waitFor(`__e2e.one('textarea').value.endsWith('@분류: []')`, 'the brackets after the name')
+    await app.cdp.insertText('select options="가,나"')
+    assert.ok((await source()).endsWith('\n@분류: [select options="가,나"]'))
+    await app.cdp.waitFor(`__e2e.all('select[name="분류"] option').some((o) => o.value === '나')`, 'the new field in the preview')
+
+    // A line of underscores alone is a Markdown rule: nothing is added.
+    await app.cdp.evaluate(`(() => { const t = __e2e.one('textarea'); t.setSelectionRange(t.value.length, t.value.length); return true })()`)
+    await app.cdp.insertText('\n___')
+    await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 200))`)
+    assert.ok((await source()).endsWith('\n___'))
+
+    // As it was, for the scenarios after this one.
+    await app.cdp.evaluate(`(() => { const t = __e2e.one('textarea'); t.focus(); t.select(); return true })()`)
+    await app.cdp.insertText(before)
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal(await readFile(path, 'utf8'), before)
+    await app.noAlert()
+  },
+
   async 'creates a template from the starter, labelled in Korean'(app, vault) {
     await app.newTemplate()
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')

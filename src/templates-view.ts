@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
-import { parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
+import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
 import { setSuggest, templateInfo } from './documents.js'
 import { conflictNotice, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
@@ -94,6 +94,8 @@ export class LlTemplates extends LitElement {
   @state() private changedOutside = false
   @state() private message = ''
   @state() private error = ''
+  /** A completion is being inserted: its own input is not completed again. */
+  private completing = false
 
   private unlisten?: Promise<UnlistenFn>
 
@@ -178,6 +180,27 @@ export class LlTemplates extends LitElement {
     } catch (e) {
       this.error = describeError(e)
     }
+  }
+
+  /**
+   * Takes what was typed into the source, completing a field just started (`___` → `___@`,
+   * `@name: ` → `@name: []`). The completion goes in as typing does, so one undo takes it away.
+   */
+  private onSourceInput(e: InputEvent) {
+    const area = e.target as HTMLTextAreaElement
+    const caret = area.selectionStart
+    if (e.inputType === 'insertText' && !this.completing && caret === area.selectionEnd) {
+      const completion = authoringCompletion(area.value, caret)
+      if (completion) {
+        this.completing = true
+        document.execCommand('insertText', false, completion.text)
+        this.completing = false
+        area.setSelectionRange(caret + completion.caret, caret + completion.caret)
+      }
+    }
+    this.source = area.value
+    this.dirty = true
+    this.message = ''
   }
 
   /** The source's fields, and whether each is a judgment field; nothing while the source does not parse. */
@@ -318,11 +341,7 @@ export class LlTemplates extends LitElement {
                 spellcheck="false"
                 aria-label=${strings.templateSource}
                 .value=${this.source}
-                @input=${(e: InputEvent) => {
-                  this.source = (e.target as HTMLTextAreaElement).value
-                  this.dirty = true
-                  this.message = ''
-                }}
+                @input=${this.onSourceInput}
               ></textarea>
             </section>
             <section>
