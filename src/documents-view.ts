@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { guard } from 'lit/directives/guard.js'
 import { keyed } from 'lit/directives/keyed.js'
+import type { FieldStates } from '@formdown/ui'
 import {
   documentTitle,
   documentFrontMatter,
@@ -97,37 +98,10 @@ export class LlDocuments extends LitElement {
     .message {
       color: var(--dc-color-text-muted, #666);
     }
-    .suggestions {
-      display: flex;
-      flex-direction: column;
-      gap: var(--dc-space-1, 4px);
-    }
-    .suggestion {
-      display: flex;
-      align-items: center;
-      gap: var(--dc-space-2, 8px);
-      padding: var(--dc-space-2, 8px);
-      border: 1px dashed var(--dc-color-border, #d0d0d0);
-      border-radius: var(--dc-radius-md, 6px);
-    }
-    .suggestion > * {
-      flex-shrink: 0;
-    }
-    /* The source gives way — one line, cut short, whole in its tooltip — so the buttons never wrap. */
-    .suggestion .source {
-      flex: 1 1 auto;
-      min-width: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      color: var(--dc-color-text-muted, #666);
-      font-size: 12px;
-    }
     .error {
       color: var(--dc-color-danger, #b00020);
     }
-    p.judgment,
-    p.abstained {
+    p.judgment {
       margin: 0;
       font-size: 0.875em;
     }
@@ -487,34 +461,31 @@ export class LlDocuments extends LitElement {
   private renderJudgment() {
     const template = this.template
     if (!template) return nothing
-    const label = (name: string) => template.fields.find((f) => f.name === name)?.label ?? name
-    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map(label))}</p>
-      ${[...this.abstained].map(
-        (field) => html`<p class="message abstained" data-field=${field}>${strings.judgmentAbstained(label(field), this.learned.get(field) ?? 0)}</p>`,
-      )}`
+    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map((f) => this.label(f)))}</p>`
   }
 
-  private renderSource(s: Suggestion) {
-    const text =
-      s.mode === 'key'
-        ? strings.suggestionKey(s.source!)
-        : strings.suggestionSource((this.pathsById.get(s.source!) ?? s.source!).replace(/^.*\//, '').replace(/\.md$/, ''))
-    return html`<span class="source" title=${text}>${text}</span>`
+  private label(field: string): string {
+    return this.template?.fields.find((f) => f.name === field)?.label ?? field
   }
 
-  private renderSuggestions() {
-    if (this.suggestions.size === 0) return nothing
-    const label = (name: string) => this.template?.fields.find((f) => f.name === name)?.label ?? name
-    return html`<div class="suggestions">
-      ${[...this.suggestions].map(
-        ([field, s]) => html`<div class="suggestion" role="note" data-field=${field}>
-          <span>${strings.suggestionFor(label(field))}: <strong>${s.value}</strong></span>
-          ${s.source ? this.renderSource(s) : html`<span class="source"></span>`}
-          <dc-button size="sm" variant="secondary" @click=${() => this.accept(field, s.value!)}>${strings.accept}</dc-button>
-          <dc-button size="sm" variant="ghost" @click=${() => this.reject(field)}>${strings.reject}</dc-button>
-        </div>`,
-      )}
-    </div>`
+  /** What the form draws by each judgment field: the suggested value to take or decline, or why there is none. */
+  private fieldStates(): FieldStates {
+    const states: FieldStates = {}
+    for (const [field, s] of this.suggestions) {
+      states[field] = { suggestions: [s.value!], note: this.sourceOf(s), decline: strings.reject }
+    }
+    for (const field of this.abstained) {
+      states[field] = { note: strings.judgmentAbstained(this.label(field), this.learned.get(field) ?? 0) }
+    }
+    return states
+  }
+
+  /** What a suggestion rests on, in words: the similar document by its name, or the value it was settled with. */
+  private sourceOf(s: Suggestion): string {
+    if (!s.source) return strings.suggestion
+    return s.mode === 'key'
+      ? strings.suggestionKey(s.source)
+      : strings.suggestionSource((this.pathsById.get(s.source) ?? s.source).replace(/^.*\//, '').replace(/\.md$/, ''))
   }
 
   render() {
@@ -565,13 +536,15 @@ export class LlDocuments extends LitElement {
               </div>
               ${draft.kind === 'existing' ? noticeFor(conflictNotice(draft.path, this.documents, '.md', strings.conflictedOriginal)) : nothing}
               ${this.renderJudgment()}
-              ${this.renderSuggestions()}
               ${keyed(
                 this.opened,
                 html`<formdown-ui
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
+                .fieldStates=${guard([this.suggestions, this.abstained], () => this.fieldStates())}
                 @formdown-data-update=${this.onData}
+                @formdown-suggestion-pick=${(e: CustomEvent<{ field: string; value: string }>) => this.accept(e.detail.field, e.detail.value)}
+                @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.reject(e.detail.field)}
               ></formdown-ui>`,
               )}
             `

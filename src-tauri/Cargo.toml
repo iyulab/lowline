@@ -29,9 +29,9 @@ getrandom = "0.4"
 # compile the native-tls transport in ureq 3.4, so the full feature is needed.
 ureq = { version = "3", default-features = false, features = ["native-tls", "win-system-proxy"] }
 # Added together: adding a crate from the same git source later re-resolves Cargo.lock.
-tauri-kit-fs = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.4.0" }
-tauri-kit-sidecar = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.4.0" }
-tauri-kit-watch = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.4.0" }
+tauri-kit-fs = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
+tauri-kit-sidecar = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
+tauri-kit-watch = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
 
 [dev-dependencies]
 tempfile = "3"

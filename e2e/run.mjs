@@ -547,24 +547,17 @@ const scenarios = {
     await app.newDocument(INTAKE)
     await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
+    // The suggestion is drawn by the field it is for: its value to take, what it rests on, and a way to decline.
     const note = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      `__e2e.all('[data-formdown-note="담당"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 15_000 },
     )
-    assert.match(note, /담당 제안: 장비/)
-    assert.match(note, /비슷한 기록: 접수-1/)
+    assert.match(note, /^제안 · 비슷한 기록: 접수-1/)
+    assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-suggestion')?.textContent`), '장비')
+    assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-decline')?.textContent`), '거절')
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in before it is accepted')
-
-    // The buttons keep one line however long the source is: the source gives way.
-    // A narrow line and a long source, as a long first field makes it.
-    const heights = await app.cdp.evaluate(`__e2e.all('.suggestion .source')[0].textContent = '비슷한 기록: ' + '결제 취소하고 돈 돌려받고 싶어요 '.repeat(8),
-      __e2e.all('.suggestion')[0].style.width = '360px',
-      ['수락', '거절'].map((t) => __e2e.one('dc-button', t).getBoundingClientRect().height)
-      .concat(__e2e.one('dc-button', '저장').getBoundingClientRect().height)`)
-    assert.ok(heights.every((h) => h === heights[2]), `buttons as tall as 저장: ${heights}`)
-    await app.cdp.evaluate(`__e2e.all('.suggestion')[0].style.width = '', true`)
-    await app.click('dc-button', '수락')
+    await app.click('.formdown-suggestion', '장비')
     await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '장비'`, 'the accepted value in the form')
     await app.click('dc-button', '저장')
     await app.status('저장했습니다')
@@ -605,15 +598,15 @@ const scenarios = {
     )
     await app.type('[data-field-name="요청"]', '급여 명세서를 다시 받고 싶어요')
     await app.choose('select[name="부서"]', '개발')
-    await app.cdp.waitFor(`__e2e.all('[role=note][data-field="담당"]').length === 1`, 'a suggestion for 담당', { timeoutMs: 15_000 })
-    await app.click('dc-button', '거절')
-    await app.cdp.waitFor(`__e2e.all('[role=note]').length === 0`, 'the suggestion to be set aside')
+    await app.cdp.waitFor(`__e2e.all('.formdown-suggestion').length === 1`, 'a suggestion for 담당', { timeoutMs: 15_000 })
+    await app.click('.formdown-decline', '거절')
+    await app.cdp.waitFor(`__e2e.all('[data-formdown-note]').length === 0`, 'the suggestion to be set aside')
     await app.click('dc-button', '저장')
     await app.status('저장했습니다')
     await app.noAlert()
 
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 1000))`)
-    assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion does not come back after saving')
+    assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'a rejected suggestion does not come back after saving')
     const all = await events(vault)
     assert.equal(all.length, 2, 'one event per confirmation, not per save')
     assert.deepEqual([all[1].kind, all[1].suggested, all[1].value], ['reject', '인사', null])
@@ -628,7 +621,7 @@ const scenarios = {
     await app.pickDocument(rejectedIn[0].replace(/\.md$/, ''))
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent.includes('급여')`, 'the reopened document')
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2000))`)
-    assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion is not offered on reopening')
+    assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'a rejected suggestion is not offered on reopening')
   },
   async 'shows nothing when no confirmed record is close enough to suggest from'(app, vault) {
     await app.newDocument(INTAKE)
@@ -637,10 +630,10 @@ const scenarios = {
     await app.choose('select[name="부서"]', '개발')
     // Suggestions are asked for once typing pauses; this waits well past that and the answer.
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2500))`)
-    assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'no suggestion is made up')
+    assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'no suggestion is made up')
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in')
     // Why the field is empty is said, with how much it has to learn from.
-    const why = await app.cdp.evaluate(`__e2e.all('p.abstained[data-field="담당"]').map((el) => el.textContent.trim())[0]`)
+    const why = await app.cdp.evaluate(`__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim())[0]`)
     assert.match(why ?? '', /^담당: 확정한 \d+건 중 비슷한 기록이 없어 제안하지 않습니다\.$/)
 
     // Saving it records no suggestion event: nothing was offered, so nothing was decided.
@@ -667,7 +660,7 @@ const scenarios = {
       await app.newDocument(INTAKE)
       await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
       return app.cdp.waitFor(
-        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+        `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
         { timeoutMs: 30_000 },
       )
@@ -754,7 +747,7 @@ const scenarios = {
     await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
     await app.choose('select[name="부서"]', '영업')
     const suggestion = await app.cdp.waitFor(
-      `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
       { timeoutMs: 30_000 },
     )
@@ -821,7 +814,7 @@ const scenarios = {
       await app.newDocument(INTAKE)
       await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       const note = await app.cdp.waitFor(
-        `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+        `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
         { timeoutMs: 15_000 },
       )

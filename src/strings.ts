@@ -87,10 +87,9 @@ export const strings = {
   learningN: '결정',
   learningAt: '시각',
   learningShare: '제안이 나온 칸 중 맞은 비율',
-  suggestionFor: (label: string) => `${label} 제안`,
-  suggestionSource: (name: string) => `비슷한 기록: ${name}`,
-  suggestionKey: (value: string) => `함께 확정된 값: ${value}`,
-  accept: '수락',
+  suggestion: '제안',
+  suggestionSource: (name: string) => `제안 · 비슷한 기록: ${name}`,
+  suggestionKey: (value: string) => `제안 · 함께 확정된 값: ${value}`,
   reject: '거절',
   hostFailed: (message: string) => `표를 만드는 도우미가 시작되지 않았습니다: ${message}`,
   errors: {
