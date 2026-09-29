@@ -6,7 +6,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
 import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { createTemplateFile } from './document-files.js'
+import { invoke } from '@tauri-apps/api/core'
+import { createSampleTemplate, createTemplateFile } from './document-files.js'
 import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
 import { strings } from './strings.js'
@@ -58,6 +59,10 @@ export class LlApp extends LitElement {
     .welcome p {
       margin: 0;
       color: var(--dc-color-text-secondary, #5e5c57);
+    }
+    .choices {
+      display: flex;
+      gap: var(--dc-space-2, 8px);
     }
     .tagline {
       font-size: 17px;
@@ -231,6 +236,38 @@ export class LlApp extends LitElement {
     }
   }
 
+  private async newVault() {
+    if (!(await confirmDiscard())) return
+    const path = await open({ directory: true, title: strings.newVaultTitle })
+    if (typeof path === 'string') await this.makeVault(path)
+  }
+
+  /**
+   * Makes a vault in the empty folder at `path`: opens it and puts the sample template in it, then
+   * shows the sample's documents, ready for a first one. A folder that holds anything is refused.
+   */
+  async makeVault(path: string) {
+    try {
+      if (!(await invoke<boolean>('folder_is_empty', { path }))) {
+        this.error = strings.newVaultNotEmpty
+        return
+      }
+      const info = await openVault(path)
+      const sample = await createSampleTemplate(info.templatesDir)
+      this.vaultInfo = info
+      this.error = ''
+      await this.updateComplete // the new vault's places are read
+      await this.refreshPlaces()
+      const made = this.templates.find((t) => t.path === sample)
+      if (made) {
+        this.place = { kind: 'template', ref: made.ref }
+        this.tab = 'documents'
+      }
+    } catch (e) {
+      this.error = describeError(e)
+    }
+  }
+
   private heading(): string {
     const place = this.place
     if (place?.kind === 'learning') return strings.navLearning
@@ -306,7 +343,10 @@ export class LlApp extends LitElement {
                 <ll-mark variant="wordmark" size="96" intro></ll-mark>
                 <p class="tagline">${strings.tagline}</p>
                 <p>${strings.noVault}</p>
-                <dc-button @click=${this.openVault}>${strings.openVault}</dc-button>
+                <div class="choices">
+                  <dc-button @click=${this.newVault}>${strings.newVault}</dc-button>
+                  <dc-button variant="secondary" @click=${this.openVault}>${strings.openFolder}</dc-button>
+                </div>
               </div>`
             : this.renderPlace(info)}
         </dp-page>

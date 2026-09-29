@@ -1030,6 +1030,42 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'makes a new vault in an empty folder, starting from a sample with a judgment field'(app, vault) {
+    const empty = await mkdtemp(join(tmpdir(), 'lowline-e2e-new-'))
+    const taken = await mkdtemp(join(tmpdir(), 'lowline-e2e-taken-'))
+    await writeFile(join(taken, 'note.md'), 'mine')
+    // The folder picker is the seam: the folder it answers with goes to the same method.
+    const make = (path) => app.cdp.evaluate(`document.querySelector('ll-app').makeVault(${JSON.stringify(path)}).then(() => true)`)
+    try {
+      // The first screen says what a vault is, and offers the two ways in.
+      await app.cdp.evaluate(`(document.querySelector('ll-app').vaultInfo = undefined, true)`)
+      await app.cdp.waitFor(`!!__e2e.one('dc-button', '새 볼트 만들기') && !!__e2e.one('dc-button', '기존 폴더 열기')`, 'the two ways in')
+      assert.ok(await app.cdp.evaluate(`__e2e.all('.welcome p').some((p) => p.textContent.includes('서식과 문서를 담는 폴더'))`))
+
+      // A folder that holds anything is not made a vault: nothing is written beside someone's files.
+      await make(taken)
+      await app.cdp.waitFor(`__e2e.all('[role=alert]').some((el) => el.textContent.includes('빈 폴더를 고르세요'))`, 'the folder refused')
+      assert.deepEqual(await readdir(taken), ['note.md'])
+
+      await make(empty)
+      await app.cdp.waitFor(`!!__e2e.one('dc-button', '새 문서')`, "the sample's documents")
+      assert.deepEqual(await readdir(join(empty, '서식')), ['문의 접수.fd.md'])
+      const sample = parseFormdown(await readFile(join(empty, '서식', '문의 접수.fd.md'), 'utf8'))
+      assert.deepEqual(sample.frontMatter?.data?.lowline, { suggest: ['담당'] })
+      assert.ok(!existsSync(join(empty, '문서')), 'no documents: suggestions learn only from what a person confirms')
+
+      await app.click('dc-button', '새 문서')
+      await app.cdp.waitFor(`__e2e.all('p.judgment').some((el) => el.textContent.includes('제안 받는 칸: 담당'))`, 'its judgment field', { timeoutMs: 30_000 })
+      const why = await app.cdp.waitFor(`__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim())[0]`, 'why 담당 has no suggestion yet')
+      assert.match(why, /^확정한 문서가 아직 없어/)
+      await app.noAlert()
+    } finally {
+      await app.openVault(vault) // back to the vault the scenarios after this one use
+      await rm(empty, { recursive: true, force: true })
+      await rm(taken, { recursive: true, force: true })
+    }
+  },
+
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of
   // the vault repeats once per document.
   ...(process.env.LOWLINE_PERF === '1' && {

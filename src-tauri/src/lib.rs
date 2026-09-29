@@ -90,6 +90,16 @@ fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> CommandRe
     Ok(info)
 }
 
+/// Whether a folder holds nothing: a new vault is made only in an empty one, so nobody's files end up
+/// beside the sample the app puts there.
+#[tauri::command]
+fn folder_is_empty(path: String) -> CommandResult<bool> {
+    Ok(std::fs::read_dir(&path)
+        .map_err(VaultError::from)?
+        .next()
+        .is_none())
+}
+
 /// Where the app keeps files of its own in a vault that are not the user's: probe files of the
 /// watch. Nothing in it is reported.
 const TMP_DIR: &str = ".lowline/tmp";
@@ -516,6 +526,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_vault,
+            folder_is_empty,
             list_templates,
             list_documents,
             read_file,

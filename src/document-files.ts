@@ -1,6 +1,6 @@
 // New document and template files: never replacing one that is there.
 import { documentFileName } from './documents.js'
-import { starterTemplate, strings } from './strings.js'
+import { sampleTemplate, starterTemplate, strings } from './strings.js'
 import { vault } from './vault-client.js'
 
 /** Creates a document file in `dir`; a name already taken gets a number. Returns its vault path. */
@@ -37,4 +37,11 @@ export async function createTemplateFile(dir: string, now = Date.now()): Promise
       if ((e as { kind?: string }).kind !== 'already-exists' || attempt >= 99) throw e
     }
   }
+}
+
+/** Puts the sample template in a new vault's `dir`. Returns its vault path. */
+export async function createSampleTemplate(dir: string, now = Date.now()): Promise<string> {
+  const path = `${dir}/${strings.sampleTemplateName}.fd.md`
+  await vault.create(path, sampleTemplate(`sample-${now.toString(36)}`))
+  return path
 }

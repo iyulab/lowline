@@ -11,7 +11,12 @@ export const strings = {
   openVault: '볼트 열기',
   openVaultTitle: '볼트로 쓸 폴더 선택',
   tagline: '서식을 노트처럼 쓰는 로컬 에디터',
-  noVault: '볼트를 열면 서식과 문서가 여기에 보입니다.',
+  noVault: '볼트는 서식과 문서를 담는 폴더입니다. 모든 것이 그 폴더의 파일로 남습니다.',
+  newVault: '새 볼트 만들기',
+  newVaultTitle: '새 볼트로 쓸 빈 폴더 선택',
+  newVaultNotEmpty: '빈 폴더를 고르세요. 이미 파일이 있는 폴더는 "기존 폴더 열기"로 엽니다.',
+  openFolder: '기존 폴더 열기',
+  sampleTemplateName: '문의 접수',
   save: '저장',
   saved: '저장했습니다',
   reloadedOutside: '밖에서 바뀌어 다시 읽었습니다',
@@ -117,6 +122,30 @@ export const strings = {
  * A starter template: its front matter names it, the body is plain Formdown. Field names are
  * Korean so the labels and the document's front matter keys read in the UI's language.
  */
+/**
+ * The sample a new vault starts with: an intake form with one judgment field turned on, so saving a
+ * few requests shows what suggestions are. It holds no documents — suggestions learn only from what
+ * a person confirms. Provisional: which domains the app's samples come from is still open (B-09).
+ */
+export function sampleTemplate(id: string): string {
+  return `---
+id: ${id}
+version: 1
+lowline:
+  suggest: [담당]
+---
+# ${strings.sampleTemplateName}
+
+요청: ___@요청
+
+@부서: [select options="영업,개발,인사,총무"]
+
+@담당: [select options="장비,계정,급여,시설"]
+
+@메모: [textarea rows=3]
+`
+}
+
 export function starterTemplate(id: string): string {
   return `---
 id: ${id}
