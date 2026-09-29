@@ -22,7 +22,9 @@
     "brand:glyphs": "node scripts/brand-glyphs.ts",
     "brand:sync": "node scripts/brand-sync.ts",
     "brand:og": "node scripts/brand-og.ts",
-    "brand:motion": "node scripts/brand-motion.ts"
+    "brand:motion": "node scripts/brand-motion.ts",
+    "brand:installer": "node scripts/brand-installer.ts",
+    "brand": "npm run brand:glyphs && npm run brand:icons && npm run brand:og -- --site ../lowline.site && npm run brand:motion && npm run brand:installer"
   },
   "dependencies": {
     "@formdown/core": "0.6.0",
