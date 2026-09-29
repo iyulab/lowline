@@ -12,3 +12,15 @@ export function newDocumentId(): string {
 export function documentId(path: string, id: string | undefined): string {
   return id ?? path
 }
+
+/**
+ * The ids more than one document holds — a file copied outside the app keeps its original's id. Until
+ * one of them is changed they are the same document twice; the one saved with a change becomes a new
+ * document (`documents-view` gives it a new id), and what was recorded stays with the other.
+ */
+export function sharedIds(documents: readonly { id: string }[]): Set<string> {
+  const seen = new Set<string>()
+  const shared = new Set<string>()
+  for (const { id } of documents) (seen.has(id) ? shared : seen).add(id)
+  return shared
+}

@@ -8,12 +8,13 @@ import {
   documentFrontMatter,
   fieldValues,
   newDocument,
+  setDocumentId,
   templateBody,
   templateInfo,
   updateDocument,
   type FieldValues,
 } from './documents.js'
-import { documentId, newDocumentId } from './identity.js'
+import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import type { Suggestion, TemplateSnapshot } from './projection.js'
@@ -156,6 +157,8 @@ export class LlDocuments extends LitElement {
   private template?: TemplateSnapshot
   /** Judgment fields asked for a suggestion and given none: nothing confirmed was close enough. */
   @state() private abstained = new Set<string>()
+  /** Ids more than one document holds (a file copied outside the app); see `sharedIds`. */
+  private sharedIds = new Set<string>()
   /** Documents' paths by id: a suggestion from a similar document names the document by its id. */
   private pathsById = new Map<string, string>()
   /** For each judgment field, how many settled documents of the template hold a value in it. */
@@ -248,6 +251,7 @@ export class LlDocuments extends LitElement {
       const templateOf = new Map(read.documents.map((d) => [d.path, d.template]))
       this.documents = documentsOf(read.documentEntries, templateOf, this.scope?.ref ?? null, new Set(read.names.keys()))
       this.templateNames = read.names
+      this.sharedIds = sharedIds(read.documents)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -416,9 +420,12 @@ export class LlDocuments extends LitElement {
     this.message = '' // "saved" is said again only once this save has landed
     try {
       if (draft.kind === 'existing') {
-        const source = updateDocument(draft.source, this.values)
+        // A copy saved with a change is a document of its own from now on.
+        const id = this.sharedIds.has(draft.id) ? newDocumentId() : draft.id
+        const updated = updateDocument(draft.source, this.values)
+        const source = id === draft.id ? updated : setDocumentId(updated, id)
         await vault.write(draft.path, source)
-        this.draft = { ...draft, source }
+        this.draft = { ...draft, id, source }
       } else {
         const id = newDocumentId()
         const source = newDocument(draft.templateSource, this.values, id)

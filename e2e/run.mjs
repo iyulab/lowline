@@ -483,6 +483,33 @@ const scenarios = {
     assert.deepEqual(await fileValues(path), before, 'with the values that were on screen')
     await app.noAlert()
   },
+
+  async 'makes a copied document its own when the copy is saved'(app, vault) {
+    // A file copied outside the app carries its original's id.
+    const [name] = await documentsIn(vault)
+    const original = join(vault, '문서', name)
+    const copyName = name.replace(/\.md$/, ' - 복사본.md')
+    const copy = join(vault, '문서', copyName)
+    await writeFile(copy, await readFile(original, 'utf8'))
+    const { lowline } = await fileValues(original)
+    assert.equal((await fileValues(copy)).lowline.id, lowline.id)
+
+    await app.openDocument(BUG, copyName.replace(/\.md$/, ''))
+    await app.choose('select[name="심각도"]', '보통')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    const saved = await fileValues(copy)
+    assert.equal(saved.심각도, '보통')
+    assert.notEqual(saved.lowline.id, lowline.id, 'the copy that was changed is a new document')
+    assert.equal((await fileValues(original)).lowline.id, lowline.id, 'the original keeps its id')
+    await app.noAlert()
+
+    // The scenarios after this one expect the one document.
+    await app.openDocument(BUG, name.replace(/\.md$/, ''))
+    await rm(copy)
+    await app.cdp.waitFor(`!__e2e.all('nav button').some((b) => b.textContent.includes('복사본'))`, 'the copy gone from the list')
+    await app.noAlert()
+  },
   async 'shows each document as one row of its template table'(app, vault) {
     await app.showTable(BUG)
     const [name] = await documentsIn(vault)
