@@ -1,27 +1,28 @@
-import { LitElement, css, svg, html, nothing, type PropertyValues } from 'lit'
+import { LitElement, css, svg, html, nothing, unsafeCSS, type PropertyValues } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { SYMBOL, WORDMARK, type Rect } from './geometry.ts'
 import { WORDMARK_GLYPHS } from './wordmark-glyphs.ts'
+import { BLINK_MS, CONFIRM_MS, CONFIRM_STAGGER_MS, KEYFRAMES_CSS, REST_AFTER_MS } from './motion.ts'
 
 export type MarkVariant = 'symbol' | 'wordmark'
 
 /** At this size and below the symbol drops to one color so the dashes stay visible. */
 const MONO_AT = 24
-/** Caret blink half-period — the common desktop default. */
-const BLINK_MS = 530
-/** Like a system caret, stop blinking after a while without input, and rest visible. */
-const REST_AFTER_MS = 5000
 
 /** The Lowline mark as an element; what it is drawn from, and why, is in `geometry.ts`. */
 @customElement('ll-mark')
 export class LlMark extends LitElement {
-  static styles = css`
+  static styles = [
+    unsafeCSS(KEYFRAMES_CSS),
+    css`
     :host {
       display: inline-block;
       line-height: 0;
       --_ink: var(--ll-ink, #1a1a1a);
       --_caret: var(--ll-caret, #2f4a6d);
       --_pending: var(--ll-pending, #b4b1aa);
+      --ll-k-ink: var(--_ink);
+      --ll-k-pending: var(--_pending);
     }
     :host([tone='mono']) {
       --_caret: var(--_ink);
@@ -44,7 +45,7 @@ export class LlMark extends LitElement {
       fill: var(--_pending);
     }
     :host([blinking]) .caret {
-      animation: blink calc(var(--ll-blink-ms, ${BLINK_MS}ms) * 2) steps(1, end) infinite;
+      animation: ll-blink calc(var(--ll-blink-ms, ${BLINK_MS}ms) * 2) steps(1, end) infinite;
     }
     /* An unfocused window keeps its caret, dimmed and still. */
     :host([inactive]) .caret {
@@ -52,29 +53,8 @@ export class LlMark extends LitElement {
       fill: var(--_pending);
     }
     .confirming .dash {
-      animation: confirm 900ms ease both;
-      animation-delay: calc(var(--i) * 70ms);
-    }
-    @keyframes blink {
-      0% {
-        opacity: 1;
-      }
-      50% {
-        opacity: 0;
-      }
-    }
-    /* "Not yet" briefly becomes "confirmed", then waits for the next one. */
-    @keyframes confirm {
-      0% {
-        fill: var(--_pending);
-      }
-      25%,
-      60% {
-        fill: var(--_ink);
-      }
-      100% {
-        fill: var(--_pending);
-      }
+      animation: ll-confirm ${CONFIRM_MS}ms linear both;
+      animation-delay: calc(var(--i) * ${CONFIRM_STAGGER_MS}ms);
     }
     @media (prefers-reduced-motion: reduce) {
       :host([blinking]) .caret,
@@ -82,7 +62,8 @@ export class LlMark extends LitElement {
         animation: none;
       }
     }
-  `
+  `,
+  ]
 
   @property({ reflect: true }) variant: MarkVariant = 'symbol'
   /** Rendered height in CSS pixels; the width follows. */
@@ -160,7 +141,7 @@ export class LlMark extends LitElement {
     requestAnimationFrame(() => {
       this.confirming = true
       const dashes = (this.variant === 'symbol' ? SYMBOL : WORDMARK).dashes.length
-      this.confirmTimer = setTimeout(() => (this.confirming = false), 900 + dashes * 70)
+      this.confirmTimer = setTimeout(() => (this.confirming = false), CONFIRM_MS + dashes * CONFIRM_STAGGER_MS)
     })
     this.wake()
   }

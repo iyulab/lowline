@@ -18,3 +18,50 @@ describe('wordmark glyphs', () => {
     expect(SYMBOL.line.x).toBe(SYMBOL.caret.x + SYMBOL.caret.w)
   })
 })
+
+import { BLINK_MS, CONFIRM_MS, CONFIRM_STAGGER_MS, INTRO_MS, TYPE_MS, confirmInk, introState } from '../brand/motion.ts'
+
+describe('intro', () => {
+  const typed = 2 * BLINK_MS + WORDMARK_GLYPHS.length * TYPE_MS
+  it('starts as an empty line with the caret at its start', () => {
+    const s = introState(0)
+    expect(s.glyphs).toBe(0)
+    expect(s.caretX).toBe(WORDMARK_GLYPHS[0].x)
+    expect(s.caretOn).toBe(true)
+    expect(s.dashInk.every((v) => v === 0)).toBe(true)
+  })
+  it('blinks once before typing', () => {
+    expect(introState(BLINK_MS + 1).caretOn).toBe(false)
+    expect(introState(2 * BLINK_MS - 1).glyphs).toBe(0)
+  })
+  it('types one glyph per step and never goes back', () => {
+    let prev = 0
+    for (let t = 0; t <= INTRO_MS; t += 10) {
+      const g = introState(t).glyphs
+      expect(g).toBeGreaterThanOrEqual(prev)
+      prev = g
+    }
+    expect(introState(2 * BLINK_MS + TYPE_MS).glyphs).toBe(1)
+  })
+  it('ends exactly as the still wordmark', () => {
+    const s = introState(INTRO_MS)
+    expect(s.glyphs).toBe(WORDMARK_GLYPHS.length)
+    expect(s.caretX).toBe(WORDMARK.caret.x)
+    expect(s.dashInk.every((v) => v === 0)).toBe(true)
+    expect(INTRO_MS).toBe(typed + CONFIRM_MS + (WORDMARK.dashes.length - 1) * CONFIRM_STAGGER_MS)
+  })
+  it('fills each dash in turn during the confirmation', () => {
+    expect(introState(typed + CONFIRM_MS * 0.4).dashInk[0]).toBe(1)
+    expect(introState(typed + CONFIRM_MS * 0.4).dashInk[2]).toBeLessThan(1)
+  })
+  it('skips to the end when motion is reduced', () => {
+    expect(introState(0, { reduced: true })).toEqual(introState(INTRO_MS))
+  })
+  it('confirm ink follows the keyframes', () => {
+    expect(confirmInk(0, 0)).toBe(0)
+    expect(confirmInk(CONFIRM_MS * 0.25, 0)).toBe(1)
+    expect(confirmInk(CONFIRM_MS * 0.6, 0)).toBe(1)
+    expect(confirmInk(CONFIRM_MS, 0)).toBe(0)
+    expect(confirmInk(CONFIRM_STAGGER_MS, 1)).toBe(0)
+  })
+})
