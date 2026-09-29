@@ -135,6 +135,10 @@ export class LlDocuments extends LitElement {
   private values: FieldValues = {}
   /** The open draft's template as the sidecar knows it; undefined when suggestions are unavailable. */
   private template?: TemplateSnapshot
+  /** Judgment fields asked for a suggestion and given none: nothing confirmed was close enough. */
+  @state() private abstained = new Set<string>()
+  /** For each judgment field, how many settled documents of the template hold a value in it. */
+  private learned = new Map<string, number>()
   /** Suggestions for the draft's empty judgment fields, by field name. */
   @state() private suggestions = new Map<string, Suggestion>()
   /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
@@ -236,6 +240,7 @@ export class LlDocuments extends LitElement {
     this.dirty = false
     this.template = undefined
     this.suggestions = new Map()
+    this.abstained = new Set()
     this.offered = new Map()
     this.filled = []
     this.rejected = new Set()
@@ -253,6 +258,8 @@ export class LlDocuments extends LitElement {
       const template = synced.templates.find((t) => t.ref === templateRef)
       if (this.draft?.templateRef !== templateRef) return // another draft opened meanwhile
       this.template = template?.suggest.length ? template : undefined
+      const settled = synced.documents.filter((d) => d.template === templateRef && !d.conflicted)
+      this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f])).length]))
       await this.suggest()
     } catch {
       this.template = undefined
@@ -266,12 +273,15 @@ export class LlDocuments extends LitElement {
     const run = ++this.suggestRun
     const values = { ...this.values }
     const next = new Map<string, Suggestion>()
+    const abstained = new Set<string>()
     for (const field of template.suggest) {
       if (!isEmpty(values[field])) continue
       try {
         const document = this.draft?.kind === 'existing' ? this.draft.path : undefined
         const suggestion = await host.suggest(template.ref, field, values, document)
-        if (suggestion.value !== null && !this.rejected.has(field)) next.set(field, suggestion)
+        if (this.rejected.has(field)) continue
+        if (suggestion.value !== null) next.set(field, suggestion)
+        else abstained.add(field)
       } catch {
         // no suggestion for this field
       }
@@ -279,6 +289,7 @@ export class LlDocuments extends LitElement {
     // Values may have changed (or another draft opened) while these were asked for.
     if (run !== this.suggestRun || this.template !== template) return
     this.suggestions = next
+    this.abstained = abstained
     const filled = fillOrder(this.filled, values)
     for (const [field, suggestion] of next) {
       // Asked again after each pause in typing: the same value still showing is the same presentation.
@@ -439,7 +450,10 @@ export class LlDocuments extends LitElement {
     const template = this.template
     if (!template) return nothing
     const label = (name: string) => template.fields.find((f) => f.name === name)?.label ?? name
-    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map(label))}</p>`
+    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map(label))}</p>
+      ${[...this.abstained].map(
+        (field) => html`<p class="message abstained" data-field=${field}>${strings.judgmentAbstained(label(field), this.learned.get(field) ?? 0)}</p>`,
+      )}`
   }
 
   private renderSuggestions() {
@@ -530,6 +544,11 @@ export class LlDocuments extends LitElement {
       </section>
     `
   }
+}
+
+/** A saved value, as the vault's front matter holds it (a key written empty reads as null). */
+function holdsValue(value: unknown): boolean {
+  return value !== undefined && value !== null && !isEmpty(value as FieldValues[string])
 }
 
 function isEmpty(value: FieldValues[string] | undefined): boolean {

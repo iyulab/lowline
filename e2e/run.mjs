@@ -542,7 +542,8 @@ const scenarios = {
     assert.equal(accepted.recall, '문서/접수-1.md')
     // When it was shown and taken, and what was filled by then — names only.
     assert.equal(accepted.template, 'intake@1')
-    assert.deepEqual(accepted.filled, ['요청', '부서'], 'in the order they were filled')
+    // The suggestion may first show after 요청 alone or after both: either way, in the order they were filled.
+    assert.ok(['["요청"]', '["요청","부서"]'].includes(JSON.stringify(accepted.filled)), JSON.stringify(accepted.filled))
     assert.ok(Date.parse(accepted.shownAt) <= Date.parse(accepted.decidedAt), 'shown before it was taken')
     assert.ok(Date.parse(accepted.decidedAt) <= Date.parse(accepted.at), 'taken before the save confirmed it')
     // What was shown is kept on this device, outside the vault, without the value.
@@ -589,6 +590,9 @@ const scenarios = {
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2500))`)
     assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'no suggestion is made up')
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in')
+    // Why the field is empty is said, with how much it has to learn from.
+    const why = await app.cdp.evaluate(`__e2e.all('p.abstained[data-field="담당"]').map((el) => el.textContent.trim())[0]`)
+    assert.match(why ?? '', /^담당: 확정한 \d+건 중 비슷한 기록이 없어 제안하지 않습니다\.$/)
 
     // Saving it records no suggestion event: nothing was offered, so nothing was decided.
     const eventsBefore = (await events(vault)).length
@@ -722,7 +726,7 @@ const scenarios = {
     const rejected = decided.filter((e) => e.kind === 'reject').length
     assert.equal(decided.length, 2, 'one accepted and one rejected suggestion so far')
     assert.ok(figures.includes(`수락 ${accepted} · 교정 0 · 거절 ${rejected}`), figures)
-    assert.ok(figures.includes('제안이 나온 최근 2건 중 맞음 50%'), figures)
+    assert.ok(figures.includes('제안이 나온 2건 중 1건 맞음'), figures) // too few for a share
     assert.ok(decided.every((e) => e.template === 'intake@1'), 'events name their template')
 
     // Weekly counts to hand over by hand: numbers only, the form's name shown beside them but not in them.

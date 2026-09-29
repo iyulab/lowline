@@ -31,6 +31,10 @@ export const strings = {
   judgmentHelp: '확정한 문서에서 배워 값을 제안받을 칸입니다. 저장하면 서식 파일의 앞부분(lowline.suggest)에 적힙니다.',
   judgmentNone: '이 서식에는 칸이 없습니다.',
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
+  judgmentAbstained: (label: string, learned: number) =>
+    learned === 0
+      ? `${label}: 확정한 문서가 아직 없어 제안하지 않습니다. 저장할 때마다 배웁니다.`
+      : `${label}: 확정한 ${learned}건 중 비슷한 기록이 없어 제안하지 않습니다.`,
   newDocument: '새 문서',
   noDocuments: '문서가 없습니다.',
   conflictCopyOf: (original: string) => `충돌 사본 — 원본: ${original}`,
@@ -63,6 +67,8 @@ export const strings = {
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
   learningRate: (rate: number, of: number) => `제안이 나온 최근 ${of}건 중 맞음 ${Math.round(rate * 100)}%`,
+  // Before the window is full a share reads as more than it is: one right answer is not "100%".
+  learningFew: (right: number, of: number) => `제안이 나온 ${of}건 중 ${right}건 맞음 — 아직 비율을 말하기엔 적습니다`,
   learningFirst: (rate: number, of: number) => `처음 ${of}건 ${Math.round(rate * 100)}%`,
   learningCounts: (accepted: number, corrected: number, rejected: number) => `수락 ${accepted} · 교정 ${corrected} · 거절 ${rejected}`,
   // The replay also counts the fields memory left blank, which the curve does not.

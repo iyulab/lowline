@@ -228,7 +228,9 @@ export class LlLearning extends LitElement {
     return html`<section>
       <h2>${strings.learningTitle(this.names.get(curve.template) ?? curve.template, label)}</h2>
       <div class="figures">
-        <span class="headline">${strings.learningRate(last.rate, recent)}</span>
+        <span class="headline"
+          >${recent < WINDOW ? strings.learningFew(Math.round(last.rate * recent), recent) : strings.learningRate(last.rate, recent)}</span
+        >
         ${first ? html`<span class="secondary">${strings.learningFirst(first.rate, WINDOW)}</span>` : nothing}
         <span class="secondary">${strings.learningCounts(curve.accepted, curve.corrected, curve.rejected)}</span>
       </div>
