@@ -23,6 +23,9 @@ const PORT = 9223
 /** The e2e build's identifier (src-tauri/tauri.e2e.conf.json), which names its WebView2 profile. */
 const IDENTIFIER = 'com.iyulab.lowline.e2e'
 const TEMPLATE = '서식/버그 리포트.fd.md'
+/** The fixture vault's templates: their names, references and files. */
+const BUG = { name: '버그 리포트', ref: 'bug-report@1', path: TEMPLATE }
+const INTAKE = { name: '접수', ref: 'intake@1', path: '서식/접수.fd.md' }
 /** The template's inline title field (`제목: ___@제목`). */
 const TITLE = '[data-field-name="제목"]'
 
@@ -141,6 +144,53 @@ class App {
     )
   }
 
+  // Where things are, in the app's own terms — which template, then what of it. Scenarios go through
+  // these, so a change of layout changes them and not every scenario.
+
+  /** Starts a new document from `template`. */
+  async newDocument(template) {
+    await this.documentsOf(template)
+    await this.choose('select#template', template.path)
+  }
+
+  /** Shows the documents of `template`: their list, and the document open, if any. */
+  async documentsOf(_template) {
+    await this.click('button', '문서')
+  }
+
+  /** Opens the document labelled `name` of `template`. */
+  async openDocument(template, name) {
+    await this.documentsOf(template)
+    await this.pickDocument(name)
+  }
+
+  /** Clicks the document labelled `name` in the list on screen. */
+  async pickDocument(name) {
+    await this.click('nav button', name)
+  }
+
+  /** The labels of the document list on screen. */
+  documentLabels() {
+    return this.cdp.evaluate(`__e2e.all('nav button').map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`)
+  }
+
+  /** Shows the table of `template`; `timeoutMs` bounds the wait for a large vault to be read. */
+  async showTable(template, { timeoutMs } = {}) {
+    await this.click('button', '표')
+    if (timeoutMs)
+      await this.cdp.waitFor(
+        `[...(__e2e.one('select#template')?.options ?? [])].some((o) => o.value === ${q(template.ref)})`,
+        `the table of ${template.name} offered`,
+        { timeoutMs },
+      )
+    await this.choose('select#template', template.ref)
+  }
+
+  /** Shows how suggestions have fared. */
+  async learning() {
+    await this.click('button', '학습')
+  }
+
   value(selector) {
     return this.cdp.evaluate(`(() => { const el = __e2e.one(${q(selector)}); return el?.isContentEditable ? el.textContent : el?.value })()`)
   }
@@ -248,8 +298,7 @@ const scenarios = {
   },
 
   async 'creates a document, edits it, and saves again in place'(app, vault) {
-    await app.click('button', '문서')
-    await app.choose('select#template', TEMPLATE)
+    await app.newDocument(BUG)
     await app.type(TITLE, '저장 후 멈춤')
     await app.choose('select[name="심각도"]', '높음')
     await app.type('textarea[name="재현_절차"]', '1. 문서를 연다\n2. 저장한다')
@@ -289,9 +338,8 @@ const scenarios = {
     await app.cdp.send('Page.reload')
     await app.ready()
     await app.openVault(vault)
-    await app.click('button', '문서')
     const [name] = await documentsIn(vault)
-    await app.click('button', name.replace(/\.md$/, ''))
+    await app.openDocument(BUG, name.replace(/\.md$/, ''))
     const values = await fileValues(join(vault, '문서', name))
     await app.cdp.waitFor(`__e2e.one(${q(TITLE)})?.textContent === ${q(values.제목)}`, 'the title from the file')
     assert.equal(await app.value('select[name="심각도"]'), values.심각도)
@@ -307,8 +355,7 @@ const scenarios = {
     await app.cdp.send('Page.reload')
     await app.ready()
     await app.openVault(vault)
-    await app.click('button', '문서')
-    await app.click('button', name.replace(/\.md$/, ''))
+    await app.openDocument(BUG, name.replace(/\.md$/, ''))
     await app.cdp.waitFor(`__e2e.one(${q(TITLE)})?.textContent === ${q(values.제목)}`, 'the document again')
     assert.equal(await app.checked('input[name="재현됨"]'), false, 'the checkbox reopens unchecked')
     await app.noAlert()
@@ -370,8 +417,7 @@ const scenarios = {
     await app.noAlert()
   },
   async 'shows each document as one row of its template table'(app, vault) {
-    await app.click('button', '표')
-    await app.choose('select#template', 'bug-report@1')
+    await app.showTable(BUG)
     const [name] = await documentsIn(vault)
     const values = await fileValues(join(vault, '문서', name))
     const rows = await app.cdp.waitFor(
@@ -403,8 +449,7 @@ const scenarios = {
   },
   async 'suggests a judgment value from confirmed documents, and saves it once accepted'(app, vault) {
     const before = new Set(await documentsIn(vault))
-    await app.click('button', '문서')
-    await app.choose('select#template', '서식/접수.fd.md')
+    await app.newDocument(INTAKE)
     await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
     const note = await app.cdp.waitFor(
@@ -437,7 +482,7 @@ const scenarios = {
   },
 
   async 'records a rejected suggestion when the document is saved without it'(app, vault) {
-    await app.choose('select#template', '서식/접수.fd.md')
+    await app.newDocument(INTAKE)
     // A new document from the same template starts empty: nothing carries over from the last one.
     await app.cdp.waitFor(
       `__e2e.one('select[name="부서"]')?.value === '' && __e2e.one('[data-field-name="요청"]')?.textContent === ''`,
@@ -460,13 +505,13 @@ const scenarios = {
 
     // Reopened, the document still has the rejection: the sidecar learned it from the event file.
     // Opening it again starts a fresh draft: nothing of the last one is kept in the window.
-    await app.click('nav button', all[1].doc.split('/').pop().replace(/\.md$/, ''))
+    await app.pickDocument(all[1].doc.split('/').pop().replace(/\.md$/, ''))
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent.includes('급여')`, 'the reopened document')
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2000))`)
     assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion is not offered on reopening')
   },
   async 'shows nothing when no confirmed record is close enough to suggest from'(app, vault) {
-    await app.choose('select#template', '서식/접수.fd.md')
+    await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
     await app.type('[data-field-name="요청"]', '사내 동호회 가입 신청서 양식')
     await app.choose('select[name="부서"]', '개발')
@@ -488,8 +533,7 @@ const scenarios = {
   },
   async 'rebuilds the same table and the same suggestion after a restart, from its cache or from the vault alone'(app, vault) {
     const tableNow = async () => {
-      await app.click('button', '표')
-      await app.choose('select#template', 'intake@1')
+      await app.showTable(INTAKE)
       return app.cdp.waitFor(
         `(() => { const rows = __e2e.all('tbody tr'); const text = rows.map((tr) => tr.textContent.replace(/\\s+/g, ' ').trim()); return text.some((t) => t.includes('급여')) && text })()`,
         'the intake table',
@@ -497,8 +541,7 @@ const scenarios = {
       )
     }
     const suggestionNow = async () => {
-      await app.click('button', '문서')
-      await app.choose('select#template', '서식/접수.fd.md')
+      await app.newDocument(INTAKE)
       await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
       return app.cdp.waitFor(
         `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
@@ -522,22 +565,22 @@ const scenarios = {
   },
   async 'asks before dropping unsaved edits'(app) {
     // The scenario before left a new document typed into and not saved.
-    await app.click('button', '문서')
+    await app.documentsOf(INTAKE)
     const typed = await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]')?.textContent`)
     assert.ok(typed, 'an unsaved draft is open')
 
-    await app.click('nav button', '접수-1')
+    await app.pickDocument('접수-1')
     await app.answerUnsaved('계속 편집')
     assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]')?.textContent`), typed, 'the edits are kept')
 
-    await app.click('nav button', '접수-1')
+    await app.pickDocument('접수-1')
     await app.answerUnsaved('편집 버리기')
     await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '접수-1'`, 'the other document open')
     await app.noAlert()
   },
   async 'imports rows copied from a spreadsheet, and suggests from them'(app, vault) {
     const before = new Set(await documentsIn(vault))
-    await app.click('button', '문서')
+    await app.documentsOf(INTAKE)
     await app.click('dc-button', '가져오기')
     await app.choose('select#import-template', '서식/접수.fd.md')
     const rows = [
@@ -577,7 +620,7 @@ const scenarios = {
     assert.equal(values.find((v) => v.요청 === '회의실 프로젝터가\n안 켜져요')?.담당, '경비', 'kept as written, line break and all')
 
     // Imported records are confirmed values: a similar new record gets the imported answer suggested.
-    await app.choose('select#template', '서식/접수.fd.md')
+    await app.newDocument(INTAKE)
     await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
     await app.choose('select[name="부서"]', '영업')
     const suggestion = await app.cdp.waitFor(
@@ -590,7 +633,7 @@ const scenarios = {
   },
   async 'shows how often suggestions were right, from the event files'(app, vault) {
     // The scenario before left a new document typed into: leaving it asks first.
-    await app.click('button', '학습')
+    await app.learning()
     await app.answerUnsaved('편집 버리기')
     const figures = await app.cdp.waitFor(
       `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); return h && h.parentElement.querySelector('.figures').textContent.replace(/\\s+/g, ' ').trim() })()`,
@@ -637,13 +680,13 @@ const scenarios = {
     await writeFile(copy, original.replace('담당: 장비', '담당: 총무'))
     try {
       await heard('written')
-      await app.click('button', '문서')
-      const listed = () => app.cdp.evaluate(`__e2e.all('nav button').map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`)
+      await app.documentsOf(INTAKE)
+      const listed = () => app.documentLabels()
       await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.includes('충돌 사본 — 원본: 접수-1'))`, 'the copy, with its original', { timeoutMs: 15_000 })
       assert.ok((await listed()).includes('접수-1 충돌 사본 있음'), 'the original, marked as having a copy')
 
       // The same request that was suggested 장비 from 접수-1 is now answered only from other records.
-      await app.choose('select#template', '서식/접수.fd.md')
+      await app.newDocument(INTAKE)
       await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       const note = await app.cdp.waitFor(
         `__e2e.all('[role=note][data-field="담당"]').map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
@@ -653,7 +696,7 @@ const scenarios = {
       assert.doesNotMatch(note, /접수-1/, 'the unsettled original is not a similar record')
       assert.doesNotMatch(note, /총무/, 'nor is its copy')
 
-      await app.click('nav button', '접수-1 충돌 사본 있음')
+      await app.pickDocument('접수-1 충돌 사본 있음')
       await app.answerUnsaved('편집 버리기')
       await app.cdp.waitFor(`__e2e.all('p.conflict').some((p) => p.textContent.includes('제안이 이 문서에서 배우지 않습니다'))`, 'what the conflict means')
       await app.noAlert()
@@ -700,9 +743,7 @@ const scenarios = {
       // A fresh start reads the full vault once, filling the cache.
       const filled = Date.now()
       await app.restart(vault)
-      await app.click('button', '표')
-      await app.cdp.waitFor(`[...(__e2e.one('select#template')?.options ?? [])].some((o) => o.value === 'intake@1')`, 'the large vault read', { timeoutMs: 300_000 })
-      await app.choose('select#template', 'intake@1')
+      await app.showTable(INTAKE, { timeoutMs: 300_000 })
       await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(0)'))`, 'the large table', { timeoutMs: 300_000 })
       const first = Date.now() - filled
 
