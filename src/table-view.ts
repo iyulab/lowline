@@ -27,10 +27,6 @@ export class LlTable extends LitElement {
       align-items: center;
       gap: var(--dc-space-2, 8px);
     }
-    select {
-      font: inherit;
-      padding: var(--dc-space-1, 4px);
-    }
     dc-data-table {
       font-size: 13px;
     }
@@ -43,11 +39,12 @@ export class LlTable extends LitElement {
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
+  /** The template whose documents the table shows, by `id@version`. */
+  @property({ attribute: false }) template!: string
 
   @state() private templates: TemplateSnapshot[] = []
-  /** Each template's name as the vault shows it (its file name), by reference. */
-  @state() private names = new Map<string, string>()
-  @state() private selected?: string
+  /** The template whose table is showing or on its way. */
+  private selected?: string
   @state() private table?: ProjectionTable
   @state() private ingest?: IngestResult
   @state() private waiting = true
@@ -67,17 +64,23 @@ export class LlTable extends LitElement {
     void this.unlisten?.then((stop) => stop())
   }
 
-  /** Reads the vault, hands it to the sidecar, and shows the first template's table. */
+  willUpdate(changed: Map<string, unknown>) {
+    // Another template picked while this one shows: its table, from the vault as last handed over.
+    if (changed.has('template') && !this.waiting && this.template !== this.selected) {
+      this.table = undefined
+      void this.show(this.template)
+    }
+  }
+
+  /** Reads the vault, hands it to the sidecar, and shows the template's table. */
   private async load(change?: VaultChanged) {
     this.error = ''
     try {
       const synced = await syncVault(change)
       this.templates = synced.templates
-      this.names = synced.names
       this.ingest = synced.ingest
       this.waiting = false
-      const first = this.selected ?? this.templates[0]?.ref
-      if (first) await this.show(first)
+      await this.show(this.template)
     } catch (e) {
       this.waiting = false
       this.error = e instanceof SidecarUnavailable ? strings.hostFailed(e.message) : describeError(e)
@@ -97,7 +100,7 @@ export class LlTable extends LitElement {
 
   /** Asks for a row's document to be opened. */
   private openRow(path: string) {
-    this.dispatchEvent(new CustomEvent('ll-open-document', { detail: { path }, bubbles: true, composed: true }))
+    this.dispatchEvent(new CustomEvent('ll-open-document', { detail: { path, template: this.selected }, bubbles: true, composed: true }))
   }
 
   /** A column's heading: the field's label in the selected template. */
@@ -112,12 +115,6 @@ export class LlTable extends LitElement {
     const skipped = this.ingest?.skipped.length ?? 0
     return html`
       <div class="bar">
-        <label for="template">${strings.tableTemplate}</label>
-        <select id="template" @change=${(e: Event) => this.show((e.target as HTMLSelectElement).value)}>
-          ${this.templates.map(
-            (t) => html`<option value=${t.ref} ?selected=${t.ref === this.selected}>${this.names.get(t.ref) ?? t.ref}</option>`,
-          )}
-        </select>
         ${table ? html`<span class="message" role="status">${strings.tableCount(table.rows.length)}</span>` : nothing}
         ${skipped ? html`<span class="error">${strings.tableSkipped(skipped)}</span>` : nothing}
       </div>

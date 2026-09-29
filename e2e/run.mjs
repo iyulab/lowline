@@ -147,15 +147,38 @@ class App {
   // Where things are, in the app's own terms — which template, then what of it. Scenarios go through
   // these, so a change of layout changes them and not every scenario.
 
+  /** Picks `label` in the sidebar — a template, or another place; the group heading is not one. */
+  async sidebar(label, { timeoutMs } = {}) {
+    const item = 'button.item:not(.group-toggle)'
+    if (timeoutMs) await this.cdp.waitFor(`!!__e2e.one(${q(item)}, ${q(label)})`, `${label} in the sidebar`, { timeoutMs })
+    await this.click(item, label)
+  }
+
+  /** Shows `tab` (표, 서식 or 문서) of `template`. */
+  async tabOf(template, tab, options) {
+    await this.sidebar(template.name, options)
+    await this.click('button[role="tab"]', tab)
+  }
+
+  /** Shows the source of `template`. */
+  async templateOf(template) {
+    await this.tabOf(template, '서식')
+  }
+
+  /** Makes a template from the starter. */
+  async newTemplate() {
+    await this.sidebar('새 서식 만들기')
+  }
+
   /** Starts a new document from `template`. */
   async newDocument(template) {
     await this.documentsOf(template)
-    await this.choose('select#template', template.path)
+    await this.click('dc-button', '새 문서')
   }
 
   /** Shows the documents of `template`: their list, and the document open, if any. */
-  async documentsOf(_template) {
-    await this.click('button', '문서')
+  async documentsOf(template) {
+    await this.tabOf(template, '문서')
   }
 
   /** Opens the document labelled `name` of `template`. */
@@ -171,24 +194,25 @@ class App {
 
   /** The labels of the document list on screen. */
   documentLabels() {
-    return this.cdp.evaluate(`__e2e.all('nav button').map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`)
+    return this.cdp.evaluate(`__e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button')]).map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`)
   }
 
   /** Shows the table of `template`; `timeoutMs` bounds the wait for a large vault to be read. */
   async showTable(template, { timeoutMs } = {}) {
-    await this.click('button', '표')
-    if (timeoutMs)
-      await this.cdp.waitFor(
-        `[...(__e2e.one('select#template')?.options ?? [])].some((o) => o.value === ${q(template.ref)})`,
-        `the table of ${template.name} offered`,
-        { timeoutMs },
-      )
-    await this.choose('select#template', template.ref)
+    await this.tabOf(template, '표', { timeoutMs })
   }
 
   /** Shows how suggestions have fared. */
   async learning() {
-    await this.click('button', '학습')
+    await this.sidebar('학습')
+  }
+
+  /** Where the sidebar and the tabs say the app is. */
+  where() {
+    return this.cdp.evaluate(`({
+      place: __e2e.one('button.item[aria-current="page"]')?.textContent.replace(/\\s+/g, ' ').trim().replace(/^\\S+ /, ''),
+      tab: __e2e.one('button[role="tab"][aria-selected="true"]')?.textContent.trim(),
+    })`)
   }
 
   value(selector) {
@@ -254,6 +278,7 @@ const scenarios = {
   },
 
   async 'edits a template and saves it with Ctrl+S'(app, vault) {
+    await app.templateOf(BUG)
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
     await app.cdp.evaluate(`(() => { const t = __e2e.one('textarea'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); return true })()`)
     await app.cdp.insertText('\n메모: ___@메모\n')
@@ -282,7 +307,7 @@ const scenarios = {
   },
 
   async 'creates a template from the starter, labelled in Korean'(app, vault) {
-    await app.click('dc-button', '새 서식')
+    await app.newTemplate()
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')
     const created = (await readdir(join(vault, '서식'))).filter((n) => n.startsWith('새 서식'))
     assert.equal(created.length, 1, 'one starter template on disk')
@@ -293,7 +318,7 @@ const scenarios = {
     )
     assert.ok(labels.includes('메모'), `labels: ${labels.join(', ')}`)
     // Back to the fixture template for the scenarios that follow.
-    await app.click('button', '버그 리포트')
+    await app.templateOf(BUG)
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the fixture template')
   },
 
@@ -573,6 +598,14 @@ const scenarios = {
     await app.answerUnsaved('계속 편집')
     assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]')?.textContent`), typed, 'the edits are kept')
 
+    // Another template or another tab asks too; keeping the edits keeps the sidebar and the tab where they are.
+    await app.sidebar(BUG.name)
+    await app.answerUnsaved('계속 편집')
+    await app.click('button[role="tab"]', '표')
+    await app.answerUnsaved('계속 편집')
+    assert.deepEqual(await app.where(), { place: INTAKE.name, tab: '문서' }, 'still where the edits are')
+    assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]')?.textContent`), typed, 'the edits are still kept')
+
     await app.pickDocument('접수-1')
     await app.answerUnsaved('편집 버리기')
     await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '접수-1'`, 'the other document open')
@@ -706,6 +739,24 @@ const scenarios = {
     // Keeping one file settles it.
     await heard('removed')
     await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
+  },
+
+  async 'lists apart the documents whose template is not in the vault, while there are any'(app, vault) {
+    const stray = join(vault, '문서', '옛 서식 문서.md')
+    await writeFile(stray, '---\ntemplate: retired@1\n제목: 남은 기록\n---\n# 옛 서식\n\n제목: ___@제목\n')
+    try {
+      await app.sidebar('서식 없는 문서', { timeoutMs: 15_000 })
+      await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.trim() === '옛 서식 문서')`, 'the stray document listed')
+      assert.ok(!(await app.documentLabels()).includes('접수-1'), "a template's documents are not listed there")
+      await app.pickDocument('옛 서식 문서')
+      await app.cdp.waitFor(`__e2e.one('[data-field-name="제목"]')?.textContent === '남은 기록'`, 'the stray document open')
+    } finally {
+      await rm(stray, { force: true })
+    }
+    // Once none is left, the place goes, and so does the app from it.
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '서식 없는 문서')`, 'the place gone', { timeoutMs: 15_000 })
+    assert.equal((await app.where()).place, BUG.name, 'back at the first template')
+    await app.noAlert()
   },
 
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of

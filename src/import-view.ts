@@ -5,7 +5,8 @@ import { documentTitle, newDocument } from './documents.js'
 import { describeError } from './errors.js'
 import { importFields, planImport, type ImportField, type ImportPlan } from './import.js'
 import { strings } from './strings.js'
-import { vault, type VaultEntry, type VaultInfo } from './vault-client.js'
+import type { TemplateItem } from './template-scope.js'
+import { vault, type VaultInfo } from './vault-client.js'
 
 /** How many values that do not fit are listed; the rest are counted. */
 const PROBLEMS_SHOWN = 10
@@ -69,7 +70,7 @@ export class LlImport extends LitElement {
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
-  @property({ attribute: false }) templates: VaultEntry[] = []
+  @property({ attribute: false }) templates: TemplateItem[] = []
 
   @state() private templatePath = ''
   @state() private templateSource = ''
@@ -139,7 +140,7 @@ export class LlImport extends LitElement {
         <label for="import-template">${strings.importTemplate}</label>
         <select id="import-template" @change=${(e: Event) => this.chooseTemplate((e.target as HTMLSelectElement).value)}>
           <option value="">${strings.pickTemplate}</option>
-          ${this.templates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
+          ${this.templates.map((t) => html`<option value=${t.path}>${t.name}</option>`)}
         </select>
         <dc-button size="sm" variant="ghost" ?disabled=${this.busy} @click=${this.cancel}>${strings.cancel}</dc-button>
       </div>

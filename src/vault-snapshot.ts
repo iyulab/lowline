@@ -4,7 +4,8 @@ import { TemplateError } from './documents.js'
 import { parseEvents, type SuggestionEvent } from './events.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type TemplateSnapshot } from './projection.js'
 import { ReadCache } from './read-cache.js'
-import { host, onVaultChanged, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultInfo } from './vault-client.js'
+import type { TemplateItem } from './template-scope.js'
+import { host, onVaultChanged, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -41,7 +42,11 @@ export interface ReadVault {
   templates: TemplateSnapshot[]
   /** Each template's name as the vault shows it (its file name), by reference. */
   names: Map<string, string>
+  /** The templates with an identity, as the sidebar lists them, in the vault's order. */
+  templateItems: TemplateItem[]
   documents: DocumentSnapshot[]
+  /** Every document file, sync conflict copies included, as the vault lists them. */
+  documentEntries: VaultEntry[]
   events: SuggestionEvent[]
 }
 
@@ -69,11 +74,14 @@ export async function readVault(): Promise<ReadVault> {
   performance.measure('vault:read', 'vault:read')
   const templates: TemplateSnapshot[] = []
   const names = new Map<string, string>()
+  const templateItems: TemplateItem[] = []
   templateEntries.forEach((entry, i) => {
     const template = templateValues[i]
     if (!template) return
+    const name = entry.name.replace(/\.fd\.md$/, '')
     templates.push(template)
-    names.set(template.ref, entry.name.replace(/\.fd\.md$/, ''))
+    names.set(template.ref, name)
+    templateItems.push({ ref: template.ref, name, path: entry.path })
   })
   const documents: DocumentSnapshot[] = []
   documentEntries.forEach((entry, i) => {
@@ -81,7 +89,7 @@ export async function readVault(): Promise<ReadVault> {
     if (document) documents.push(conflicted.has(entry.path) ? { ...document, conflicted: true } : document)
   })
   const events = eventValues.flatMap((parsed) => parsed ?? [])
-  return { templates, names, documents, events }
+  return { templates, names, templateItems, documents, documentEntries: listed[1], events }
 }
 
 /** Why the sidecar is not there, thrown as a string by `sidecarReady`. */

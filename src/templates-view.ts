@@ -1,48 +1,23 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { templateInfo } from './documents.js'
-import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.js'
+import { conflictNotice, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
-import { confirmDiscard, markUnsaved } from './unsaved.js'
-import { starterTemplate, strings } from './strings.js'
+import { markUnsaved } from './unsaved.js'
+import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
-/** Templates: pick one, edit its Formdown source next to a live preview, save. */
+/** A template: its Formdown source next to a live preview, saved in place. */
 @customElement('ll-templates')
 export class LlTemplates extends LitElement {
   static styles = css`
     :host {
       display: grid;
-      grid-template-columns: 14rem 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: var(--dc-space-4, 16px);
       height: 100%;
       min-height: 0;
-    }
-    nav {
-      display: flex;
-      flex-direction: column;
-      gap: var(--dc-space-1, 4px);
-      overflow: auto;
-    }
-    nav button {
-      text-align: left;
-      padding: var(--dc-space-2, 8px);
-      border: 1px solid transparent;
-      border-radius: var(--dc-radius-md, 6px);
-      background: none;
-      font: inherit;
-      color: inherit;
-      cursor: pointer;
-    }
-    nav button[aria-current='true'] {
-      border-color: var(--dc-color-border, #d0d0d0);
-      background: var(--dc-color-bg-subtle, #f4f4f4);
-    }
-    nav button .note {
-      display: block;
-      font-size: 0.85em;
-      color: var(--dc-color-text-muted, #666);
     }
     section {
       display: flex;
@@ -84,7 +59,10 @@ export class LlTemplates extends LitElement {
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
+  /** The template's file. The app asks before leaving unsaved edits, so a new one is simply shown. */
+  @property({ attribute: false }) path!: string
 
+  /** The template files, conflict copies included: what tells whether this one has a copy. */
   @state() private entries: VaultEntry[] = []
   @state() private selected?: string
   @state() private source = ''
@@ -108,14 +86,12 @@ export class LlTemplates extends LitElement {
     markUnsaved('templates', false)
   }
 
-  updated(changed: Map<string, unknown>) {
-    if (changed.has('dirty')) markUnsaved('templates', this.dirty)
+  willUpdate(changed: Map<string, unknown>) {
+    if (changed.has('path') && this.path !== this.selected) void this.select(this.path).catch((e) => (this.error = describeError(e)))
   }
 
-  /** Opens another template once unsaved edits to this one are let go. */
-  private async choose(path: string) {
-    if (path === this.selected || !(await confirmDiscard())) return
-    await this.select(path)
+  updated(changed: Map<string, unknown>) {
+    if (changed.has('dirty')) markUnsaved('templates', this.dirty)
   }
 
   /** Shows what another program did to the templates; an edit in progress is never replaced. */
@@ -145,7 +121,6 @@ export class LlTemplates extends LitElement {
   private async refresh() {
     try {
       this.entries = await vault.listTemplates()
-      if (!this.selected && this.entries.length > 0) await this.select(this.entries[0].path)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -190,42 +165,8 @@ export class LlTemplates extends LitElement {
     }
   }
 
-  private async create() {
-    if (!(await confirmDiscard())) return
-    this.error = ''
-    const id = `template-${Date.now().toString(36)}`
-    const dir = this.vaultInfo.templatesDir
-    for (let attempt = 1; attempt < 100; attempt++) {
-      const name = attempt === 1 ? strings.newTemplateName : `${strings.newTemplateName} ${attempt}`
-      const path = `${dir}/${name}.fd.md`
-      try {
-        await vault.create(path, starterTemplate(id))
-        this.selected = undefined
-        await this.refresh()
-        await this.select(path)
-        return
-      } catch (e) {
-        if ((e as { kind?: string }).kind !== 'already-exists') {
-          this.error = describeError(e)
-          return
-        }
-      }
-    }
-  }
-
   render() {
     return html`
-      <nav aria-label=${strings.navTemplates}>
-        <dc-button variant="secondary" size="sm" @click=${this.create}>${strings.newTemplate}</dc-button>
-        ${this.entries.length === 0
-          ? html`<p class="message">${strings.noTemplates}</p>`
-          : this.entries.map(
-              (e) => html`<button aria-current=${e.path === this.selected} @click=${() => this.choose(e.path)}>
-                ${e.name.replace(/\.fd\.md$/, '')}
-                ${noteFor(conflictLabel(e, this.entries, '.fd.md'))}
-              </button>`,
-            )}
-      </nav>
       ${this.selected
         ? html`
             <section>

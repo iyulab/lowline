@@ -1,20 +1,26 @@
-import { LitElement, css, html } from 'lit'
+import { LitElement, css, html, nothing } from 'lit'
 import { customElement, queryAll, state } from 'lit/decorators.js'
+import { live } from 'lit/directives/live.js'
 import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
+import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { createTemplateFile } from './document-files.js'
 import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
 import { strings } from './strings.js'
-import { type VaultInfo } from './vault-client.js'
-import { openVault } from './vault-snapshot.js'
+import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, type Place, type TemplateItem } from './template-scope.js'
+import { onVaultChanged, onWritten, type VaultInfo } from './vault-client.js'
+import { openVault, readVault } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
 import './templates-view.js'
 import './documents-view.js'
 import './table-view.js'
 import './learning-view.js'
 
-type View = 'templates' | 'documents' | 'table' | 'learning'
+/** What of a template shows: its table, its source, or its documents. */
+type Tab = 'table' | 'template' | 'documents'
 
 @customElement('ll-app')
 export class LlApp extends LitElement {
@@ -25,6 +31,17 @@ export class LlApp extends LitElement {
     }
     dp-shell {
       height: 100%;
+    }
+    .place {
+      display: flex;
+      flex-direction: column;
+      gap: var(--dc-space-3, 12px);
+      height: 100%;
+      min-height: 0;
+    }
+    .place > :last-child {
+      flex: 1;
+      min-height: 0;
     }
     .error {
       color: var(--dc-color-danger, #b00020);
@@ -48,7 +65,13 @@ export class LlApp extends LitElement {
     }
   `
 
-  @state() private view: View = 'templates'
+  /** Where the app is; unset while the vault has no template (or none is open). */
+  @state() private place?: Place
+  @state() private tab: Tab = 'table'
+  /** The vault's templates, as the sidebar lists them. */
+  @state() private templates: TemplateItem[] = []
+  /** Whether some documents name no template the vault has. */
+  @state() private hasOrphans = false
   @state() private sidebarOpen = true
   @state() private vaultInfo?: VaultInfo
   @state() private error = ''
@@ -58,6 +81,11 @@ export class LlApp extends LitElement {
   @state() private asking = false
   private answer?: (discard: boolean) => void
   @queryAll('ll-mark') private marks!: NodeListOf<LlMark>
+  private unlisten?: Promise<UnlistenFn>
+  /** A template the app writes (makes, saves) may change the list. */
+  private readonly onTemplateWritten = (path: string | null) => {
+    if (path !== null && this.vaultInfo && path.startsWith(this.vaultInfo.templatesDir + '/')) void this.refreshPlaces()
+  }
 
   connectedCallback() {
     super.connectedCallback()
@@ -81,9 +109,52 @@ export class LlApp extends LitElement {
       if (await confirmDiscard()) await win.destroy()
     })
     this.addEventListener('ll-open-document', (e) => {
-      this.openPath = (e as CustomEvent<{ path: string }>).detail.path
-      this.view = 'documents'
+      const { path, template } = (e as CustomEvent<{ path: string; template: string }>).detail
+      this.openPath = path
+      this.place = { kind: 'template', ref: template }
+      this.tab = 'documents'
     })
+    onWritten.add(this.onTemplateWritten)
+    this.unlisten = onVaultChanged(() => void this.refreshPlaces())
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    onWritten.delete(this.onTemplateWritten)
+    void this.unlisten?.then((stop) => stop())
+  }
+
+  willUpdate(changed: Map<string, unknown>) {
+    // Another vault: its own templates, starting from the first.
+    if (changed.has('vaultInfo')) {
+      this.place = undefined
+      this.templates = []
+      this.hasOrphans = false
+      void this.refreshPlaces()
+    }
+  }
+
+  /** Reads which templates the vault has now; a place that is gone gives way to the first template. */
+  private async refreshPlaces() {
+    if (!this.vaultInfo) return
+    try {
+      const read = await readVault()
+      const templateOf = new Map(read.documents.map((d) => [d.path, d.template]))
+      const place = this.place
+      const shown = place?.kind === 'template' ? this.templates.find((t) => t.ref === place.ref) : undefined
+      // A template removed outside while it shows stays listed until it is left: what is on screen
+      // is held nowhere else, and saving makes it again.
+      const gone = shown && !read.templateItems.some((t) => t.ref === shown.ref) ? [shown] : []
+      this.templates = [...read.templateItems, ...gone]
+      this.hasOrphans = documentsOf(read.documentEntries, templateOf, null, new Set(read.names.keys())).length > 0
+      const stays =
+        place?.kind === 'learning' ||
+        (place?.kind === 'orphans' && this.hasOrphans) ||
+        (place?.kind === 'template' && this.templates.some((t) => t.ref === place.ref))
+      if (!stays) this.place = this.templates[0] ? { kind: 'template', ref: this.templates[0].ref } : undefined
+    } catch (e) {
+      this.error = describeError(e)
+    }
   }
 
   private settle(discard: boolean) {
@@ -92,11 +163,48 @@ export class LlApp extends LitElement {
     this.answer = undefined
   }
 
-  private async switchTo(view: View) {
-    if (view === this.view) return
-    if (!(await confirmDiscard())) return this.requestUpdate() // the sidebar shows the view kept
+  /** Goes to a place once unsaved edits are let go; otherwise the sidebar shows the place kept. */
+  private async go(place: Place) {
+    if (this.place && placeId(place) === placeId(this.place)) return
+    if (!(await confirmDiscard())) return this.requestUpdate()
     this.openPath = undefined
-    this.view = view
+    this.place = place
+    void this.refreshPlaces() // a template kept while it showed, gone outside, leaves the list
+  }
+
+  private async switchTab(tab: Tab) {
+    if (tab === this.tab) return
+    if (!(await confirmDiscard())) return this.requestUpdate()
+    this.openPath = undefined
+    this.tab = tab
+  }
+
+  private onSidebarSelect(e: DpSidebarSelectEvent) {
+    if (e.itemId === NEW_TEMPLATE) {
+      e.preventDefault() // an action, not a place: the selection stays where it is
+      void this.createTemplate()
+      return
+    }
+    const place = placeOf(e.itemId)
+    if (place) void this.go(place)
+  }
+
+  /** Makes a template from the starter and opens its source. */
+  private async createTemplate() {
+    const info = this.vaultInfo
+    if (!info || !(await confirmDiscard())) return
+    try {
+      const path = await createTemplateFile(info.templatesDir)
+      await this.refreshPlaces()
+      const made = this.templates.find((t) => t.path === path)
+      if (made) {
+        this.openPath = undefined
+        this.place = { kind: 'template', ref: made.ref }
+        this.tab = 'template'
+      }
+    } catch (e) {
+      this.error = describeError(e)
+    }
   }
 
   private async openVault() {
@@ -111,6 +219,43 @@ export class LlApp extends LitElement {
     }
   }
 
+  private heading(): string {
+    const place = this.place
+    if (place?.kind === 'learning') return strings.navLearning
+    if (place?.kind === 'orphans') return strings.orphanDocuments
+    if (place?.kind === 'template') return this.templates.find((t) => t.ref === place.ref)?.name ?? place.ref
+    return ''
+  }
+
+  private renderPlace(info: VaultInfo) {
+    const place = this.place
+    if (!place)
+      return html`<div class="welcome">
+        <p>${strings.noTemplates}</p>
+        <dc-button @click=${() => void this.createTemplate()}>${strings.makeTemplate}</dc-button>
+      </div>`
+    if (place.kind === 'learning') return html`<ll-learning .vaultInfo=${info}></ll-learning>`
+    if (place.kind === 'orphans') return html`<ll-documents .vaultInfo=${info} .scope=${null}></ll-documents>`
+    const template = this.templates.find((t) => t.ref === place.ref)
+    if (!template) return nothing
+    return html`<div class="place">
+      <dc-tab-bar
+        .items=${[
+          { id: 'table', label: strings.navTable },
+          { id: 'template', label: strings.navTemplates },
+          { id: 'documents', label: strings.navDocuments },
+        ]}
+        .activeId=${live(this.tab)}
+        @dc-tab-change=${(e: DcTabChangeEvent) => void this.switchTab(e.tabId as Tab)}
+      ></dc-tab-bar>
+      ${this.tab === 'table'
+        ? html`<ll-table .vaultInfo=${info} .template=${template.ref}></ll-table>`
+        : this.tab === 'template'
+          ? html`<ll-templates .vaultInfo=${info} .path=${template.path}></ll-templates>`
+          : html`<ll-documents .vaultInfo=${info} .scope=${template} .openPath=${this.openPath}></ll-documents>`}
+    </div>`
+  }
+
   render() {
     const info = this.vaultInfo
     return html`
@@ -119,21 +264,23 @@ export class LlApp extends LitElement {
           slot="sidebar"
           header=${info?.name ?? strings.appName}
           nav-label=${strings.navLabel}
-          active-id=${this.view}
-          .items=${[
-            { id: 'templates', icon: '▤', label: strings.navTemplates },
-            { id: 'documents', icon: '▦', label: strings.navDocuments },
-            { id: 'table', icon: '▥', label: strings.navTable },
-            { id: 'learning', icon: '◔', label: strings.navLearning },
-          ]}
-          @dp-sidebar-select=${(e: DpSidebarSelectEvent) => void this.switchTo(e.itemId as View)}
+          .activeId=${live(this.place ? placeId(this.place) : '')}
+          .items=${info
+            ? sidebarEntries(this.templates, this.hasOrphans, {
+                templates: strings.navTemplates,
+                newTemplate: strings.makeTemplate,
+                learning: strings.navLearning,
+                orphans: strings.orphanDocuments,
+              })
+            : []}
+          @dp-sidebar-select=${(e: DpSidebarSelectEvent) => this.onSidebarSelect(e)}
         >
           <ll-mark slot="icon" size="20" label=""></ll-mark>
         </dp-sidebar>
         <dp-toolbar
           slot="toolbar"
-          heading=${{ templates: strings.navTemplates, documents: strings.navDocuments, table: strings.navTable, learning: strings.navLearning }[this.view]}
-          subtitle=${info?.root ?? ''}
+          heading=${info?.name ?? strings.appName}
+          subtitle=${this.heading()}
           show-toggle
           toggle-label=${strings.toggleSidebar}
           @dp-toolbar-toggle=${() => (this.sidebarOpen = !this.sidebarOpen)}
@@ -149,13 +296,7 @@ export class LlApp extends LitElement {
                 <p>${strings.noVault}</p>
                 <dc-button @click=${this.openVault}>${strings.openVault}</dc-button>
               </div>`
-            : this.view === 'templates'
-              ? html`<ll-templates .vaultInfo=${info}></ll-templates>`
-              : this.view === 'documents'
-                ? html`<ll-documents .vaultInfo=${info} .openPath=${this.openPath}></ll-documents>`
-                : this.view === 'table'
-                  ? html`<ll-table .vaultInfo=${info}></ll-table>`
-                  : html`<ll-learning .vaultInfo=${info}></ll-learning>`}
+            : this.renderPlace(info)}
         </dp-page>
       </dp-shell>
       <dc-confirm-dialog

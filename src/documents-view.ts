@@ -18,7 +18,8 @@ import type { Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
-import { syncVault } from './vault-snapshot.js'
+import { readVault, syncVault } from './vault-snapshot.js'
+import { documentsOf, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
 import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
@@ -32,7 +33,10 @@ type Draft =
   | { kind: 'new'; templateSource: string; templateRef: string }
   | { kind: 'existing'; path: string; source: string; templateRef?: string }
 
-/** Documents: fill in a template to create one, or open one and change its values. */
+/**
+ * A template's documents: fill in the template to create one, or open one and change its values.
+ * Without a template (`null`), the documents that name none the vault has — to open and keep.
+ */
 @customElement('ll-documents')
 export class LlDocuments extends LitElement {
   static styles = css`
@@ -70,13 +74,8 @@ export class LlDocuments extends LitElement {
     }
     .new {
       display: flex;
-      flex-direction: column;
       gap: var(--dc-space-1, 4px);
       margin-bottom: var(--dc-space-2, 8px);
-    }
-    select {
-      font: inherit;
-      padding: var(--dc-space-1, 4px);
     }
     section {
       display: flex;
@@ -116,11 +115,13 @@ export class LlDocuments extends LitElement {
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
+  /** Whose documents: a template, or `null` for those naming none the vault has. */
+  @property({ attribute: false }) scope: TemplateItem | null = null
   /** A document to open as soon as the view shows. */
   @property({ attribute: false }) openPath?: string
 
+  /** This template's documents, their conflict copies included. */
   @state() private documents: VaultEntry[] = []
-  @state() private templates: VaultEntry[] = []
   @state() private draft?: Draft
   /**
    * Values handed to the form when a draft opens; the form owns them after that. Lit
@@ -173,6 +174,16 @@ export class LlDocuments extends LitElement {
     markUnsaved('documents', false)
   }
 
+  willUpdate(changed: Map<string, unknown>) {
+    // Another template: the app asked before letting unsaved edits go.
+    const before = changed.get('scope') as TemplateItem | null | undefined
+    if (changed.has('scope') && before !== undefined && before?.ref !== this.scope?.ref) {
+      this.reset()
+      this.draft = undefined
+      void this.refresh()
+    }
+  }
+
   updated(changed: Map<string, unknown>) {
     if (changed.has('dirty')) markUnsaved('documents', this.dirty)
   }
@@ -206,17 +217,10 @@ export class LlDocuments extends LitElement {
 
   private async refresh() {
     try {
-      ;[this.documents, this.templates] = await Promise.all([vault.listDocuments(), vault.listTemplates()])
-      const names = new Map<string, string>()
-      for (const t of this.templates) {
-        if (t.conflictOf !== undefined) continue // the copy names the same template as its original
-        try {
-          names.set(templateInfo(await vault.read(t.path)).ref, t.name.replace(/\.fd\.md$/, ''))
-        } catch {
-          // a template without an identity has no documents
-        }
-      }
-      this.templateNames = names
+      const read = await readVault()
+      const templateOf = new Map(read.documents.map((d) => [d.path, d.template]))
+      this.documents = documentsOf(read.documentEntries, templateOf, this.scope?.ref ?? null, new Set(read.names.keys()))
+      this.templateNames = read.names
     } catch (e) {
       this.error = describeError(e)
     }
@@ -425,31 +429,18 @@ export class LlDocuments extends LitElement {
     </div>`
   }
 
-  /** Templates to write documents from: a conflict copy is not a second template. */
-  private get settledTemplates() {
-    return this.templates.filter((t) => t.conflictOf === undefined)
-  }
-
   render() {
     const draft = this.draft
     return html`
       <nav aria-label=${strings.navDocuments}>
-        <div class="new">
-          <label for="template">${strings.newDocument}</label>
-          <select
-            id="template"
-            @change=${(e: Event) => {
-              const select = e.target as HTMLSelectElement
-              const path = select.value
-              if (path) void this.leaveFor(() => this.startNew(path))
-              select.value = ''
-            }}
-          >
-            <option value="">${strings.pickTemplate}</option>
-            ${this.settledTemplates.map((t) => html`<option value=${t.path}>${t.name.replace(/\.fd\.md$/, '')}</option>`)}
-          </select>
-          <dc-button size="sm" variant="ghost" @click=${() => this.leaveFor(() => this.startImport())}>${strings.import}</dc-button>
-        </div>
+        ${this.scope
+          ? html`<div class="new">
+              <dc-button size="sm" variant="secondary" @click=${() => this.leaveFor(() => this.startNew(this.scope!.path))}
+                >${strings.newDocument}</dc-button
+              >
+              <dc-button size="sm" variant="ghost" @click=${() => this.leaveFor(() => this.startImport())}>${strings.import}</dc-button>
+            </div>`
+          : nothing}
         ${this.documents.length === 0
           ? html`<p class="message">${strings.noDocuments}</p>`
           : this.documents.map(
@@ -466,7 +457,7 @@ export class LlDocuments extends LitElement {
         ${this.importing
           ? html`<ll-import
               .vaultInfo=${this.vaultInfo}
-              .templates=${this.settledTemplates}
+              .templates=${this.scope ? [this.scope] : []}
               @ll-imported=${(e: CustomEvent<{ created: number }>) => void this.imported(e.detail.created)}
               @ll-import-cancel=${() => (this.importing = false)}
             ></ll-import>`
@@ -474,7 +465,7 @@ export class LlDocuments extends LitElement {
           ? html`
               <div class="bar">
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
-                ${draft.templateRef
+                ${draft.templateRef && !this.scope
                   ? html`<span class="message">${strings.documentFrom(this.templateNames.get(draft.templateRef) ?? draft.templateRef)}</span>`
                   : nothing}
                 ${this.error
