@@ -242,4 +242,19 @@ public sealed class SuggestionsTests
 
         Assert.Equal("장비", await SuggestedIn(vault, "문서/2.md"));
     }
+
+    [Fact]
+    public async Task A_document_is_known_by_its_id_wherever_its_file_is()
+    {
+        // The rejection was recorded when the file was 문서/2.md; it has been renamed since.
+        var renamed = Confirmed.Select(d => d.Path == "문서/2.md" ? d with { Path = "문서/새 이름.md", Id = "doc-2" } : d).ToArray();
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake], renamed, [Event("2026-09-28T10:00:00.000Z", "doc-2", "reject")]), Ct);
+
+        Assert.Null(await SuggestedIn(vault, "doc-2"));
+        var fromSimilar = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업"}"""), "doc-9"), Ct);
+        Assert.Equal("memory", fromSimilar!.Mode);
+        Assert.Contains(fromSimilar.Source, new[] { "문서/1.md", "doc-2", "문서/3.md" });
+    }
 }

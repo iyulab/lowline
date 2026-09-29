@@ -97,6 +97,7 @@ export const strings = {
     'missing-id': '서식 front matter에 id가 없습니다.',
     'missing-version': '서식 front matter에 version이 없습니다.',
     'invalid-id': '서식 id에는 공백과 @를 쓸 수 없습니다.',
+    'reserved-field': '칸 이름으로 template과 lowline은 쓸 수 없습니다. 문서가 이 이름을 스스로 씁니다.',
     'template-not-found': (ref: string) => `이 문서의 서식(${ref})을 볼트에서 찾지 못했습니다.`,
     'already-exists': '같은 이름의 파일이 이미 있습니다.',
     unknown: (message: string) => `작업을 끝내지 못했습니다: ${message}`,

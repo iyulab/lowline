@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { createDocumentFile } from './document-files.js'
 import { documentTitle, newDocument } from './documents.js'
+import { newDocumentId } from './identity.js'
 import { describeError } from './errors.js'
 import { importFields, planImport, type ImportField, type ImportPlan } from './import.js'
 import { strings } from './strings.js'
@@ -118,7 +119,7 @@ export class LlImport extends LitElement {
     try {
       const date = new Date()
       for (const values of plan.documents) {
-        const source = newDocument(this.templateSource, values)
+        const source = newDocument(this.templateSource, values, newDocumentId())
         await createDocumentFile(this.vaultInfo.documentsDir, source, documentTitle(this.templateSource, values), date)
         created++
         this.created = created

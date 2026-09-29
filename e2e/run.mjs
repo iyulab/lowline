@@ -376,8 +376,10 @@ const scenarios = {
     assert.equal(created.length, 1, 'one document created')
     const path = join(vault, '문서', created[0])
     assert.match(created[0], /^\d{4}-\d{2}-\d{2}-저장 후 멈춤\.md$/, 'named after the first text field')
+    const { lowline, ...saved } = await fileValues(path)
+    assert.match(lowline?.id ?? '', /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, 'a new document names itself')
     assert.deepEqual(
-      { ...(await fileValues(path)) },
+      saved,
       { template: 'bug-report@1', 제목: '저장 후 멈춤', 심각도: '높음', 재현_절차: '1. 문서를 연다\n2. 저장한다', 재현됨: true, 환경: '맥' },
     )
     const bodyBefore = await fileBody(path)
@@ -547,10 +549,12 @@ const scenarios = {
     assert.equal(values.요청, '노트북 배터리가 금방 닳아요')
 
     const [accepted] = await events(vault)
+    // The event names the document by its id, not by where its file is.
     assert.deepEqual(
       { doc: accepted.doc, field: accepted.field, kind: accepted.kind, suggested: accepted.suggested, value: accepted.value },
-      { doc: `문서/${created[0]}`, field: '담당', kind: 'accept', suggested: '장비', value: '장비' },
+      { doc: values.lowline.id, field: '담당', kind: 'accept', suggested: '장비', value: '장비' },
     )
+    // The fixture documents predate ids: they are known by their paths.
     assert.equal(accepted.recall, '문서/접수-1.md')
     // When it was shown and taken, and what was filled by then — names only.
     assert.equal(accepted.template, 'intake@1')
@@ -588,7 +592,12 @@ const scenarios = {
 
     // Reopened, the document still has the rejection: the sidecar learned it from the event file.
     // Opening it again starts a fresh draft: nothing of the last one is kept in the window.
-    await app.pickDocument(all[1].doc.split('/').pop().replace(/\.md$/, ''))
+    const rejectedIn = []
+    for (const name of await documentsIn(vault)) {
+      if ((await fileValues(join(vault, '문서', name))).lowline?.id === all[1].doc) rejectedIn.push(name)
+    }
+    assert.equal(rejectedIn.length, 1, 'the event names one document by its id')
+    await app.pickDocument(rejectedIn[0].replace(/\.md$/, ''))
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent.includes('급여')`, 'the reopened document')
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2000))`)
     assert.equal(await app.cdp.evaluate(`__e2e.all('[role=note]').length`), 0, 'a rejected suggestion is not offered on reopening')

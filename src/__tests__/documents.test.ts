@@ -7,6 +7,7 @@ import {
   documentFrontMatter,
   fieldValues,
   newDocument,
+  setDocumentId,
   setSuggest,
   templateBody,
   templateInfo,
@@ -39,6 +40,11 @@ describe('templateInfo', () => {
     expect(() => templateInfo('---\nid: a\n---\nx')).toThrow('missing-version')
     expect(() => templateInfo('---\nid: "a b"\nversion: 1\n---\nx')).toThrow('invalid-id')
   })
+
+  it('refuses a template with a field named as a key documents keep for themselves', () => {
+    expect(() => templateInfo('---\nid: a\nversion: 1\n---\n@template: []\n')).toThrow('reserved-field')
+    expect(() => templateInfo('---\nid: a\nversion: 1\n---\nBy ___@lowline\n')).toThrow('reserved-field')
+  })
 })
 
 describe('newDocument', () => {
@@ -50,10 +56,11 @@ describe('newDocument', () => {
   }
 
   it('copies the template body and records the template and values in front matter', () => {
-    const doc = newDocument(template, values)
+    const doc = newDocument(template, values, 'doc-1')
     const parsed = parseFormdown(doc)
     expect(parsed.frontMatter?.data).toEqual({
       template: 'bug-report@1',
+      lowline: { id: 'doc-1' },
       title: values.title,
       severity: 'high',
       steps: values.steps,
@@ -63,14 +70,29 @@ describe('newDocument', () => {
   })
 
   it('binds the recorded values to the fields', () => {
-    const parsed = parseFormdown(newDocument(template, values))
+    const parsed = parseFormdown(newDocument(template, values, 'doc-1'))
     const title = parsed.forms.find((f) => f.name === 'title')
     expect(title?.value).toBe(values.title)
   })
 
   it('keeps values that YAML would read as another type as strings', () => {
-    const doc = newDocument(template, { title: 'true', severity: '007' })
+    const doc = newDocument(template, { title: 'true', severity: '007' }, 'doc-1')
     expect(documentFrontMatter(doc).values).toEqual({ title: 'true', severity: '007' })
+  })
+})
+
+describe('document id', () => {
+  it('is read from the front matter and is not a value', () => {
+    const doc = newDocument(template, { title: 'A' }, 'doc-1')
+    expect(documentFrontMatter(doc)).toEqual({ template: 'bug-report@1', id: 'doc-1', values: { title: 'A' } })
+    expect(documentFrontMatter(updateDocument(doc, { title: 'B' })).id).toBe('doc-1')
+  })
+
+  it('is set without touching the rest of the file or other keys under lowline', () => {
+    const doc = '---\ntemplate: bug-report@1\nlowline:\n  note: kept\ntitle: A\n---\n# Body\n'
+    const moved = setDocumentId(doc, '문서/old.md')
+    expect(readFrontMatter(moved)?.frontMatter.data).toEqual({ template: 'bug-report@1', lowline: { note: 'kept', id: '문서/old.md' }, title: 'A' })
+    expect(moved.endsWith('---\n# Body\n')).toBe(true)
   })
 })
 
@@ -78,7 +100,7 @@ describe('checkbox values', () => {
   const withCheckbox = template.replace('Expected result', '@reproduced: [checkbox]\n\nExpected result')
 
   it('records a checkbox as a boolean, false included, and reads it back as one', () => {
-    const doc = newDocument(withCheckbox, { title: 'A', reproduced: true })
+    const doc = newDocument(withCheckbox, { title: 'A', reproduced: true }, 'doc-1')
     expect(documentFrontMatter(doc).values).toEqual({ title: 'A', reproduced: true })
     const unchecked = updateDocument(doc, { reproduced: false })
     expect(documentFrontMatter(unchecked).values).toEqual({ title: 'A', reproduced: false })
@@ -98,7 +120,7 @@ describe('fieldValues', () => {
 
 describe('updateDocument', () => {
   it('changes values and leaves the body byte for byte', () => {
-    const doc = newDocument(template, { title: 'First', severity: 'low' })
+    const doc = newDocument(template, { title: 'First', severity: 'low' }, 'doc-1')
     const updated = updateDocument(doc, { title: 'Second', severity: '' })
     expect(documentFrontMatter(updated).values).toEqual({ title: 'Second' })
     expect(documentFrontMatter(updated).template).toBe('bug-report@1')
@@ -106,7 +128,7 @@ describe('updateDocument', () => {
   })
 
   it('keeps CRLF line endings', () => {
-    const crlf = newDocument(template.replace(/\n/g, '\r\n'), { title: 'A' })
+    const crlf = newDocument(template.replace(/\n/g, '\r\n'), { title: 'A' }, 'doc-1')
     const updated = updateDocument(crlf, { title: 'B' })
     expect(updated.includes('\n') && !/[^\r]\n/.test(updated)).toBe(true)
   })

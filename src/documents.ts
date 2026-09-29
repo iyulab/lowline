@@ -1,6 +1,7 @@
 // Templates and documents as text. A template is a Formdown file whose front matter carries
 // its `id` and `version`. A document is a copy of the template body whose front matter records
-// which template it came from (`template: <id>@<version>`) and the value of each field.
+// which template it came from (`template: <id>@<version>`), its own id (`lowline.id`, see
+// `identity.ts`) and the value of each field. `template` and `lowline` are not field values.
 
 import { parseFormdown, readFrontMatter, updateFrontMatter } from '@formdown/core'
 
@@ -17,6 +18,9 @@ export interface TemplateInfo {
 
 export class TemplateError extends Error {}
 
+/** Front matter keys a document uses for itself, not for field values. */
+const RESERVED_KEYS = ['template', 'lowline']
+
 /** Reads a template's identity from its front matter. There is no fallback: no id, no template. */
 export function templateInfo(source: string): TemplateInfo {
   const data = readFrontMatter(source)?.frontMatter.data ?? {}
@@ -30,6 +34,10 @@ export function templateInfo(source: string): TemplateInfo {
   }
   if (/[@\s]/.test(id)) {
     throw new TemplateError('invalid-id')
+  }
+  // A document keeps these beside its values in front matter: a field of the same name would overwrite them.
+  if (parseFormdown(source).forms.some((f) => RESERVED_KEYS.includes(f.name))) {
+    throw new TemplateError('reserved-field')
   }
   return { id, version: String(version), ref: `${id}@${version}` }
 }
@@ -70,10 +78,17 @@ export function fieldValues(data: Record<string, unknown>): FieldValues {
   return values
 }
 
-/** A new document filled in from `templateSource`. */
-export function newDocument(templateSource: string, values: FieldValues): string {
+/** A new document filled in from `templateSource`, named by `id`. */
+export function newDocument(templateSource: string, values: FieldValues, id: string): string {
   const { ref } = templateInfo(templateSource)
-  return updateFrontMatter(templateBody(templateSource), { template: ref, ...valueChanges(values) })
+  return updateFrontMatter(templateBody(templateSource), { template: ref, lowline: { id }, ...valueChanges(values) })
+}
+
+/** Gives a document the id `id`; other keys under `lowline`, and the rest of the file, stay as they are. */
+export function setDocumentId(documentSource: string, id: string): string {
+  const lowline = readFrontMatter(documentSource)?.frontMatter.data.lowline
+  const rest = typeof lowline === 'object' && lowline !== null && !Array.isArray(lowline) ? lowline : {}
+  return updateFrontMatter(documentSource, { lowline: { ...rest, id } })
 }
 
 /** Records new field values in an existing document; the body stays as it is. */
@@ -81,10 +96,11 @@ export function updateDocument(documentSource: string, values: FieldValues): str
   return updateFrontMatter(documentSource, valueChanges(values))
 }
 
-/** A document's template reference and its values, read from its front matter alone. */
-export function documentFrontMatter(documentSource: string): { template?: string; values: Record<string, unknown> } {
-  const { template, ...values } = readFrontMatter(documentSource)?.frontMatter.data ?? {}
-  return { ...(typeof template === 'string' ? { template } : {}), values }
+/** A document's template reference, id and values, read from its front matter alone. */
+export function documentFrontMatter(documentSource: string): { template?: string; id?: string; values: Record<string, unknown> } {
+  const { template, lowline, ...values } = readFrontMatter(documentSource)?.frontMatter.data ?? {}
+  const id = typeof lowline === 'object' && lowline !== null ? (lowline as { id?: unknown }).id : undefined
+  return { ...(typeof template === 'string' ? { template } : {}), ...(typeof id === 'string' && id ? { id } : {}), values }
 }
 
 /**

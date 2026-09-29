@@ -3,6 +3,7 @@
 
 import { parseFormdown } from '@formdown/core'
 import { documentFrontMatter, templateInfo } from './documents.js'
+import { documentId } from './identity.js'
 import type { SuggestionEvent } from './events.js'
 
 export interface TemplateField {
@@ -24,6 +25,8 @@ export interface TemplateSnapshot {
 
 export interface DocumentSnapshot {
   path: string
+  /** What the document is known by (`identity.ts`): what suggestions learned and events recorded are about. */
+  id: string
   template: string
   values: Record<string, unknown>
   /** When the file was last saved (ms since the epoch): its values were last confirmed then. */
@@ -70,9 +73,9 @@ function suggestFields(data: Record<string, unknown> | undefined, fields: Templa
 
 /** A document's template and values, or undefined when it names no template. */
 export function documentSnapshot(path: string, source: string, modified?: number): DocumentSnapshot | undefined {
-  const { template, values } = documentFrontMatter(source)
+  const { template, id, values } = documentFrontMatter(source)
   if (!template) return undefined
-  return { path, template, values, ...(modified ? { modified } : {}) }
+  return { path, id: documentId(path, id), template, values, ...(modified ? { modified } : {}) }
 }
 
 export interface ProjectionTable {

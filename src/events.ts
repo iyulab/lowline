@@ -10,7 +10,7 @@ export type EventKind = 'accept' | 'correct' | 'reject'
 /** One line of `.lowline/events/<device>.jsonl`. */
 export interface SuggestionEvent {
   at: string
-  /** The document, relative to the vault. */
+  /** The document's id (`identity.ts`) — for a document with none, its path relative to the vault. */
   doc: string
   /**
    * The document's template as `id@version`, so the event still says where it belongs if the document

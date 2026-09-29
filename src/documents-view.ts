@@ -13,6 +13,7 @@ import {
   updateDocument,
   type FieldValues,
 } from './documents.js'
+import { documentId, newDocumentId } from './identity.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import type { Suggestion, TemplateSnapshot } from './projection.js'
@@ -32,7 +33,7 @@ const SUGGEST_DELAY_MS = 300
 /** What is open in the editor: a new document from a template, or an existing document. */
 type Draft =
   | { kind: 'new'; templateSource: string; templateRef: string }
-  | { kind: 'existing'; path: string; source: string; templateRef?: string }
+  | { kind: 'existing'; path: string; id: string; source: string; templateRef?: string }
 
 /**
  * A template's documents: fill in the template to create one, or open one and change its values.
@@ -155,6 +156,8 @@ export class LlDocuments extends LitElement {
   private template?: TemplateSnapshot
   /** Judgment fields asked for a suggestion and given none: nothing confirmed was close enough. */
   @state() private abstained = new Set<string>()
+  /** Documents' paths by id: a suggestion from a similar document names the document by its id. */
+  private pathsById = new Map<string, string>()
   /** For each judgment field, how many settled documents of the template hold a value in it. */
   private learned = new Map<string, number>()
   /** Suggestions for the draft's empty judgment fields, by field name. */
@@ -277,6 +280,7 @@ export class LlDocuments extends LitElement {
       if (this.draft?.templateRef !== templateRef) return // another draft opened meanwhile
       this.template = template?.suggest.length ? template : undefined
       const settled = synced.documents.filter((d) => d.template === templateRef && !d.conflicted)
+      this.pathsById = new Map(synced.documents.map((d) => [d.id, d.path]))
       this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f])).length]))
       await this.suggest()
     } catch {
@@ -295,7 +299,7 @@ export class LlDocuments extends LitElement {
     for (const field of template.suggest) {
       if (!isEmpty(values[field])) continue
       try {
-        const document = this.draft?.kind === 'existing' ? this.draft.path : undefined
+        const document = this.draft?.kind === 'existing' ? this.draft.id : undefined
         const suggestion = await host.suggest(template.ref, field, values, document)
         if (this.rejected.has(field)) continue
         if (suggestion.value !== null) next.set(field, suggestion)
@@ -359,8 +363,8 @@ export class LlDocuments extends LitElement {
   }
 
   /** Records what the save confirmed about the suggestions offered for this draft. */
-  private async recordSuggestionEvents(path: string) {
-    const events = suggestionEvents(this.offered, this.rejected, this.values, path, new Date(), this.template?.ref)
+  private async recordSuggestionEvents(id: string) {
+    const events = suggestionEvents(this.offered, this.rejected, this.values, id, new Date(), this.template?.ref)
     // Each event is recorded once; a rejection stays in force while the draft is open. A suggestion
     // the save said nothing about is still the one showing, not a new presentation.
     for (const event of events) this.offered.delete(event.field)
@@ -393,10 +397,10 @@ export class LlDocuments extends LitElement {
     this.reset()
     try {
       const source = await vault.read(path)
-      const { template, values } = documentFrontMatter(source)
+      const { template, id, values } = documentFrontMatter(source)
       this.setValues(fieldValues(values))
       this.initialValues = this.values
-      this.draft = { kind: 'existing', path, source, templateRef: template }
+      this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef: template }
       this.opened++
       void this.prepareSuggestions(this.draft.templateRef)
     } catch (e) {
@@ -416,14 +420,15 @@ export class LlDocuments extends LitElement {
         await vault.write(draft.path, source)
         this.draft = { ...draft, source }
       } else {
-        const source = newDocument(draft.templateSource, this.values)
+        const id = newDocumentId()
+        const source = newDocument(draft.templateSource, this.values, id)
         const path = await this.createDocument(source, documentTitle(draft.templateSource, this.values))
-        this.draft = { kind: 'existing', path, source, templateRef: draft.templateRef }
+        this.draft = { kind: 'existing', path, id, source, templateRef: draft.templateRef }
       }
       // The app's own writes are not reported back, so the list is read here: a new document, or
       // one made again after it was removed outside, joins it.
       await this.refresh()
-      if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.path)
+      if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.id)
       this.dirty = false
       this.changedOutside = false
       this.message = strings.saved
@@ -477,7 +482,9 @@ export class LlDocuments extends LitElement {
 
   private renderSource(s: Suggestion) {
     const text =
-      s.mode === 'key' ? strings.suggestionKey(s.source!) : strings.suggestionSource(s.source!.replace(/^.*\//, '').replace(/\.md$/, ''))
+      s.mode === 'key'
+        ? strings.suggestionKey(s.source!)
+        : strings.suggestionSource((this.pathsById.get(s.source!) ?? s.source!).replace(/^.*\//, '').replace(/\.md$/, ''))
     return html`<span class="source" title=${text}>${text}</span>`
   }
 

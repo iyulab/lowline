@@ -28,6 +28,7 @@ const event = (at: string, doc: string, field: string, kind: SuggestionEvent['ki
 
 const doc = (path: string, tpl: string, values: Record<string, unknown>, modified?: number): DocumentSnapshot => ({
   path,
+  id: path,
   template: tpl,
   values,
   ...(modified ? { modified } : {}),

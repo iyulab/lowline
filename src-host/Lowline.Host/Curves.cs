@@ -33,7 +33,10 @@ public static class Curves
 
     public static IReadOnlyList<FieldCurve> Compute(VaultSnapshot vault)
     {
-        var templateOf = vault.Documents.ToDictionary(d => d.Path, d => d.Template, StringComparer.Ordinal);
+        // A copied file carries its original's id: either names the template.
+        var templateOf = vault.Documents
+            .GroupBy(d => d.Identity, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Template, StringComparer.Ordinal);
         var judged = vault.Templates.ToDictionary(t => t.Ref, t => t.Suggest ?? [], StringComparer.Ordinal);
         return (vault.Events ?? [])
             // An event names its template; older ones are placed through their document, if it is still there.

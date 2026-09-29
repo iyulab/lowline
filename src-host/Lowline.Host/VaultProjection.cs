@@ -18,14 +18,20 @@ public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> F
 /// A document: where it lives in the vault, its template, its recorded values, when it was last
 /// saved (ms since the epoch — its values were last confirmed then), if known, and whether a sync
 /// client left a conflict copy of it — until the person settles which to keep, its values are not
-/// confirmed: it stays in the table, and suggestions do not learn from it.
+/// confirmed: it stays in the table, and suggestions do not learn from it. <see cref="Id"/> is what it is
+/// known by — the id in its front matter, or its path when it has none — and what events name it by.
 /// </summary>
 public sealed record DocumentSnapshot(
-    string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values, long? Modified = null, bool Conflicted = false);
+    string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values, long? Modified = null, bool Conflicted = false,
+    string? Id = null)
+{
+    /// <summary>What suggestions learned and events recorded about the document are keyed by.</summary>
+    public string Identity => Id ?? Path;
+}
 
 /// <summary>
 /// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the
-/// vault's event files. <see cref="Doc"/> is the document's vault path, <see cref="Template"/> its
+/// vault's event files. <see cref="Doc"/> is the document's <see cref="DocumentSnapshot.Identity"/>, <see cref="Template"/> its
 /// template (absent in events recorded before it was written down).
 /// </summary>
 public sealed record SuggestionEvent(string At, string Doc, string Field, string Kind, string Suggested, string? Template = null);

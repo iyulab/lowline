@@ -44,12 +44,17 @@ describe('templateSnapshot', () => {
 
 describe('documentSnapshot', () => {
   it('carries the template reference and typed values', () => {
-    const doc = newDocument(template, { 제목: '멈춤', 재현됨: true, 태그: ['UI'] })
+    const doc = newDocument(template, { 제목: '멈춤', 재현됨: true, 태그: ['UI'] }, 'id-a')
     expect(documentSnapshot('문서/a.md', doc)).toEqual({
       path: '문서/a.md',
+      id: 'id-a',
       template: 'bug-report@2',
       values: { 제목: '멈춤', 재현됨: true, 태그: ['UI'] },
     })
+  })
+
+  it('knows a document without an id by its path', () => {
+    expect(documentSnapshot('문서/old.md', '---\ntemplate: bug-report@2\n제목: 멈춤\n---\n')).toMatchObject({ id: '문서/old.md', values: { 제목: '멈춤' } })
   })
 
   it('skips a file that names no template', () => {

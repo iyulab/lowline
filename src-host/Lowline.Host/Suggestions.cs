@@ -7,7 +7,7 @@ namespace Lowline.Host;
 
 /// <summary>
 /// What the UI asks: a value for one judgment field, given the document's other values.
-/// <see cref="Document"/> is the document's vault path once it has been saved.
+/// <see cref="Document"/> is the document's <see cref="DocumentSnapshot.Identity"/> once it has been saved.
 /// </summary>
 public sealed record SuggestRequest(
     string Template, string Field, IReadOnlyDictionary<string, JsonElement> Values, string? Document = null);
@@ -188,7 +188,7 @@ public sealed class Suggestions
     /// oldest possible time when that is unknown, as the shell reports an unreadable one.
     /// </summary>
     private static SettledDocument Settled(DocumentSnapshot document) => new(
-        document.Path,
+        document.Identity,
         Texts(document.Values),
         DateTimeOffset.FromUnixTimeMilliseconds(document.Modified ?? 0));
 

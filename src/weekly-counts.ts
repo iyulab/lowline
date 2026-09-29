@@ -71,7 +71,7 @@ export function weeklyCounts(
 ): WeeklyCounts {
   const forms = numberedForms(templates)
   const formNumber = new Map(forms.map((t, i) => [t.ref, i + 1]))
-  const templateOf = new Map(documents.map((d) => [d.path, d.template]))
+  const templateOf = new Map(documents.map((d) => [d.id, d.template]))
 
   const cells = new Map<string, WeekCounts>()
   /** The week's counts for a judgment field of a counted form; undefined for anything else. */
