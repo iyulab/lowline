@@ -5,10 +5,10 @@
 //! led to it. Messages are never taken — an exception's text can hold a vault path, a file name, a
 //! template name or a field value, and none of those may leave the device under any consent.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Where a failure happened.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Layer {
     Ui,
@@ -16,15 +16,17 @@ pub enum Layer {
     Shell,
 }
 
-/// One error report, exactly as it would be sent.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// One error report, exactly as it is sent.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report {
     pub layer: Layer,
     pub kind: String,
     pub frames: Vec<String>,
-    pub version: &'static str,
-    pub os: &'static str,
-    pub arch: &'static str,
+    pub version: String,
+    pub os: String,
+    pub arch: String,
+    /// When it failed, in UTC to the second — reports are sent on a later launch.
+    pub time: String,
 }
 
 impl Report {
@@ -35,9 +37,10 @@ impl Report {
             layer,
             kind: plain_kind(kind),
             frames: stack.lines().filter_map(|line| frame(layer, line)).take(MAX_FRAMES).collect(),
-            version: env!("CARGO_PKG_VERSION"),
-            os: std::env::consts::OS,
-            arch: std::env::consts::ARCH,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            os: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
+            time: utc(std::time::SystemTime::now()),
         }
     }
 }
@@ -105,8 +108,6 @@ pub struct Sink {
     pub track_url: String,
 }
 
-// Nothing calls this until sending is switched on: that waits on choosing the HTTPS client.
-#[allow(dead_code)]
 impl Sink {
     /// The sink a connection string names, if it names one.
     pub fn parse(connection_string: &str) -> Option<Self> {
@@ -132,10 +133,10 @@ impl Sink {
 
     /// A report as Application Insights takes it: one exception telemetry item, whose type and
     /// message are both the report's kind and whose stack is the report's frames.
-    pub fn envelope(&self, report: &Report, at: std::time::SystemTime) -> serde_json::Value {
+    pub fn envelope(&self, report: &Report) -> serde_json::Value {
         serde_json::json!({
             "name": "Microsoft.ApplicationInsights.Exception",
-            "time": utc(at),
+            "time": report.time,
             "iKey": self.instrumentation_key,
             "tags": {
                 "ai.cloud.role": report.layer,
@@ -156,6 +157,72 @@ impl Sink {
                 },
             },
         })
+    }
+}
+
+/// How many reports go out in one request.
+const BATCH: usize = 100;
+
+impl Sink {
+    /// An agent for the ingestion endpoint: the OS's TLS and certificate store, and the proxy the
+    /// PC is set up with — an office network that inspects TLS has its own root in that store.
+    pub fn agent() -> ureq::Agent {
+        use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
+        let tls = TlsConfig::builder().provider(TlsProvider::NativeTls).root_certs(RootCerts::PlatformVerifier).build();
+        ureq::Agent::config_builder()
+            .tls_config(tls)
+            .http_status_as_error(false)
+            .timeout_global(Some(std::time::Duration::from_secs(30)))
+            .build()
+            .into()
+    }
+
+    /// Sends the reports `file` has gained since the last send, and records in `sent` how far into
+    /// `file` has been sent. A line that is not a report (one written before reports had a time) is
+    /// passed over. Stops at the first request that fails for a reason that may pass — the network,
+    /// or the endpoint being busy or down — and leaves the rest for the next launch. Returns how
+    /// many reports were sent.
+    pub fn send_pending(&self, agent: &ureq::Agent, file: &std::path::Path, sent: &std::path::Path) -> std::io::Result<usize> {
+        let bytes = match std::fs::read(file) {
+            Ok(bytes) => bytes,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e),
+        };
+        // A file shorter than what was sent is a new file: the old one was deleted.
+        let mut offset = std::fs::read_to_string(sent)
+            .ok()
+            .and_then(|s| s.trim().parse::<usize>().ok())
+            .filter(|&offset| offset <= bytes.len())
+            .unwrap_or(0);
+        // Only whole lines: a launch may still be writing the last one.
+        let end = bytes.iter().rposition(|&b| b == b'\n').map_or(0, |i| i + 1).max(offset);
+        let lines: Vec<&[u8]> = bytes[offset..end].split_inclusive(|&b| b == b'\n').collect();
+        let mut count = 0;
+        for batch in lines.chunks(BATCH) {
+            let reports: Vec<Report> = batch.iter().filter_map(|line| serde_json::from_slice(line).ok()).collect();
+            if !reports.is_empty() {
+                let items: Vec<_> = reports.iter().map(|report| self.envelope(report)).collect();
+                let body = serde_json::to_vec(&items).map_err(std::io::Error::other)?;
+                let status = agent
+                    .post(&self.track_url)
+                    .header("Content-Type", "application/json")
+                    .send(&body[..])
+                    .map_err(std::io::Error::other)?
+                    .status()
+                    .as_u16();
+                // Busy, throttled or down: the same reports may be taken later.
+                if matches!(status, 408 | 429) || status >= 500 {
+                    return Err(std::io::Error::other(format!("the endpoint answered {status}")));
+                }
+                // Anything else was taken, or will never be: either way it is not sent again.
+                if (200..300).contains(&status) {
+                    count += reports.len();
+                }
+            }
+            offset += batch.iter().map(|line| line.len()).sum::<usize>();
+            std::fs::write(sent, offset.to_string())?;
+        }
+        Ok(count)
     }
 }
 
@@ -342,9 +409,9 @@ mod tests {
     #[test]
     fn a_report_goes_out_as_one_exception_item() {
         let sink = Sink { instrumentation_key: "k".into(), track_url: "https://x/v2.1/track".into() };
-        let report = Report::new(Layer::Ui, "TypeError", "at save (http://tauri.localhost/assets/index-a.js:1:2)");
-        let at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_790_673_991);
-        let item = sink.envelope(&report, at);
+        let mut report = Report::new(Layer::Ui, "TypeError", "at save (http://tauri.localhost/assets/index-a.js:1:2)");
+        report.time = "2026-09-29T09:26:31Z".into();
+        let item = sink.envelope(&report);
         assert_eq!(item["name"], "Microsoft.ApplicationInsights.Exception");
         assert_eq!(item["time"], "2026-09-29T09:26:31Z");
         assert_eq!(item["iKey"], "k");
@@ -356,6 +423,142 @@ mod tests {
         assert_eq!(exception["stack"], "save index-a.js:1:2");
         // Still nothing but the report: the envelope adds no field that could carry content.
         assert!(item.to_string().is_ascii());
+    }
+
+    /// A loopback endpoint that answers each request with the next of `statuses`, and hands back
+    /// the bodies it was sent.
+    fn endpoint(statuses: Vec<u16>) -> (Sink, std::thread::JoinHandle<Vec<serde_json::Value>>) {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let sink = Sink {
+            instrumentation_key: "k".into(),
+            track_url: format!("http://{}/v2.1/track", listener.local_addr().unwrap()),
+        };
+        let server = std::thread::spawn(move || {
+            let mut bodies = Vec::new();
+            for status in statuses {
+                let (stream, _) = listener.accept().unwrap();
+                let mut reader = BufReader::new(stream);
+                let mut length = 0;
+                loop {
+                    let mut line = String::new();
+                    reader.read_line(&mut line).unwrap();
+                    if line == "\r\n" {
+                        break;
+                    }
+                    if let Some((name, value)) = line.split_once(':') {
+                        if name.eq_ignore_ascii_case("content-length") {
+                            length = value.trim().parse().unwrap();
+                        }
+                    }
+                }
+                let mut body = vec![0; length];
+                reader.read_exact(&mut body).unwrap();
+                bodies.push(serde_json::from_slice(&body).unwrap());
+                let answer = format!("HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                reader.into_inner().write_all(answer.as_bytes()).unwrap();
+            }
+            bodies
+        });
+        (sink, server)
+    }
+
+    fn loopback() -> ureq::Agent {
+        ureq::Agent::config_builder().http_status_as_error(false).proxy(None).build().into()
+    }
+
+    #[test]
+    fn sends_what_was_written_since_the_last_send() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        let reporter = Reporter::new(file.clone());
+        reporter.record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+        reporter.record(Report::new(Layer::Host, "System.IOException", "")).unwrap();
+
+        let (sink, server) = endpoint(vec![200]);
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 2);
+        let bodies = server.join().unwrap();
+        let items = bodies[0].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["data"]["baseData"]["exceptions"][0]["typeName"], "TypeError");
+        assert_eq!(items[1]["tags"]["ai.cloud.role"], "host");
+
+        // Nothing new: no request at all.
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 0);
+
+        // Only what came after.
+        reporter.record(Report::new(Layer::Shell, "Panic", "")).unwrap();
+        let (sink, server) = endpoint(vec![200]);
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
+        assert_eq!(server.join().unwrap()[0][0]["data"]["baseData"]["exceptions"][0]["typeName"], "Panic");
+    }
+
+    #[test]
+    fn keeps_the_reports_for_later_when_the_endpoint_is_busy() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        Reporter::new(file.clone()).record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+
+        let (sink, server) = endpoint(vec![503]);
+        assert!(sink.send_pending(&loopback(), &file, &sent).is_err());
+        server.join().unwrap();
+
+        let (sink, server) = endpoint(vec![200]);
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn does_not_send_again_what_the_endpoint_will_never_take() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        Reporter::new(file.clone()).record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+
+        let (sink, server) = endpoint(vec![400]);
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 0);
+        server.join().unwrap();
+        // The line counts as handled: a second send makes no request.
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 0);
+    }
+
+    #[test]
+    fn passes_over_lines_that_are_not_reports_and_a_line_still_being_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        let old = r#"{"layer":"ui","kind":"TypeError","frames":[],"version":"0.1.0","os":"windows","arch":"x86_64"}"#;
+        let report = serde_json::to_string(&Report::new(Layer::Ui, "RangeError", "")).unwrap();
+        std::fs::write(&file, format!("{old}\n{report}\n{{\"layer\":\"ui\"")).unwrap();
+
+        let (sink, server) = endpoint(vec![200]);
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
+        let bodies = server.join().unwrap();
+        assert_eq!(bodies[0].as_array().unwrap().len(), 1);
+        assert_eq!(std::fs::read_to_string(&sent).unwrap(), (old.len() + 1 + report.len() + 1).to_string());
+    }
+
+    #[test]
+    fn a_new_file_shorter_than_what_was_sent_is_sent_from_its_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        std::fs::write(&sent, "999999").unwrap();
+        Reporter::new(file.clone()).record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+
+        let (sink, server) = endpoint(vec![200]);
+        assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
+        server.join().unwrap();
+    }
+
+    /// Sends one report to a real resource over HTTPS — the OS's TLS and certificate store. Run by
+    /// hand with the connection string in the environment:
+    /// `LOWLINE_APPINSIGHTS_CONNECTION_STRING=… cargo test -- --ignored reaches_the_ingestion_endpoint`
+    #[test]
+    #[ignore]
+    fn reaches_the_ingestion_endpoint() {
+        let sink = Sink::parse(&std::env::var("LOWLINE_APPINSIGHTS_CONNECTION_STRING").unwrap()).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        Reporter::new(file.clone()).record(Report::new(Layer::Shell, "EnvelopeProbe", "")).unwrap();
+        assert_eq!(sink.send_pending(&Sink::agent(), &file, &sent).unwrap(), 1);
     }
 
     #[test]

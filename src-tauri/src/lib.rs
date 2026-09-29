@@ -389,8 +389,8 @@ fn start_host(app: &tauri::AppHandle) {
 /// reported.
 static REPORTER: std::sync::OnceLock<report::Reporter> = std::sync::OnceLock::new();
 
-/// Writes an error report. Reports are only written for now, to `reports.jsonl` in the log folder —
-/// what would be sent, for anyone to read.
+/// Writes an error report to `reports.jsonl` in the log folder — what is sent, for anyone to read.
+/// A build made with a sink sends it on the next launch.
 fn report(report: report::Report) {
     if let Some(reporter) = REPORTER.get() {
         let _ = reporter.record(report);
@@ -415,8 +415,15 @@ fn report_error(kind: String, stack: String) {
 /// itself: a panicking process is no place to send anything.
 fn start_reports(app: &tauri::AppHandle) {
     let Ok(dir) = app.path().app_log_dir() else { return };
-    if REPORTER.set(report::Reporter::new(dir.join("reports.jsonl"))).is_err() {
+    let file = dir.join("reports.jsonl");
+    if REPORTER.set(report::Reporter::new(file.clone())).is_err() {
         return;
+    }
+    // What earlier launches wrote goes out now, away from startup; what fails stays for the next.
+    if let Some(sink) = report::Sink::of_build() {
+        std::thread::spawn(move || {
+            let _ = sink.send_pending(&report::Sink::agent(), &file, &dir.join("reports.sent"));
+        });
     }
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {

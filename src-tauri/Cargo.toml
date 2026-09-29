@@ -24,7 +24,10 @@ serde_json = "1"
 dunce = "1"
 # The sidecar: a per-launch token, and HTTP to it on loopback.
 getrandom = "0.4"
-ureq = { version = "3", default-features = false }
+# Loopback HTTP to the sidecar, and HTTPS for error reports through the OS's TLS and certificate
+# store — the roots and proxy an office PC is set up with. `native-tls-no-default` alone does not
+# compile the native-tls transport in ureq 3.4, so the full feature is needed.
+ureq = { version = "3", default-features = false, features = ["native-tls", "win-system-proxy"] }
 # Added together: adding a crate from the same git source later re-resolves Cargo.lock.
 tauri-kit-fs = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.4.0" }
 tauri-kit-sidecar = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.4.0" }
