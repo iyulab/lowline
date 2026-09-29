@@ -32,12 +32,10 @@ export const strings = {
   noTemplates: '서식이 없습니다. 새 서식을 만드세요.',
   templateSource: '서식 원문',
   preview: '미리보기',
-  optionsTitle: '선택지',
-  optionsHelp: '쉼표로 나눠 적습니다. 서식 원문의 그 칸에 그대로 적힙니다.',
   optionsOf: (label: string) => `${label} 선택지`,
-  judgmentTitle: '판단 칸',
-  judgmentHelp: '확정한 문서에서 배워 값을 제안받을 칸입니다. 저장하면 서식 파일의 앞부분(lowline.suggest)에 적힙니다.',
-  judgmentNone: '이 서식에는 칸이 없습니다.',
+  fieldsTitle: '칸',
+  fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다.',
+  fieldsNone: '이 서식에는 칸이 없습니다.',
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
   judgmentAbstained: (learned: number) =>
     learned === 0

@@ -59,21 +59,25 @@ export class LlTemplates extends LitElement {
     .error {
       color: var(--dc-color-danger, #b00020);
     }
-    .options {
+    /* Each field on one row: its judgment checkbox (as wide as its label, so a click beside it does
+       nothing), then a choice field's options. */
+    .fields {
       display: grid;
       grid-template-columns: max-content 1fr;
       align-items: center;
-      gap: var(--dc-space-1, 4px) var(--dc-space-2, 8px);
+      justify-items: start;
+      gap: var(--dc-space-1, 4px) var(--dc-space-3, 12px);
     }
-    .options h3,
-    .options p {
+    .fields h3,
+    .fields p {
       grid-column: 1 / -1;
     }
-    .judgment {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start; /* a checkbox is as wide as its label, so a click beside it does nothing */
-      gap: var(--dc-space-1, 4px);
+    .fields p {
+      margin: 0;
+      font-size: 0.875em;
+    }
+    .fields dc-input {
+      justify-self: stretch;
     }
     h3 {
       margin: 0;
@@ -207,12 +211,20 @@ export class LlTemplates extends LitElement {
     this.message = ''
   }
 
-  /** The source's fields, and whether each is a judgment field; nothing while the source does not parse. */
-  private judgmentFields(): { name: string; label: string; on: boolean }[] {
+  /**
+   * The source's fields: whether each is a judgment field, and a choice field's options (a select, or
+   * a radio or checkbox group). Nothing while the source does not parse.
+   */
+  private fields(): { name: string; label: string; judgment: boolean; options?: string[] }[] {
     try {
       const lowline = readFrontMatter(this.source)?.frontMatter.data.lowline as { suggest?: unknown } | undefined
       const on = new Set(Array.isArray(lowline?.suggest) ? lowline.suggest : [])
-      return parseFormdown(this.source).forms.map((f) => ({ name: f.name, label: f.label ?? f.name, on: on.has(f.name) }))
+      return parseFormdown(this.source).forms.map((f) => ({
+        name: f.name,
+        label: f.label ?? f.name,
+        judgment: on.has(f.name),
+        options: ['select', 'radio', 'checkbox'].includes(f.type) && f.options?.length ? f.options : undefined,
+      }))
     } catch {
       return []
     }
@@ -230,23 +242,12 @@ export class LlTemplates extends LitElement {
     }
   }
 
-  /** The source's choice fields — a select, or a radio or checkbox group — with their options. */
-  private choiceFields(): { name: string; label: string; options: string[] }[] {
-    try {
-      return parseFormdown(this.source)
-        .forms.filter((f) => ['select', 'radio', 'checkbox'].includes(f.type) && f.options?.length)
-        .map((f) => ({ name: f.name, label: f.label ?? f.name, options: f.options! }))
-    } catch {
-      return []
-    }
-  }
-
   /**
    * Writes a field's options, as typed (split at commas), into its place in the source: an edit of the
    * source like any other, kept by saving. A field is left with at least one option.
    */
   private setOptions(field: string, typed: string, input: HTMLInputElement & { value: string }) {
-    const current = this.choiceFields().find((f) => f.name === field)?.options ?? []
+    const current = this.fields().find((f) => f.name === field)?.options ?? []
     const options = typed.split(',').map((o) => o.trim()).filter(Boolean)
     if (options.length === 0 || options.join(',') === current.join(',')) {
       input.value = current.join(', ') // nothing to write: show what the source holds
@@ -293,30 +294,6 @@ export class LlTemplates extends LitElement {
     }
   }
 
-  private renderChoices() {
-    const fields = this.choiceFields()
-    if (fields.length === 0) return nothing
-    const commit = (field: string) => (e: Event) => {
-      const input = e.currentTarget as HTMLInputElement
-      this.setOptions(field, input.value, input)
-    }
-    return html`<div class="options" role="group" aria-label=${strings.optionsTitle}>
-      <h3>${strings.optionsTitle}</h3>
-      <p class="message">${strings.optionsHelp}</p>
-      ${fields.map(
-        (f) => html`<span>${f.label}</span>
-          <dc-input
-            aria-label=${strings.optionsOf(f.label)}
-            .value=${f.options.join(', ')}
-            @focusout=${commit(f.name)}
-            @keydown=${(e: KeyboardEvent) => {
-              if (e.key === 'Enter') commit(f.name)(e)
-            }}
-          ></dc-input>`,
-      )}
-    </div>`
-  }
-
   /** Saves the template as it is on screen; the app's save shortcut calls this too. */
   async save() {
     if (!this.selected) return
@@ -338,20 +315,35 @@ export class LlTemplates extends LitElement {
     }
   }
 
-  private renderJudgment() {
-    const fields = this.judgmentFields()
-    return html`<div class="judgment" role="group" aria-label=${strings.judgmentTitle}>
-      <h3>${strings.judgmentTitle}</h3>
-      <p class="message">${strings.judgmentHelp}</p>
+  /** The template's fields: each can be made a judgment field, and a choice field's options edited. */
+  private renderFields() {
+    const fields = this.fields()
+    const commit = (field: string) => (e: Event) => {
+      const input = e.currentTarget as HTMLInputElement
+      this.setOptions(field, input.value, input)
+    }
+    return html`<div class="fields" role="group" aria-label=${strings.fieldsTitle}>
+      <h3>${strings.fieldsTitle}</h3>
+      <p class="message">${strings.fieldsHelp}</p>
       ${fields.length === 0
-        ? html`<p class="message">${strings.judgmentNone}</p>`
+        ? html`<p class="message">${strings.fieldsNone}</p>`
         : fields.map(
             (f) => html`<dc-checkbox
-              name=${f.name}
-              .checked=${f.on}
-              @change=${(e: Event) => this.toggleJudgment(f.name, (e.target as HTMLInputElement).checked)}
-              >${f.label}</dc-checkbox
-            >`,
+                name=${f.name}
+                .checked=${f.judgment}
+                @change=${(e: Event) => this.toggleJudgment(f.name, (e.target as HTMLInputElement).checked)}
+                >${f.label}</dc-checkbox
+              >
+              ${f.options
+                ? html`<dc-input
+                    aria-label=${strings.optionsOf(f.label)}
+                    .value=${f.options.join(', ')}
+                    @focusout=${commit(f.name)}
+                    @keydown=${(e: KeyboardEvent) => {
+                      if (e.key === 'Enter') commit(f.name)(e)
+                    }}
+                  ></dc-input>`
+                : html`<span></span>`}`,
           )}
     </div>`
   }
@@ -385,12 +377,11 @@ export class LlTemplates extends LitElement {
               ></textarea>
             </section>
             <section>
+              ${this.renderFields()}
               <h3>${strings.preview}</h3>
               <div class="preview">
                 <formdown-ui .content=${this.source}></formdown-ui>
               </div>
-              ${this.renderChoices()}
-              ${this.renderJudgment()}
             </section>
           `
         : nothing}
