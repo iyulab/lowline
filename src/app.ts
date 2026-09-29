@@ -87,10 +87,22 @@ export class LlApp extends LitElement {
     if (path !== null && this.vaultInfo && path.startsWith(this.vaultInfo.templatesDir + '/')) void this.refreshPlaces()
   }
 
+  /**
+   * Ctrl+S (⌘S) saves whatever is being edited — a template or a document — the same way from any
+   * field in it. The web view's own "save page" never runs.
+   */
+  private readonly onSaveShortcut = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's') return
+    e.preventDefault()
+    const editor = this.renderRoot.querySelector<HTMLElement & { save(): Promise<void> }>('ll-templates, ll-documents')
+    void editor?.save()
+  }
+
   connectedCallback() {
     super.connectedCallback()
     // Typing holds the caret solid; a pause lets it blink again.
     this.addEventListener('keydown', () => this.marks.forEach((m) => m.hold()))
+    this.addEventListener('keydown', this.onSaveShortcut)
     this.addEventListener('pointerdown', () => this.marks.forEach((m) => m.wake()))
     // A save is a confirmation: the mark shows "not yet" becoming "confirmed".
     this.addEventListener('ll-confirmed', () => this.marks.forEach((m) => m.confirm()))

@@ -381,7 +381,8 @@ const scenarios = {
     assert.match(bodyBefore, /# 버그 리포트/)
 
     await app.type(TITLE, '저장 후 화면이 멈춤')
-    await app.click('dc-button', '저장')
+    // Saved again with Ctrl+S, from inside the field being typed in — as a template is.
+    await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
     await app.status('저장했습니다')
     await app.noAlert()
     assert.deepEqual(await documentsIn(vault), created, 'saved in place, no new file')
@@ -522,6 +523,14 @@ const scenarios = {
     assert.match(note, /비슷한 기록: 접수-1/)
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in before it is accepted')
 
+    // The buttons keep one line however long the source is: the source gives way.
+    // A narrow line and a long source, as a long first field makes it.
+    const heights = await app.cdp.evaluate(`__e2e.all('.suggestion .source')[0].textContent = '비슷한 기록: ' + '결제 취소하고 돈 돌려받고 싶어요 '.repeat(8),
+      __e2e.all('.suggestion')[0].style.width = '360px',
+      ['수락', '거절'].map((t) => __e2e.one('dc-button', t).getBoundingClientRect().height)
+      .concat(__e2e.one('dc-button', '저장').getBoundingClientRect().height)`)
+    assert.ok(heights.every((h) => h === heights[2]), `buttons as tall as 저장: ${heights}`)
+    await app.cdp.evaluate(`__e2e.all('.suggestion')[0].style.width = '', true`)
     await app.click('dc-button', '수락')
     await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '장비'`, 'the accepted value in the form')
     await app.click('dc-button', '저장')

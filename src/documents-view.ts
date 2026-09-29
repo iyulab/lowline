@@ -105,7 +105,16 @@ export class LlDocuments extends LitElement {
       border: 1px dashed var(--dc-color-border, #d0d0d0);
       border-radius: var(--dc-radius-md, 6px);
     }
+    .suggestion > * {
+      flex-shrink: 0;
+    }
+    /* The source gives way — one line, cut short, whole in its tooltip — so the buttons never wrap. */
     .suggestion .source {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
       color: var(--dc-color-text-muted, #666);
       font-size: 12px;
     }
@@ -386,7 +395,8 @@ export class LlDocuments extends LitElement {
     }
   }
 
-  private async save() {
+  /** Saves the open document; the app's save shortcut calls this too. */
+  async save() {
     const draft = this.draft
     if (!draft) return
     this.error = ''
@@ -456,6 +466,12 @@ export class LlDocuments extends LitElement {
       )}`
   }
 
+  private renderSource(s: Suggestion) {
+    const text =
+      s.mode === 'key' ? strings.suggestionKey(s.source!) : strings.suggestionSource(s.source!.replace(/^.*\//, '').replace(/\.md$/, ''))
+    return html`<span class="source" title=${text}>${text}</span>`
+  }
+
   private renderSuggestions() {
     if (this.suggestions.size === 0) return nothing
     const label = (name: string) => this.template?.fields.find((f) => f.name === name)?.label ?? name
@@ -463,13 +479,7 @@ export class LlDocuments extends LitElement {
       ${[...this.suggestions].map(
         ([field, s]) => html`<div class="suggestion" role="note" data-field=${field}>
           <span>${strings.suggestionFor(label(field))}: <strong>${s.value}</strong></span>
-          ${s.source
-            ? html`<span class="source"
-                >${s.mode === 'key'
-                  ? strings.suggestionKey(s.source)
-                  : strings.suggestionSource(s.source.replace(/^.*\//, '').replace(/\.md$/, ''))}</span
-              >`
-            : nothing}
+          ${s.source ? this.renderSource(s) : html`<span class="source"></span>`}
           <dc-button size="sm" variant="secondary" @click=${() => this.accept(field, s.value!)}>${strings.accept}</dc-button>
           <dc-button size="sm" variant="ghost" @click=${() => this.reject(field)}>${strings.reject}</dc-button>
         </div>`,

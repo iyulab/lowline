@@ -176,7 +176,8 @@ export class LlTemplates extends LitElement {
     }
   }
 
-  private async save() {
+  /** Saves the template as it is on screen; the app's save shortcut calls this too. */
+  async save() {
     if (!this.selected) return
     this.error = ''
     this.message = '' // "saved" is said again only once this save has landed
@@ -237,12 +238,6 @@ export class LlTemplates extends LitElement {
                   this.source = (e.target as HTMLTextAreaElement).value
                   this.dirty = true
                   this.message = ''
-                }}
-                @keydown=${(e: KeyboardEvent) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                    e.preventDefault()
-                    void this.save()
-                  }
                 }}
               ></textarea>
             </section>
