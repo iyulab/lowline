@@ -156,6 +156,14 @@ impl HostClient {
         answer(status, response.body_mut().read_to_string()?)
     }
 
+    /// The host's failures of work no request waited on, since the last time they were taken.
+    pub fn take_failures(&self) -> Vec<HostFailure> {
+        self.post_json("/failures/take", "")
+            .ok()
+            .and_then(|body| serde_json::from_str(&body).ok())
+            .unwrap_or_default()
+    }
+
     fn bearer(&self) -> String {
         format!("Bearer {}", self.token)
     }

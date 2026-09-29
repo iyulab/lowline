@@ -15,8 +15,10 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]))
 }
 
 // Projection caches live where the shell says, outside any vault; without a place they last one run.
-builder.Services.AddSingleton(services =>
-    new VaultProjection(services.GetRequiredService<IConfiguration>()[VaultProjection.CacheVariable]));
+builder.Services.AddSingleton<HostFailures>();
+builder.Services.AddSingleton(services => new VaultProjection(
+    services.GetRequiredService<IConfiguration>()[VaultProjection.CacheVariable],
+    services.GetRequiredService<HostFailures>()));
 
 var app = builder.Build();
 
@@ -44,6 +46,9 @@ app.MapGet("/curves", (VaultProjection vault, CancellationToken ct) => vault.Cur
 
 app.MapPost("/suggest", async (SuggestRequest request, VaultProjection vault, CancellationToken ct) =>
     await vault.SuggestAsync(request, ct) is { } suggestion ? Results.Ok(suggestion) : Results.NotFound());
+
+// Failures of work no request waited on, since the last time the shell asked.
+app.MapPost("/failures/take", (HostFailures failures) => failures.Take());
 
 app.MapPost("/shutdown", (HttpContext context, IHostApplicationLifetime lifetime) =>
 {

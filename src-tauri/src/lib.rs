@@ -282,7 +282,14 @@ async fn host_ingest(
     };
     let client = state.client()?;
     let body = snapshot.to_string();
-    host_json(blocking(move || client.post_json(&path, &body)).await?)
+    host_json(
+        blocking(move || {
+            // What the last ingest's background work failed at is reported before the next one.
+            report_host_failures(client.take_failures());
+            client.post_json(&path, &body)
+        })
+        .await?,
+    )
 }
 
 /// The ingest request for the vault at `root`: the sidecar keeps one projection cache per vault.
@@ -390,6 +397,13 @@ fn report(report: report::Report) {
     }
 }
 
+/// Reports what the sidecar failed at away from any request.
+fn report_host_failures(failures: Vec<host::HostFailure>) {
+    for failure in failures {
+        report(report::Report::new(report::Layer::Host, &failure.kind, &failure.frames.join("\n")));
+    }
+}
+
 /// A failure the UI caught: its kind (an error's class name or an app-owned code) and stack. Only
 /// what the report keeps of them is written.
 #[tauri::command]
@@ -446,6 +460,9 @@ pub fn run() {
         .expect("error while building Lowline")
         .run(|app, event| {
             if let RunEvent::Exit = event {
+                if let Ok(client) = app.state::<HostState>().client() {
+                    report_host_failures(client.take_failures());
+                }
                 app.state::<HostState>().stop();
             }
         });

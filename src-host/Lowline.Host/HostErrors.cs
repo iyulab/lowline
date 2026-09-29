@@ -36,3 +36,35 @@ public static class HostErrors
         if (exception is not null) await context.Response.WriteAsJsonAsync(Of(exception));
     });
 }
+
+/// <summary>
+/// Failures away from any request — work the sidecar does on its own — kept until the shell takes
+/// them, since the sidecar never sends anything itself.
+/// </summary>
+public sealed class HostFailures
+{
+    /// <summary>Past this many, more of the same would say nothing new.</summary>
+    public const int Capacity = 20;
+
+    private readonly Lock _lock = new();
+    private readonly List<HostFailure> _kept = [];
+
+    public void Record(Exception exception)
+    {
+        lock (_lock)
+        {
+            if (_kept.Count < Capacity) _kept.Add(HostErrors.Of(exception));
+        }
+    }
+
+    /// <summary>What failed since the last time, which is then forgotten.</summary>
+    public IReadOnlyList<HostFailure> Take()
+    {
+        lock (_lock)
+        {
+            var taken = _kept.ToList();
+            _kept.Clear();
+            return taken;
+        }
+    }
+}

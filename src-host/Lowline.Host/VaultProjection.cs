@@ -63,7 +63,7 @@ public sealed record ProjectionRow(string Path, IReadOnlyDictionary<string, obje
 /// Where projection caches live, one file per vault. Without one they live in a temporary directory for as
 /// long as this projection.
 /// </param>
-public sealed class VaultProjection(string? cacheDirectory = null) : IAsyncDisposable
+public sealed class VaultProjection(string? cacheDirectory = null, HostFailures? failures = null) : IAsyncDisposable
 {
     /// <summary>The setting that names the cache directory.</summary>
     public const string CacheVariable = "LOWLINE_HOST_CACHE";
@@ -170,6 +170,11 @@ public sealed class VaultProjection(string? cacheDirectory = null) : IAsyncDispo
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // superseded by a later ingest
+        }
+        catch (Exception e)
+        {
+            // No request is waiting on this: the shell takes the failure the next time it asks.
+            failures?.Record(e);
         }
     }
 

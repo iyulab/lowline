@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Lowline.Host;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Lowline.Host.Tests;
 
@@ -60,6 +61,22 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         var health = await client.GetFromJsonAsync<Health>("/health", TestContext.Current.CancellationToken);
         Assert.True(health!.VaultIndexed);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/projection/none@1", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Hands_over_failures_away_from_requests_once_asked()
+    {
+        await using var factory = new Factory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        var ct = TestContext.Current.CancellationToken;
+        factory.Services.GetRequiredService<HostFailures>().Record(new TimeoutException());
+
+        var first = await client.PostAsync("/failures/take", null, ct);
+        var again = await client.PostAsync("/failures/take", null, ct);
+
+        Assert.Equal("[{\"kind\":\"System.TimeoutException\",\"frames\":[]}]", await first.Content.ReadAsStringAsync(ct));
+        Assert.Equal("[]", await again.Content.ReadAsStringAsync(ct));
     }
 
     [Fact]
