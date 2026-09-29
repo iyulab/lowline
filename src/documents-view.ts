@@ -68,7 +68,7 @@ export class LlDocuments extends LitElement {
     }
     nav button[aria-current='true'] {
       border-color: var(--dc-color-border, #d0d0d0);
-      background: var(--dc-color-bg-subtle, #f4f4f4);
+      background: var(--dc-color-surface, #f4f4f4);
     }
     nav button .note {
       display: block;

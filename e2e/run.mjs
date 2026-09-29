@@ -2,7 +2,8 @@
 //
 //   npm run build:e2e   builds the debug app with the e2e config (debugging port 9223)
 //   npm run test:e2e    copies the fixture vault to a temp folder and runs every scenario
-//                       (E2E_SCREENSHOTS=<dir> saves a picture of the window after each one)
+//                       (E2E_SCREENSHOTS=<dir> saves a picture of the window after each one;
+//                       E2E_COLOR_SCHEME=dark runs it in the dark scheme)
 //
 // The one seam: the folder picker is a native dialog, so the vault is opened through the same
 // `open_vault` command the picker's result goes to. Everything after that is clicks and typing.
@@ -102,6 +103,8 @@ class App {
   async ready() {
     await this.cdp.waitFor(`customElements.get('ll-app') && !!document.querySelector('ll-app')`, 'the app')
     await this.cdp.evaluate(HELPERS)
+    const scheme = process.env.E2E_COLOR_SCHEME
+    if (scheme) await this.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
   }
 
   async openVault(path) {

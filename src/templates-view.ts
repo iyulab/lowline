@@ -32,7 +32,7 @@ export class LlTemplates extends LitElement {
     textarea {
       flex: 1;
       min-height: 20rem;
-      font-family: var(--dc-font-mono, ui-monospace, monospace);
+      font-family: ui-monospace, monospace;
       font-size: 13px;
       padding: var(--dc-space-2, 8px);
       resize: none;

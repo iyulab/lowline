@@ -13,7 +13,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/check-tokens.ts",
     "build:e2e": "tauri build --debug --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "test:e2e": "node e2e/run.mjs",
     "tauri": "tauri",
