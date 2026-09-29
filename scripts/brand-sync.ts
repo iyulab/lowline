@@ -11,6 +11,10 @@ const SYNC: { from: string; to: 'site' | 'releases'; path: string; banner?: bool
   { from: 'src/brand/geometry.ts', to: 'site', path: 'src/brand/geometry.ts', banner: true },
   { from: 'src/brand/wordmark-glyphs.ts', to: 'site', path: 'src/brand/wordmark-glyphs.ts', banner: true },
   { from: 'src/brand/motion.ts', to: 'site', path: 'src/brand/motion.ts', banner: true },
+  { from: 'brand-out/og-ko.png', to: 'site', path: 'public/og-ko.png' },
+  { from: 'brand-out/og-en.png', to: 'site', path: 'public/og-en.png' },
+  { from: 'brand-out/mark-blink.svg', to: 'site', path: 'public/mark-blink.svg' },
+  { from: 'brand-out/social.png', to: 'releases', path: 'assets/social.png' },
 ]
 
 const { values } = parseArgs({ options: { site: { type: 'string' }, releases: { type: 'string' }, check: { type: 'boolean' } } })

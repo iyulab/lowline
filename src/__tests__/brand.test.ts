@@ -65,3 +65,24 @@ describe('intro', () => {
     expect(confirmInk(CONFIRM_STAGGER_MS, 1)).toBe(0)
   })
 })
+
+import { LIGHT, mix, symbolSvg, wordmarkSvg } from '../brand/svg.ts'
+
+describe('svg', () => {
+  it('draws the still wordmark with every glyph and the caret at the end', () => {
+    const s = wordmarkSvg({ colors: LIGHT, x: 0, y: 0, height: 110 })
+    expect(s.match(/<path /g)?.length).toBe(WORDMARK_GLYPHS.length)
+    expect(s).toContain(`x="${WORDMARK.caret.x}"`)
+  })
+  it('draws a moment of the intro with only the typed glyphs', () => {
+    const s = wordmarkSvg({ colors: LIGHT, x: 0, y: 0, height: 110, state: introState(2 * BLINK_MS + 3 * TYPE_MS) })
+    expect(s.match(/<path /g)?.length).toBe(3)
+  })
+  it('draws a blinking symbol that honours reduced motion', () => {
+    expect(symbolSvg({ colors: LIGHT, x: 0, y: 0, size: 64, blink: true })).toContain('prefers-reduced-motion')
+  })
+  it('mixes colors', () => {
+    expect(mix('#000000', '#ffffff', 0.5)).toBe('#808080')
+    expect(mix(LIGHT.pending, LIGHT.ink, 0)).toBe(LIGHT.pending)
+  })
+})

@@ -1,0 +1,4 @@
+# Videos are large and regenerated with npm run brand:motion.
+*.mp4
+*.webm
+*.gif
