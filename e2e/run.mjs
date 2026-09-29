@@ -315,6 +315,33 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'turns suggestions on for a field from the template page, and shows it on the document'(app, vault) {
+    const path = join(vault, TEMPLATE)
+    await app.templateOf(BUG)
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
+    await app.click('dc-checkbox', '심각도')
+    await app.cdp.waitFor(`/lowline:\\s*\\n\\s*suggest:/.test(__e2e.one('textarea')?.value)`, 'the choice written into the source')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.deepEqual(parseFormdown(await readFile(path, 'utf8')).frontMatter?.data?.lowline, { suggest: ['심각도'] })
+
+    await app.newDocument(BUG)
+    await app.cdp.waitFor(
+      `__e2e.all('p.judgment').some((el) => el.textContent.includes('제안 받는 칸: 심각도'))`,
+      'the judgment field named on the document',
+      { timeoutMs: 30_000 },
+    )
+
+    // Off again: the key goes, and the rest of the file is as it was.
+    await app.templateOf(BUG)
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('suggest:')`, 'the template source')
+    await app.click('dc-checkbox', '심각도')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal(parseFormdown(await readFile(path, 'utf8')).frontMatter?.data?.lowline, undefined)
+    await app.noAlert()
+  },
+
   async 'creates a template from the starter, labelled in Korean'(app, vault) {
     await app.newTemplate()
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')

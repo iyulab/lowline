@@ -434,6 +434,14 @@ export class LlDocuments extends LitElement {
     this.scheduleSuggest()
   }
 
+  /** Which fields of this template learn from confirmed documents — set on the template's page. */
+  private renderJudgment() {
+    const template = this.template
+    if (!template) return nothing
+    const label = (name: string) => template.fields.find((f) => f.name === name)?.label ?? name
+    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map(label))}</p>`
+  }
+
   private renderSuggestions() {
     if (this.suggestions.size === 0) return nothing
     const label = (name: string) => this.template?.fields.find((f) => f.name === name)?.label ?? name
@@ -502,6 +510,7 @@ export class LlDocuments extends LitElement {
                   : nothing}
               </div>
               ${draft.kind === 'existing' ? noticeFor(conflictNotice(draft.path, this.documents, '.md', strings.conflictedOriginal)) : nothing}
+              ${this.renderJudgment()}
               ${this.renderSuggestions()}
               ${keyed(
                 this.opened,

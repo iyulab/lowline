@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseFormdown } from '@formdown/core'
+import { parseFormdown, readFrontMatter } from '@formdown/core'
 import {
   TemplateError,
   documentFileName,
@@ -7,6 +7,7 @@ import {
   documentFrontMatter,
   fieldValues,
   newDocument,
+  setSuggest,
   templateBody,
   templateInfo,
   updateDocument,
@@ -147,5 +148,24 @@ describe('starterTemplate', () => {
   it('names new documents after its title field', () => {
     const source = starterTemplate('t1')
     expect(documentTitle(source, { 상태: '열림', 제목: '첫 기록' })).toBe('첫 기록')
+  })
+})
+
+describe('setSuggest', () => {
+  const template = ['---', 'id: intake', 'version: 1', '---', '# 접수', '', '요청: ___@요청', '', '@부서: [select options="영업,개발"]', '', '@담당: [select options="장비,총무"]', ''].join('\n')
+
+  it('turns suggestions on for a field, in the template order', () => {
+    const one = setSuggest(template, '담당', true)
+    expect(readFrontMatter(one)?.frontMatter.data.lowline).toEqual({ suggest: ['담당'] })
+    const two = setSuggest(one, '부서', true)
+    expect(readFrontMatter(two)?.frontMatter.data.lowline).toEqual({ suggest: ['부서', '담당'] })
+    expect(templateBody(two)).toBe(templateBody(template))
+  })
+
+  it('removes the key once no field is left, and keeps other keys under lowline', () => {
+    const on = setSuggest(template, '담당', true)
+    expect(readFrontMatter(setSuggest(on, '담당', false))?.frontMatter.data).toEqual({ id: 'intake', version: 1 })
+    const withOther = on.replace('lowline:', 'lowline:\n  note: keep')
+    expect(readFrontMatter(setSuggest(withOther, '담당', false))?.frontMatter.data.lowline).toEqual({ note: 'keep' })
   })
 })

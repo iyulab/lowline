@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import { templateInfo } from './documents.js'
+import { parseFormdown, readFrontMatter } from '@formdown/core'
+import { setSuggest, templateInfo } from './documents.js'
 import { conflictNotice, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
 import { markUnsaved } from './unsaved.js'
@@ -50,6 +51,12 @@ export class LlTemplates extends LitElement {
     }
     .error {
       color: var(--dc-color-danger, #b00020);
+    }
+    .judgment {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start; /* a checkbox is as wide as its label, so a click beside it does nothing */
+      gap: var(--dc-space-1, 4px);
     }
     h3 {
       margin: 0;
@@ -146,6 +153,29 @@ export class LlTemplates extends LitElement {
     }
   }
 
+  /** The source's fields, and whether each is a judgment field; nothing while the source does not parse. */
+  private judgmentFields(): { name: string; label: string; on: boolean }[] {
+    try {
+      const lowline = readFrontMatter(this.source)?.frontMatter.data.lowline as { suggest?: unknown } | undefined
+      const on = new Set(Array.isArray(lowline?.suggest) ? lowline.suggest : [])
+      return parseFormdown(this.source).forms.map((f) => ({ name: f.name, label: f.label ?? f.name, on: on.has(f.name) }))
+    } catch {
+      return []
+    }
+  }
+
+  /** Turns suggestions on or off for a field: an edit of the source like any other, kept by saving. */
+  private toggleJudgment(field: string, on: boolean) {
+    try {
+      this.source = setSuggest(this.source, field, on)
+      this.dirty = true
+      this.message = ''
+      this.error = ''
+    } catch (e) {
+      this.error = describeError(e)
+    }
+  }
+
   private async save() {
     if (!this.selected) return
     this.error = ''
@@ -163,6 +193,24 @@ export class LlTemplates extends LitElement {
     } catch (e) {
       this.error = describeError(e)
     }
+  }
+
+  private renderJudgment() {
+    const fields = this.judgmentFields()
+    return html`<div class="judgment" role="group" aria-label=${strings.judgmentTitle}>
+      <h3>${strings.judgmentTitle}</h3>
+      <p class="message">${strings.judgmentHelp}</p>
+      ${fields.length === 0
+        ? html`<p class="message">${strings.judgmentNone}</p>`
+        : fields.map(
+            (f) => html`<dc-checkbox
+              name=${f.name}
+              .checked=${f.on}
+              @change=${(e: Event) => this.toggleJudgment(f.name, (e.target as HTMLInputElement).checked)}
+              >${f.label}</dc-checkbox
+            >`,
+          )}
+    </div>`
   }
 
   render() {
@@ -203,6 +251,7 @@ export class LlTemplates extends LitElement {
               <div class="preview">
                 <formdown-ui .content=${this.source} .showSubmitButton=${false}></formdown-ui>
               </div>
+              ${this.renderJudgment()}
             </section>
           `
         : nothing}

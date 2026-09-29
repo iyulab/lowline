@@ -119,3 +119,27 @@ export function documentFileName(date: Date, title: string | undefined, attempt 
   const base = cleaned ? `${day}-${cleaned}` : day
   return attempt > 1 ? `${base}-${attempt}.md` : `${base}.md`
 }
+
+/**
+ * Turns suggestions on or off for one field of a template, under its front matter's `lowline.suggest`
+ * (D-46) — the only place the choice is kept. The list follows the template's field order; other keys
+ * under `lowline`, and everything else in the file, are left as they are.
+ */
+export function setSuggest(templateSource: string, field: string, on: boolean): string {
+  const data = readFrontMatter(templateSource)?.frontMatter.data ?? {}
+  const lowline = typeof data.lowline === 'object' && data.lowline !== null && !Array.isArray(data.lowline) ? (data.lowline as Record<string, unknown>) : {}
+  const named = new Set(Array.isArray(lowline.suggest) ? lowline.suggest.filter((n): n is string => typeof n === 'string') : [])
+  if (on) named.add(field)
+  else named.delete(field)
+  const order = parseFormdown(templateSource).forms.map((f) => f.name)
+  const suggest = [...named].sort((a, b) => rank(order, a) - rank(order, b))
+  const { suggest: _, ...rest } = lowline
+  const next = suggest.length > 0 ? { ...rest, suggest } : rest
+  return updateFrontMatter(templateSource, { lowline: Object.keys(next).length > 0 ? next : undefined })
+}
+
+/** A name's place in the template; names it no longer has go last, in the order they were. */
+function rank(order: readonly string[], name: string): number {
+  const i = order.indexOf(name)
+  return i === -1 ? order.length : i
+}
