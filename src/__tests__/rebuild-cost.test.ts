@@ -1,5 +1,5 @@
-// What reading a vault costs on this side at 1,000 and 10,000 documents: every outside edit
-// parses every document again. Runs only with LOWLINE_PERF=1.
+// What a full read of a vault costs on this side at 1,000 and 10,000 documents — opening it, or
+// after the watch lost changes; an outside edit parses only what changed. Runs only with LOWLINE_PERF=1.
 import { describe, expect, it } from 'vitest'
 import { documentSnapshot } from '../projection.js'
 
