@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { formdownTheme } from './formdown-theme.js'
 import { parseFormdown, readFrontMatter } from '@formdown/core'
 import { setSuggest, templateInfo } from './documents.js'
 import { conflictNotice, noticeFor } from './conflicts.js'
@@ -12,7 +13,9 @@ import { onVaultChanged, removedBy, touches, vault, type VaultChanged, type Vaul
 /** A template: its Formdown source next to a live preview, saved in place. */
 @customElement('ll-templates')
 export class LlTemplates extends LitElement {
-  static styles = css`
+  static styles = [
+    formdownTheme,
+    css`
     :host {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -63,7 +66,8 @@ export class LlTemplates extends LitElement {
       font-size: 13px;
       font-weight: 600;
     }
-  `
+  `,
+  ]
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
   /** The template's file. The app asks before leaving unsaved edits, so a new one is simply shown. */

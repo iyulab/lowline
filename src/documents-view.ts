@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { formdownTheme } from './formdown-theme.js'
 import { guard } from 'lit/directives/guard.js'
 import { keyed } from 'lit/directives/keyed.js'
 import {
@@ -39,7 +40,9 @@ type Draft =
  */
 @customElement('ll-documents')
 export class LlDocuments extends LitElement {
-  static styles = css`
+  static styles = [
+    formdownTheme,
+    css`
     :host {
       display: grid;
       grid-template-columns: 16rem 1fr;
@@ -121,7 +124,13 @@ export class LlDocuments extends LitElement {
     .error {
       color: var(--dc-color-danger, #b00020);
     }
-  `
+    p.judgment,
+    p.abstained {
+      margin: 0;
+      font-size: 0.875em;
+    }
+  `,
+  ]
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
   /** Whose documents: a template, or `null` for those naming none the vault has. */
