@@ -60,9 +60,9 @@ export const INTRO_MS = TYPED_MS + CONFIRM_MS + (WORDMARK.dashes.length - 1) * C
 /** The caret sits where the next glyph goes; after the last, where the wordmark keeps it. */
 const caretAt = (typed: number) => (typed < WORDMARK_GLYPHS.length ? WORDMARK_GLYPHS[typed].x : WORDMARK.caret.x)
 
-/** The intro at `t` ms. With reduced motion there is no process to show, only the end. */
-export function introState(t: number, o: { reduced?: boolean } = {}): IntroState {
-  const time = o.reduced ? INTRO_MS : Math.min(Math.max(t, 0), INTRO_MS)
+/** The intro at `t` ms. With reduced motion there is no intro to show: callers skip it. */
+export function introState(t: number): IntroState {
+  const time = Math.min(Math.max(t, 0), INTRO_MS)
   const typed = time < LEAD_MS ? 0 : Math.min(WORDMARK_GLYPHS.length, Math.floor((time - LEAD_MS) / TYPE_MS))
   return {
     glyphs: typed,

@@ -54,9 +54,6 @@ describe('intro', () => {
     expect(introState(typed + CONFIRM_MS * 0.4).dashInk[0]).toBe(1)
     expect(introState(typed + CONFIRM_MS * 0.4).dashInk[2]).toBeLessThan(1)
   })
-  it('skips to the end when motion is reduced', () => {
-    expect(introState(0, { reduced: true })).toEqual(introState(INTRO_MS))
-  })
   it('confirm ink follows the keyframes', () => {
     expect(confirmInk(0, 0)).toBe(0)
     expect(confirmInk(CONFIRM_MS * 0.25, 0)).toBe(1)

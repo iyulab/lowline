@@ -882,6 +882,7 @@ async function screenshot(cdp, dir, name) {
  * grace period the leftovers, which belong to the e2e profile alone, are ended too.
  */
 async function webviewGone(graceMs = 10_000) {
+  if (process.platform !== 'win32') return // WebView2 is Windows' webview
   const { execFileSync } = await import('node:child_process')
   // The process table can still list a process that has exited while something holds a handle to
   // it; only ones Get-Process can open are running.

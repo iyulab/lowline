@@ -20,6 +20,11 @@ const SYNC: { from: string; to: 'site' | 'releases'; path: string; banner?: bool
 
 const { values } = parseArgs({ options: { site: { type: 'string' }, releases: { type: 'string' }, check: { type: 'boolean' } } })
 const roots = { site: values.site, releases: values.releases }
+if (!roots.site && !roots.releases) {
+  // With nowhere to copy to, --check would compare nothing and pass.
+  console.error('name where the copies go: --site <dir> and/or --releases <dir>')
+  process.exit(2)
+}
 /** Line endings are the checkout's business, not the content's. */
 const normalize = (b: Buffer) => b.toString('utf8').replace(/\r\n/g, '\n')
 
