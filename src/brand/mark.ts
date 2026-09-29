@@ -1,6 +1,7 @@
 import { LitElement, css, svg, html, nothing, type PropertyValues } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
-import { SYMBOL, WORD, WORDMARK, type Rect } from './geometry.js'
+import { SYMBOL, WORDMARK, type Rect } from './geometry.ts'
+import { WORDMARK_GLYPHS } from './wordmark-glyphs.ts'
 
 export type MarkVariant = 'symbol' | 'wordmark'
 
@@ -30,8 +31,6 @@ export class LlMark extends LitElement {
       overflow: visible;
     }
     .word {
-      font-family: 'Instrument Sans', var(--dc-font-family, sans-serif);
-      font-weight: 500;
       fill: var(--_ink);
     }
     .line {
@@ -187,7 +186,7 @@ export class LlMark extends LitElement {
       class=${this.confirming ? 'confirming' : ''}
     >
       ${this.variant === 'wordmark'
-        ? svg`<text class="word" x=${WORD.x} y=${WORD.baseline} font-size=${WORD.size} textLength=${WORD.length} lengthAdjust="spacing">lowline</text>`
+        ? WORDMARK_GLYPHS.map((g) => svg`<path class="word" transform="translate(${g.x} 0)" d=${g.d}></path>`)
         : nothing}
       ${rect(g.line, 'line')} ${g.dashes.map((d, i) => rect(d, 'dash', i))} ${rect(g.caret, 'caret')}
     </svg>`
