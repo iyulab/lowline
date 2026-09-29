@@ -722,14 +722,25 @@ async function screenshot(cdp, dir, name) {
   await writeFile(join(dir, `${name.replace(/[^\p{L}\p{N}]+/gu, '-')}.png`), Buffer.from(data, 'base64'))
 }
 
-/** Waits until no WebView2 process runs on the e2e app's profile. */
-async function webviewGone(timeoutMs = 30_000) {
+/**
+ * Waits until no WebView2 process runs on the e2e app's profile. The app was killed, so its
+ * browser only notices after a while — sometimes longer than a scenario should wait. After a
+ * grace period the leftovers, which belong to the e2e profile alone, are ended too.
+ */
+async function webviewGone(graceMs = 10_000) {
   const { execFileSync } = await import('node:child_process')
-  const query = `@(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Where-Object { $_.CommandLine -like '*${IDENTIFIER}*' }).Count`
-  const deadline = Date.now() + timeoutMs
+  // The process table can still list a process that has exited while something holds a handle to
+  // it; only ones Get-Process can open are running.
+  const on = `Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Where-Object { $_.CommandLine -like '*${IDENTIFIER}*' -and (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue) }`
+  const left = () => Number(execFileSync('powershell', ['-NoProfile', '-Command', `@(${on}).Count`], { encoding: 'utf8' }).trim())
+  const deadline = Date.now() + graceMs
   while (Date.now() < deadline) {
-    const out = execFileSync('powershell', ['-NoProfile', '-Command', query], { encoding: 'utf8' })
-    if (Number(out.trim()) === 0) return
+    if (left() === 0) return
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  execFileSync('powershell', ['-NoProfile', '-Command', `${on} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`])
+  for (let i = 0; i < 20; i++) {
+    if (left() === 0) return
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
   throw new Error(`WebView2 on the ${IDENTIFIER} profile did not exit`)
