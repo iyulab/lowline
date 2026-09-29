@@ -424,6 +424,42 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'renames a template, and its documents stay with it'(app, vault) {
+    const enter = () => app.cdp.press('Enter', { code: 'Enter', keyCode: 13 })
+    const renamed = { ...BUG, name: '결함 보고', path: '서식/결함 보고.fd.md' }
+    const before = await readFile(join(vault, TEMPLATE), 'utf8')
+    await app.documentsOf(BUG)
+    const documents = await app.documentLabels()
+
+    await app.templateOf(BUG)
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
+    await app.click('dc-button', '이름 바꾸기')
+    // A name another template has is refused.
+    await app.type('input[aria-label="새 이름"]', '접수')
+    await enter()
+    await app.cdp.waitFor(`__e2e.all('[role=alert]').some((el) => el.textContent.includes('같은 이름의 서식이 이미 있습니다'))`, 'the name refused')
+    await app.type('input[aria-label="새 이름"]', renamed.name)
+    await enter()
+    await app.status('이름을 바꿨습니다')
+
+    const files = await readdir(join(vault, '서식'))
+    assert.ok(files.includes('결함 보고.fd.md') && !files.includes('버그 리포트.fd.md'), files.join(', '))
+    assert.equal(await readFile(join(vault, renamed.path), 'utf8'), before, 'the same file under its new name')
+    await app.cdp.waitFor(`!!__e2e.one('button.item', '결함 보고') && !__e2e.one('button.item', '버그 리포트')`, 'the sidebar showing its new name')
+    await app.documentsOf(renamed)
+    await app.cdp.waitFor(`__e2e.all('ll-documents').length === 1`, 'its documents')
+    assert.deepEqual(await app.documentLabels(), documents, 'its documents are still its own')
+
+    // As it was, for the scenarios after this one.
+    await app.templateOf(renamed)
+    await app.click('dc-button', '이름 바꾸기')
+    await app.type('input[aria-label="새 이름"]', BUG.name)
+    await enter()
+    await app.status('이름을 바꿨습니다')
+    assert.equal(await readFile(join(vault, TEMPLATE), 'utf8'), before)
+    await app.noAlert()
+  },
+
   async 'creates a template from the starter, labelled in Korean'(app, vault) {
     await app.newTemplate()
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@상태:')`, 'the starter template')

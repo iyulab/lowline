@@ -6,7 +6,8 @@ import { keyed } from 'lit/directives/keyed.js'
 import type { FieldStates } from '@formdown/ui'
 import {
   documentTitle,
-  documentFileNameFor,
+  fileName,
+  fileNameFor,
   documentFrontMatter,
   fieldValues,
   newDocument,
@@ -29,6 +30,7 @@ import { createDocumentFile } from './document-files.js'
 import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
+import './rename-control.js'
 
 /** How long typing pauses before suggestions are asked for again. */
 const SUGGEST_DELAY_MS = 300
@@ -99,9 +101,6 @@ export class LlDocuments extends LitElement {
     .message {
       color: var(--dc-color-text-muted, #666);
     }
-    dc-input.name {
-      width: 16rem;
-    }
     .error {
       color: var(--dc-color-danger, #b00020);
     }
@@ -164,8 +163,6 @@ export class LlDocuments extends LitElement {
   @state() private importing = false
   /** The open document changed outside while it had unsaved edits: the person chooses which to keep. */
   @state() private changedOutside = false
-  /** The open document's name is being changed. */
-  @state() private renaming = false
   @state() private message = ''
   @state() private error = ''
 
@@ -247,7 +244,6 @@ export class LlDocuments extends LitElement {
   private reset() {
     this.error = ''
     this.importing = false
-    this.renaming = false
     this.changedOutside = false
     this.message = ''
     this.dirty = false
@@ -442,17 +438,14 @@ export class LlDocuments extends LitElement {
    */
   private async rename(name: string) {
     if (this.draft?.kind !== 'existing') return
-    const file = documentFileNameFor(name)
+    const file = fileNameFor(name, '.md')
     if (!file) {
       this.error = strings.nameInvalid
       return
     }
     const from = this.draft.path
     const to = `${from.slice(0, from.lastIndexOf('/') + 1)}${file}`
-    if (to === from) {
-      this.renaming = false
-      return
-    }
+    if (to === from) return
     this.error = ''
     this.message = ''
     if (this.dirty) {
@@ -472,7 +465,6 @@ export class LlDocuments extends LitElement {
         throw e
       }
       this.draft = { ...draft, source, path: to }
-      this.renaming = false
       await this.refresh()
       this.message = strings.renamed
       // The sidecar knows documents by their paths too: it is handed the vault as it is now.
@@ -480,25 +472,6 @@ export class LlDocuments extends LitElement {
     } catch (e) {
       this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.nameTaken : describeError(e)
     }
-  }
-
-  private renderName(draft: Extract<Draft, { kind: 'existing' }>) {
-    const name = draft.path.replace(/^.*\//, '').replace(/\.md$/, '')
-    if (!this.renaming) {
-      return html`<dc-button size="sm" variant="ghost" @click=${() => ((this.renaming = true), (this.error = ''))}>${strings.rename}</dc-button>`
-    }
-    const input = () => this.renderRoot.querySelector<HTMLElement & { value: string }>('dc-input.name')!
-    return html`<dc-input
-        class="name"
-        aria-label=${strings.newName}
-        .value=${name}
-        @keydown=${(e: KeyboardEvent) => {
-          if (e.key === 'Enter') void this.rename(input().value)
-          else if (e.key === 'Escape') ((this.renaming = false), (this.error = ''))
-        }}
-      ></dc-input>
-      <dc-button size="sm" variant="secondary" @click=${() => void this.rename(input().value)}>${strings.renameConfirm}</dc-button>
-      <dc-button size="sm" variant="ghost" @click=${() => ((this.renaming = false), (this.error = ''))}>${strings.cancel}</dc-button>`
   }
 
   /** Creates the document under a free name; never replaces an existing file. */
@@ -597,7 +570,13 @@ export class LlDocuments extends LitElement {
           ? html`
               <div class="bar">
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
-                ${draft.kind === 'existing' ? this.renderName(draft) : nothing}
+                ${draft.kind === 'existing'
+                  ? html`<ll-rename
+                      .name=${fileName(draft.path, '.md')}
+                      @ll-rename=${(e: CustomEvent<{ name: string }>) => void this.rename(e.detail.name)}
+                      @ll-rename-cancel=${() => (this.error = '')}
+                    ></ll-rename>`
+                  : nothing}
                 ${draft.templateRef && !this.scope
                   ? html`<span class="message">${strings.documentFrom(this.templateNames.get(draft.templateRef) ?? draft.templateRef)}</span>`
                   : nothing}

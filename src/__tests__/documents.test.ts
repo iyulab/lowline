@@ -3,7 +3,8 @@ import { parseFormdown, readFrontMatter } from '@formdown/core'
 import {
   TemplateError,
   documentFileName,
-  documentFileNameFor,
+  fileName,
+  fileNameFor,
   documentTitle,
   documentFrontMatter,
   fieldValues,
@@ -192,11 +193,14 @@ describe('setSuggest', () => {
     expect(readFrontMatter(setSuggest(withOther, '담당', false))?.frontMatter.data.lowline).toEqual({ note: 'keep' })
   })
 
-  it('names a document file after what a person typed, or refuses a name no file can have', () => {
-    expect(documentFileNameFor('  배터리 문의  ')).toBe('배터리 문의.md')
-    expect(documentFileNameFor('끝에 점...')).toBe('끝에 점.md')
-    expect(documentFileNameFor('')).toBeNull()
-    expect(documentFileNameFor(' . ')).toBeNull()
-    for (const bad of ['a/b', 'a\\b', 'a:b', 'a?b', 'a*b', 'a"b', 'a<b', 'a|b', 'a\tb']) expect(documentFileNameFor(bad)).toBeNull()
+  it('names a file after what a person typed, or refuses a name no file can have', () => {
+    expect(fileNameFor('  배터리 문의  ', '.md')).toBe('배터리 문의.md')
+    expect(fileNameFor('끝에 점...', '.md')).toBe('끝에 점.md')
+    expect(fileNameFor('', '.md')).toBeNull()
+    expect(fileNameFor(' . ', '.md')).toBeNull()
+    for (const bad of ['a/b', 'a\\b', 'a:b', 'a?b', 'a*b', 'a"b', 'a<b', 'a|b', 'a\tb']) expect(fileNameFor(bad, '.md')).toBeNull()
+    expect(fileNameFor('고객 문의', '.fd.md')).toBe('고객 문의.fd.md')
+    expect(fileName('서식/고객 문의.fd.md', '.fd.md')).toBe('고객 문의')
+    expect(fileName('문서/접수-1.md', '.md')).toBe('접수-1')
   })
 })

@@ -52,6 +52,7 @@ export const strings = {
   newName: '새 이름',
   renamed: '이름을 바꿨습니다',
   nameTaken: '같은 이름의 문서가 이미 있습니다.',
+  templateNameTaken: '같은 이름의 서식이 이미 있습니다.',
   nameInvalid: '이름이 비었거나 파일 이름에 쓸 수 없는 글자(\\ / :* ? " < > |)가 있습니다.',
   import: '가져오기',
   importTitle: '기존 기록 가져오기',

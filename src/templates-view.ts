@@ -2,13 +2,17 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { setSuggest, templateInfo } from './documents.js'
+import { fileName, fileNameFor, setSuggest, templateInfo } from './documents.js'
+import './rename-control.js'
 import { conflictNotice, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
 import { markUnsaved } from './unsaved.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+
+/** What a template's file name ends with. */
+const TEMPLATE_SUFFIX = '.fd.md'
 
 /** A template: its Formdown source next to a live preview, saved in place. */
 @customElement('ll-templates')
@@ -258,6 +262,37 @@ export class LlTemplates extends LitElement {
     }
   }
 
+  /**
+   * Gives the template the name typed — its file's name, which is what the sidebar shows (R-1).
+   * Documents name their template by its id, not its file, so they stay with it. Unsaved edits are
+   * saved first; a name another template has is refused.
+   */
+  private async rename(name: string) {
+    const from = this.selected
+    if (!from) return
+    const file = fileNameFor(name, TEMPLATE_SUFFIX)
+    if (!file) {
+      this.error = strings.nameInvalid
+      return
+    }
+    const to = `${from.slice(0, from.lastIndexOf('/') + 1)}${file}`
+    if (to === from) return
+    this.error = ''
+    this.message = ''
+    if (this.dirty) {
+      await this.save()
+      if (this.dirty) return // not saved: the error says why
+    }
+    try {
+      await vault.rename(from, to)
+      this.selected = to // the app lists it under its new name and hands it back: nothing to read again
+      await this.refresh()
+      this.message = strings.renamed
+    } catch (e) {
+      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.templateNameTaken : describeError(e)
+    }
+  }
+
   private renderChoices() {
     const fields = this.choiceFields()
     if (fields.length === 0) return nothing
@@ -329,6 +364,11 @@ export class LlTemplates extends LitElement {
               <div class="bar">
                 <h3>${strings.templateSource}</h3>
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
+                <ll-rename
+                  .name=${fileName(this.selected, TEMPLATE_SUFFIX)}
+                  @ll-rename=${(e: CustomEvent<{ name: string }>) => void this.rename(e.detail.name)}
+                  @ll-rename-cancel=${() => (this.error = '')}
+                ></ll-rename>
                 ${this.error
                   ? html`<span class="error" role="alert">${this.error}</span>`
                   : html`<span class="message" role="status">${this.message}</span>`}
@@ -336,7 +376,7 @@ export class LlTemplates extends LitElement {
                   ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
                   : nothing}
               </div>
-              ${noticeFor(conflictNotice(this.selected, this.entries, '.fd.md', strings.conflictedTemplate))}
+              ${noticeFor(conflictNotice(this.selected, this.entries, TEMPLATE_SUFFIX, strings.conflictedTemplate))}
               <textarea
                 spellcheck="false"
                 aria-label=${strings.templateSource}

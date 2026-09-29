@@ -136,14 +136,21 @@ export function documentFileName(date: Date, title: string | undefined, attempt 
   return attempt > 1 ? `${base}-${attempt}.md` : `${base}.md`
 }
 
+/** The name a file is shown by (R-1): its file name, without `suffix`. */
+export function fileName(path: string, suffix: string): string {
+  const base = path.slice(path.lastIndexOf('/') + 1)
+  return base.endsWith(suffix) ? base.slice(0, -suffix.length) : base
+}
+
 /**
- * The file name a document gets for a name a person typed — what the lists show it by (R-1) — or
- * `null` when it cannot be one: empty, or holding a character a file name cannot.
+ * The file name for a name a person typed — what the lists show a document or template by (R-1) —
+ * with `suffix` after it, or `null` when it cannot be one: empty, or holding a character a file name
+ * cannot.
  */
-export function documentFileNameFor(name: string): string | null {
+export function fileNameFor(name: string, suffix: string): string | null {
   const trimmed = name.trim().replace(/[. ]+$/, '')
   if (!trimmed || /[\\/:*?"<>|\u0000-\u001f]/.test(trimmed)) return null
-  return `${trimmed}.md`
+  return `${trimmed}${suffix}`
 }
 
 /**
