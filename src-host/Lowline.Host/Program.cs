@@ -27,6 +27,8 @@ if (string.IsNullOrEmpty(token))
     return 2;
 }
 
+// A failed request says what failed, never with what: see HostErrors.
+app.UseExceptionHandler(HostErrors.Answer);
 app.Use(HostAuth.RequireToken(token));
 
 app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: vault.MemoryReady));

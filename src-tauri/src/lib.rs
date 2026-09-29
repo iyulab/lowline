@@ -310,12 +310,17 @@ async fn host_curves(state: State<'_, HostState>) -> Result<serde_json::Value, S
 
 /// Runs a request to the sidecar off the async runtime.
 async fn blocking(
-    request: impl FnOnce() -> Result<String, ureq::Error> + Send + 'static,
+    request: impl FnOnce() -> Result<String, host::CallError> + Send + 'static,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(request)
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+        .map_err(|e| {
+            if let host::CallError::Failed(failure) = &e {
+                report(report::Report::new(report::Layer::Host, &failure.kind, &failure.frames.join("\n")));
+            }
+            e.to_string()
+        })
 }
 
 /// A suggestion for one judgment field of a document being filled in.

@@ -198,7 +198,7 @@ fn plain_kind(raw: &str) -> String {
 fn function_name(raw: &str) -> Option<&str> {
     let plain = !raw.is_empty()
         && raw.len() <= 200
-        && raw.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$' | '<' | '>'));
+        && raw.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$' | '<' | '>' | '+' | '`'));
     plain.then_some(raw)
 }
 
@@ -243,7 +243,8 @@ fn frame(layer: Layer, line: &str) -> Option<String> {
     };
     match layer {
         Layer::Host => {
-            let function = function.or_else(|| line.split_once('(').map(|(f, _)| f))?;
+            // `Type.Method` as the host lists it, or `Type.Method(args) in file:line N` as .NET prints it.
+            let function = function.unwrap_or(line);
             let function = function.split('(').next().unwrap_or(function);
             function_name(function).map(str::to_string)
         }
@@ -411,6 +412,21 @@ mod tests {
         for raw in ["intake@1", "IOException: 문서/a.md", "", "a b"] {
             assert_eq!(Report::new(Layer::Ui, raw, "").kind, "Unrecognized", "{raw:?}");
         }
+    }
+
+    #[test]
+    fn keeps_the_method_names_a_host_failure_lists() {
+        let report = Report::new(
+            Layer::Host,
+            "System.ArgumentException",
+            "Lowline.Host.VaultProjection.IngestAsync
+Lowline.Host.VaultProjection+<IngestAsync>d__12.MoveNext
+문서/회의록.md",
+        );
+        assert_eq!(
+            report.frames,
+            ["Lowline.Host.VaultProjection.IngestAsync", "Lowline.Host.VaultProjection+<IngestAsync>d__12.MoveNext"]
+        );
     }
 
     #[test]

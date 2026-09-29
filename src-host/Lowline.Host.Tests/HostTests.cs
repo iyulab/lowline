@@ -63,6 +63,28 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
     }
 
     [Fact]
+    public async Task A_failed_request_answers_with_what_failed_but_not_with_what()
+    {
+        await using var factory = new Factory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        var ct = TestContext.Current.CancellationToken;
+        // A template with no reference cannot be a form type.
+        var ingest = await client.PostAsync("/vault/ingest", new StringContent("""
+            {"templates": [{"ref": "", "fields": [{"name": "요청", "type": "text"}]}],
+             "documents": [{"path": "문서/회의록.md", "template": "", "values": {"요청": "노트북 배터리"}}]}
+            """, System.Text.Encoding.UTF8, "application/json"), ct);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, ingest.StatusCode);
+        var body = await ingest.Content.ReadAsStringAsync(ct);
+        var failure = System.Text.Json.JsonSerializer.Deserialize<HostFailure>(body, System.Text.Json.JsonSerializerOptions.Web)!;
+        Assert.False(string.IsNullOrEmpty(failure.Kind));
+        Assert.NotEmpty(failure.Frames);
+        Assert.DoesNotContain("회의록", body);
+        Assert.DoesNotContain("노트북", body);
+    }
+
+    [Fact]
     public async Task Reads_a_document_marked_conflicted_over_http()
     {
         await using var factory = new Factory();

@@ -763,15 +763,20 @@ const scenarios = {
     const before = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).length : 0
     await app.cdp.evaluate(`setTimeout(() => { throw new RangeError('문서/비밀 회의록.md — 담당: 장비') }), true`)
     await app.cdp.evaluate(`Promise.reject({ kind: 'outside-vault', message: 'C:\\\\Users\\\\홍길동' }), true`)
+    // A request the sidecar fails: a template with no reference cannot be a form type.
+    await app.cdp.evaluate(`window.__TAURI_INTERNALS__.invoke('host_ingest', { snapshot: { templates: [{ ref: '', fields: [] }],
+      documents: [{ path: '문서/비밀 회의록.md', template: '', values: { 담당: '장비' } }] } }).catch(() => {}), true`)
     const deadline = Date.now() + 10_000
     let lines = []
     while (Date.now() < deadline) {
       lines = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).slice(before) : []
-      if (lines.length >= 2) break
+      if (lines.length >= 3) break
       await new Promise((resolve) => setTimeout(resolve, 200))
     }
     const written = lines.map((line) => JSON.parse(line))
-    assert.deepEqual(written.map((r) => [r.layer, r.kind]), [['ui', 'RangeError'], ['ui', 'outside-vault']])
+    assert.deepEqual(written.slice(0, 2).map((r) => [r.layer, r.kind]), [['ui', 'RangeError'], ['ui', 'outside-vault']])
+    const host = written.find((r) => r.layer === 'host')
+    assert.ok(host && host.kind !== 'Unrecognized' && host.frames.length > 0, `the sidecar's failure: ${JSON.stringify(host)}`)
     assert.ok(!lines.join('\n').match(/비밀|회의록|장비|홍길동|Users/), `nothing of the page: ${lines.join(' ')}`)
     await app.noAlert()
   },

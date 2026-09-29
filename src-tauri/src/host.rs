@@ -33,6 +33,51 @@ pub struct Host {
 pub struct HostClient {
     base: String,
     token: String,
+    /// Reads every answer, failures included: a failed request's body says what failed.
+    agent: ureq::Agent,
+}
+
+/// A request the host failed: what the host said about it, when it said something.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct HostFailure {
+    pub kind: String,
+    pub frames: Vec<String>,
+}
+
+/// Why a request to the host did not come back with an answer.
+#[derive(Debug)]
+pub enum CallError {
+    /// The host failed the request and said what failed.
+    Failed(HostFailure),
+    /// The host answered with this status and nothing more to go on.
+    Status(u16),
+    /// The request did not reach the host, or its answer could not be read.
+    Transport(ureq::Error),
+}
+
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CallError::Failed(failure) => write!(f, "the sidecar failed: {}", failure.kind),
+            CallError::Status(status) => write!(f, "the sidecar answered {status}"),
+            CallError::Transport(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl From<ureq::Error> for CallError {
+    fn from(e: ureq::Error) -> Self {
+        CallError::Transport(e)
+    }
+}
+
+/// An answer by its status: the body when it succeeded; otherwise what failed, if the host said.
+pub fn answer(status: u16, body: String) -> Result<String, CallError> {
+    match status {
+        200..=299 => Ok(body),
+        500 => Err(serde_json::from_str(&body).map_or(CallError::Status(500), CallError::Failed)),
+        _ => Err(CallError::Status(status)),
+    }
 }
 
 impl Host {
@@ -67,9 +112,10 @@ impl Host {
                 ));
             }
         };
+        let agent = ureq::Agent::config_builder().http_status_as_error(false).build().into();
         let host = Host {
             sidecar,
-            client: HostClient { base, token },
+            client: HostClient { base, token, agent },
         };
         host.client
             .get("/health")
@@ -88,22 +134,26 @@ impl Host {
 
 impl HostClient {
     /// A GET request to the host, returning the response body.
-    pub fn get(&self, path: &str) -> Result<String, ureq::Error> {
-        ureq::get(&format!("{}{}", self.base, path))
+    pub fn get(&self, path: &str) -> Result<String, CallError> {
+        let mut response = self
+            .agent
+            .get(&format!("{}{}", self.base, path))
             .header("Authorization", &self.bearer())
-            .call()?
-            .body_mut()
-            .read_to_string()
+            .call()?;
+        let status = response.status().as_u16();
+        answer(status, response.body_mut().read_to_string()?)
     }
 
     /// A POST request with a JSON body, returning the response body.
-    pub fn post_json(&self, path: &str, body: &str) -> Result<String, ureq::Error> {
-        ureq::post(&format!("{}{}", self.base, path))
+    pub fn post_json(&self, path: &str, body: &str) -> Result<String, CallError> {
+        let mut response = self
+            .agent
+            .post(&format!("{}{}", self.base, path))
             .header("Authorization", &self.bearer())
             .header("Content-Type", "application/json")
-            .send(body)?
-            .body_mut()
-            .read_to_string()
+            .send(body)?;
+        let status = response.status().as_u16();
+        answer(status, response.body_mut().read_to_string()?)
     }
 
     fn bearer(&self) -> String {
@@ -181,4 +231,32 @@ pub fn executable(resource_dir: &Path) -> PathBuf {
         "Lowline.Host"
     };
     resource_dir.join("host").join(name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_answer_is_its_body_when_the_request_succeeded() {
+        assert_eq!(answer(200, "{}".into()).unwrap(), "{}");
+    }
+
+    #[test]
+    fn a_failed_request_says_what_failed_when_the_host_said() {
+        let failed = answer(500, r#"{"kind":"System.ArgumentException","frames":["Lowline.Host.VaultProjection.IngestAsync"]}"#.into());
+        match failed {
+            Err(CallError::Failed(f)) => {
+                assert_eq!(f.kind, "System.ArgumentException");
+                assert_eq!(f.frames, ["Lowline.Host.VaultProjection.IngestAsync"]);
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn any_other_failure_is_only_its_status() {
+        assert!(matches!(answer(500, "".into()), Err(CallError::Status(500))));
+        assert!(matches!(answer(404, "".into()), Err(CallError::Status(404))));
+    }
 }
