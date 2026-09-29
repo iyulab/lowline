@@ -1,4 +1,5 @@
 mod host;
+mod report;
 mod vault;
 
 use std::path::{Path, PathBuf};
@@ -364,8 +365,49 @@ fn start_host(app: &tauri::AppHandle) {
                 .join("projections");
             host::Host::start(&exe, log, &cache)
         })();
+        if result.is_err() {
+            // Why it failed is a message, and messages do not leave the device: the kind says enough.
+            report(report::Report::new(report::Layer::Host, "HostStartFailed", ""));
+        }
         app.state::<HostState>().set(result);
     });
+}
+
+/// This launch's error reports. Set once the log folder is known; a failure before that is not
+/// reported.
+static REPORTER: std::sync::OnceLock<report::Reporter> = std::sync::OnceLock::new();
+
+/// Writes an error report. Reports are only written for now, to `reports.jsonl` in the log folder —
+/// what would be sent, for anyone to read.
+fn report(report: report::Report) {
+    if let Some(reporter) = REPORTER.get() {
+        let _ = reporter.record(report);
+    }
+}
+
+/// A failure the UI caught: its kind (an error's class name or an app-owned code) and stack. Only
+/// what the report keeps of them is written.
+#[tauri::command]
+fn report_error(kind: String, stack: String) {
+    report(report::Report::new(report::Layer::Ui, &kind, &stack));
+}
+
+/// Starts writing error reports, and reports a panic of the shell — to disk only, from the panic
+/// itself: a panicking process is no place to send anything.
+fn start_reports(app: &tauri::AppHandle) {
+    let Ok(dir) = app.path().app_log_dir() else { return };
+    if REPORTER.set(report::Reporter::new(dir.join("reports.jsonl"))).is_err() {
+        return;
+    }
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let at = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_default();
+        report(report::Report::new(report::Layer::Shell, "Panic", &at));
+        previous(info);
+    }));
 }
 
 pub fn run() {
@@ -374,6 +416,7 @@ pub fn run() {
         .manage(AppState::default())
         .manage(HostState::default())
         .setup(|app| {
+            start_reports(app.handle());
             start_host(app.handle());
             Ok(())
         })
@@ -390,6 +433,7 @@ pub fn run() {
             host_projection,
             host_curves,
             host_suggest,
+            report_error,
             record_event,
             list_events
         ])

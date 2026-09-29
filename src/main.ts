@@ -11,3 +11,6 @@ import '@iyulab/desktop-compact/tab-bar'
 import '@formdown/ui'
 import './brand/mark.js'
 import './app.js'
+import { watchErrors } from './reports.js'
+
+watchErrors()

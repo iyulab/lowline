@@ -758,6 +758,24 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'writes an error report with the kind of failure and nothing of what was on screen'(app) {
+    const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
+    const before = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).length : 0
+    await app.cdp.evaluate(`setTimeout(() => { throw new RangeError('문서/비밀 회의록.md — 담당: 장비') }), true`)
+    await app.cdp.evaluate(`Promise.reject({ kind: 'outside-vault', message: 'C:\\\\Users\\\\홍길동' }), true`)
+    const deadline = Date.now() + 10_000
+    let lines = []
+    while (Date.now() < deadline) {
+      lines = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).slice(before) : []
+      if (lines.length >= 2) break
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    const written = lines.map((line) => JSON.parse(line))
+    assert.deepEqual(written.map((r) => [r.layer, r.kind]), [['ui', 'RangeError'], ['ui', 'outside-vault']])
+    assert.ok(!lines.join('\n').match(/비밀|회의록|장비|홍길동|Users/), `nothing of the page: ${lines.join(' ')}`)
+    await app.noAlert()
+  },
+
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of
   // the vault repeats once per document.
   ...(process.env.LOWLINE_PERF === '1' && {
