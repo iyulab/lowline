@@ -634,7 +634,7 @@ const scenarios = {
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in')
     // Why the field is empty is said, with how much it has to learn from.
     const why = await app.cdp.evaluate(`__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim())[0]`)
-    assert.match(why ?? '', /^담당: 확정한 \d+건 중 비슷한 기록이 없어 제안하지 않습니다\.$/)
+    assert.match(why ?? '', /^확정한 \d+건 중 비슷한 기록이 없어 제안하지 않습니다\.$/)
 
     // Saving it records no suggestion event: nothing was offered, so nothing was decided.
     const eventsBefore = (await events(vault)).length

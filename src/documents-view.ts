@@ -475,7 +475,7 @@ export class LlDocuments extends LitElement {
       states[field] = { suggestions: [s.value!], note: this.sourceOf(s), decline: strings.reject }
     }
     for (const field of this.abstained) {
-      states[field] = { note: strings.judgmentAbstained(this.label(field), this.learned.get(field) ?? 0) }
+      states[field] = { note: strings.judgmentAbstained(this.learned.get(field) ?? 0) }
     }
     return states
   }
