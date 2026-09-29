@@ -495,6 +495,7 @@ const scenarios = {
     assert.equal((await fileValues(copy)).lowline.id, lowline.id)
 
     await app.openDocument(BUG, copyName.replace(/\.md$/, ''))
+    await app.cdp.waitFor(`__e2e.all('nav button[aria-current="true"]').some((b) => b.textContent.includes('복사본'))`, 'the copy open')
     await app.choose('select[name="심각도"]', '보통')
     await app.click('dc-button', '저장')
     await app.status('저장했습니다')

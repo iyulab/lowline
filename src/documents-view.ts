@@ -232,14 +232,21 @@ export class LlDocuments extends LitElement {
         this.dirty = true
         this.error = strings.removedOutside
         this.message = '' // an earlier "saved" no longer holds
-      } else if (this.dirty) {
-        this.error = strings.changedOutsideDirty
-        this.message = ''
-        this.changedOutside = true
       } else {
-        await this.open(draft.path)
-        if (!change.rescan) this.message = strings.reloadedOutside
-        return // opening prepares the suggestions again
+        const source = await vault.read(draft.path)
+        // A notice that changed nothing leaves the screen alone. An edit made while the file was being
+        // read is not replaced: the notice was about the file, not about what was typed since.
+        if (this.draft !== draft || source === draft.source) {
+          // nothing to show
+        } else if (this.dirty) {
+          this.error = strings.changedOutsideDirty
+          this.message = ''
+          this.changedOutside = true
+        } else {
+          await this.open(draft.path)
+          if (!change.rescan) this.message = strings.reloadedOutside
+          return // opening prepares the suggestions again
+        }
       }
     }
     if (this.template) void this.prepareSuggestions(draft?.templateRef)

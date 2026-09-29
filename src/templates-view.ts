@@ -77,6 +77,8 @@ export class LlTemplates extends LitElement {
   @state() private entries: VaultEntry[] = []
   @state() private selected?: string
   @state() private source = ''
+  /** The open template as it was last read or saved: what the file holds unless changed outside. */
+  private loaded = ''
   @state() private dirty = false
   /** The open template changed outside while it had unsaved edits: the person chooses which to keep. */
   @state() private changedOutside = false
@@ -116,13 +118,19 @@ export class LlTemplates extends LitElement {
         this.dirty = true
         this.error = strings.removedOutside
         this.message = '' // an earlier "saved" no longer holds
-      } else if (this.dirty) {
-        this.error = strings.changedOutsideDirty
-        this.message = ''
-        this.changedOutside = true
       } else {
-        await this.select(selected)
-        if (!change.rescan) this.message = strings.reloadedOutside
+        const source = await vault.read(selected)
+        // A notice that changed nothing leaves the screen alone. An edit made while the file was being
+        // read is not replaced: the notice was about the file, not about what was typed since.
+        if (this.selected !== selected || source === this.loaded) return
+        if (this.dirty) {
+          this.error = strings.changedOutsideDirty
+          this.message = ''
+          this.changedOutside = true
+        } else {
+          this.show(selected, source)
+          if (!change.rescan) this.message = strings.reloadedOutside
+        }
       }
     } catch (e) {
       this.error = describeError(e)
@@ -138,9 +146,14 @@ export class LlTemplates extends LitElement {
   }
 
   private async select(path: string) {
+    this.show(path, await vault.read(path))
+  }
+
+  private show(path: string, source: string) {
     this.error = ''
     this.message = ''
-    this.source = await vault.read(path)
+    this.source = source
+    this.loaded = source
     this.selected = path
     this.dirty = false
     this.changedOutside = false
@@ -188,6 +201,7 @@ export class LlTemplates extends LitElement {
     try {
       templateInfo(this.source) // a template must name itself
       await vault.write(this.selected, this.source)
+      this.loaded = this.source
       // The app's own writes are not reported back: a template made again after it was removed
       // outside rejoins the list here.
       await this.refresh()
