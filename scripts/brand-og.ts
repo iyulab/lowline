@@ -1,9 +1,9 @@
-// Share images and the blinking symbol, into brand-out/: `npm run brand:og -- --site ../lowline.site`.
+// Share images, into brand-out/: `npm run brand:og -- --site ../lowline.site`.
 // The headline is read from the site's pages, so the image says what the page says.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { DARK, LIGHT, symbolSvg, wordmarkSvg } from '../src/brand/svg.ts'
+import { LIGHT, wordmarkSvg } from '../src/brand/svg.ts'
 import { pngSize, pretendard, textSvg, toPng } from './brand-render.ts'
 
 const { values } = parseArgs({ options: { site: { type: 'string' } } })
@@ -50,12 +50,3 @@ for (const [file, w, h, text] of images) {
   console.log(`wrote ${OUT}/${file}`)
 }
 
-// The symbol with a blinking caret, light or dark with the reader's system.
-const blink =
-  `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">` +
-  `<style>.dark { display: none } @media (prefers-color-scheme: dark) { .light { display: none } .dark { display: inline } }</style>` +
-  `<g class="light">${symbolSvg({ colors: LIGHT, x: 0, y: 0, size: 64, blink: true })}</g>` +
-  `<g class="dark">${symbolSvg({ colors: DARK, x: 0, y: 0, size: 64, blink: true })}</g>` +
-  `</svg>`
-writeFileSync(join(OUT, 'mark-blink.svg'), blink)
-console.log(`wrote ${OUT}/mark-blink.svg`)
