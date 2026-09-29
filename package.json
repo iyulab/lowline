@@ -19,7 +19,8 @@
     "tauri": "tauri",
     "test:host": "dotnet test --project src-host/Lowline.Host.Tests",
     "brand:icons": "node scripts/brand-icons.ts",
-    "brand:glyphs": "node scripts/brand-glyphs.ts"
+    "brand:glyphs": "node scripts/brand-glyphs.ts",
+    "brand:sync": "node scripts/brand-sync.ts"
   },
   "dependencies": {
     "@formdown/core": "0.6.0",
