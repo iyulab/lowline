@@ -6,6 +6,7 @@ import { keyed } from 'lit/directives/keyed.js'
 import type { FieldStates } from '@formdown/ui'
 import {
   documentTitle,
+  documentFileNameFor,
   documentFrontMatter,
   fieldValues,
   newDocument,
@@ -98,6 +99,9 @@ export class LlDocuments extends LitElement {
     .message {
       color: var(--dc-color-text-muted, #666);
     }
+    dc-input.name {
+      width: 16rem;
+    }
     .error {
       color: var(--dc-color-danger, #b00020);
     }
@@ -160,6 +164,8 @@ export class LlDocuments extends LitElement {
   @state() private importing = false
   /** The open document changed outside while it had unsaved edits: the person chooses which to keep. */
   @state() private changedOutside = false
+  /** The open document's name is being changed. */
+  @state() private renaming = false
   @state() private message = ''
   @state() private error = ''
 
@@ -241,6 +247,7 @@ export class LlDocuments extends LitElement {
   private reset() {
     this.error = ''
     this.importing = false
+    this.renaming = false
     this.changedOutside = false
     this.message = ''
     this.dirty = false
@@ -428,6 +435,72 @@ export class LlDocuments extends LitElement {
     }
   }
 
+  /**
+   * Gives the open document the name typed — its file's name, which is what the lists show (R-1).
+   * Unsaved edits are saved first. A document known by its path is given that path as its id before
+   * it moves, so what was recorded about it stays with it. A name another document has is refused.
+   */
+  private async rename(name: string) {
+    if (this.draft?.kind !== 'existing') return
+    const file = documentFileNameFor(name)
+    if (!file) {
+      this.error = strings.nameInvalid
+      return
+    }
+    const from = this.draft.path
+    const to = `${from.slice(0, from.lastIndexOf('/') + 1)}${file}`
+    if (to === from) {
+      this.renaming = false
+      return
+    }
+    this.error = ''
+    this.message = ''
+    if (this.dirty) {
+      await this.save()
+      if (this.dirty) return // not saved: the error says why
+    }
+    const draft = this.draft
+    if (draft?.kind !== 'existing') return
+    try {
+      const source = documentFrontMatter(draft.source).id ? draft.source : setDocumentId(draft.source, draft.id)
+      if (source !== draft.source) await vault.write(draft.path, source)
+      try {
+        await vault.rename(draft.path, to)
+      } catch (e) {
+        // Refused: the file is left as it was.
+        if (source !== draft.source) await vault.write(draft.path, draft.source)
+        throw e
+      }
+      this.draft = { ...draft, source, path: to }
+      this.renaming = false
+      await this.refresh()
+      this.message = strings.renamed
+      // The sidecar knows documents by their paths too: it is handed the vault as it is now.
+      void this.prepareSuggestions(draft.templateRef)
+    } catch (e) {
+      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.nameTaken : describeError(e)
+    }
+  }
+
+  private renderName(draft: Extract<Draft, { kind: 'existing' }>) {
+    const name = draft.path.replace(/^.*\//, '').replace(/\.md$/, '')
+    if (!this.renaming) {
+      return html`<dc-button size="sm" variant="ghost" @click=${() => ((this.renaming = true), (this.error = ''))}>${strings.rename}</dc-button>`
+    }
+    const input = () => this.renderRoot.querySelector<HTMLElement & { value: string }>('dc-input.name')!
+    return html`<dc-input
+        class="name"
+        aria-label=${strings.newName}
+        .value=${name}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.key === 'Enter') void this.rename(input().value)
+          else if (e.key === 'Escape') ((this.renaming = false), (this.error = ''))
+        }}
+      ></dc-input>
+      <dc-button size="sm" variant="secondary" @click=${() => void this.rename(input().value)}>${strings.renameConfirm}</dc-button>
+      <dc-button size="sm" variant="ghost" @click=${() => ((this.renaming = false), (this.error = ''))}>${strings.cancel}</dc-button>`
+  }
+
   /** Creates the document under a free name; never replaces an existing file. */
   private createDocument(source: string, title: string | undefined): Promise<string> {
     return createDocumentFile(this.vaultInfo.documentsDir, source, title)
@@ -524,6 +597,7 @@ export class LlDocuments extends LitElement {
           ? html`
               <div class="bar">
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
+                ${draft.kind === 'existing' ? this.renderName(draft) : nothing}
                 ${draft.templateRef && !this.scope
                   ? html`<span class="message">${strings.documentFrom(this.templateNames.get(draft.templateRef) ?? draft.templateRef)}</span>`
                   : nothing}

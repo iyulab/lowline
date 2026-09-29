@@ -198,6 +198,12 @@ fn create_file(path: String, content: String, state: State<AppState>) -> Command
     with_vault(&state, |v| v.create(&path, &content))
 }
 
+/// Gives a file another name in its folder; fails with `already-exists` rather than replace one.
+#[tauri::command]
+fn rename_file(from: String, to: String, state: State<AppState>) -> CommandResult<()> {
+    with_vault(&state, |v| v.rename(&from, &to))
+}
+
 /// Where this install's events go: one append-only file per device, so vaults shared through a
 /// sync service never have two devices writing the same file.
 const EVENTS_DIR: &str = ".lowline/events";
@@ -516,6 +522,7 @@ pub fn run() {
             read_files,
             write_file,
             create_file,
+            rename_file,
             host_status,
             host_ingest,
             host_projection,

@@ -137,6 +137,16 @@ export function documentFileName(date: Date, title: string | undefined, attempt 
 }
 
 /**
+ * The file name a document gets for a name a person typed — what the lists show it by (R-1) — or
+ * `null` when it cannot be one: empty, or holding a character a file name cannot.
+ */
+export function documentFileNameFor(name: string): string | null {
+  const trimmed = name.trim().replace(/[. ]+$/, '')
+  if (!trimmed || /[\\/:*?"<>|\u0000-\u001f]/.test(trimmed)) return null
+  return `${trimmed}.md`
+}
+
+/**
  * Turns suggestions on or off for one field of a template, under its front matter's `lowline.suggest`
  * (D-46) — the only place the choice is kept. The list follows the template's field order; other keys
  * under `lowline`, and everything else in the file, are left as they are.

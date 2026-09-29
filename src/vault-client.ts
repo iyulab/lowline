@@ -70,6 +70,12 @@ export const vault = {
     await invoke<void>('create_file', { path, content })
     wrote(path)
   },
+  /** Gives a file another name in its folder; rejects with `already-exists` instead of replacing one. */
+  rename: async (from: string, to: string) => {
+    await invoke<void>('rename_file', { from, to })
+    wrote(from)
+    wrote(to)
+  },
   /** Appends a suggestion event to this device's event file in the vault. */
   recordEvent: async (event: object) => {
     await invoke<void>('record_event', { event })

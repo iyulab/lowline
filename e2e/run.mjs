@@ -870,6 +870,47 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
   },
 
+  async 'renames a document, and what was recorded about it stays with it'(app, vault) {
+    const rows = async () => {
+      await app.showTable(INTAKE)
+      return app.cdp.waitFor(`(() => { const n = __e2e.all('tbody tr').length; return n > 0 && n })()`, 'the intake table', { timeoutMs: 30_000 })
+    }
+    const rowsBefore = await rows()
+    const enter = () => app.cdp.press('Enter', { code: 'Enter', keyCode: 13 })
+    const refused = (text) => app.cdp.waitFor(`__e2e.all('[role=alert]').some((el) => el.textContent.includes(${JSON.stringify(text)}))`, `refused: ${text}`)
+    const original = join(vault, '문서', '접수-2.md')
+    const before = await readFile(original, 'utf8')
+    const valuesBefore = await fileValues(original)
+    assert.ok(!valuesBefore.lowline?.id, 'a document known by its path')
+
+    await app.documentsOf(INTAKE)
+    await app.pickDocument('접수-2')
+    await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '접수-2'`, 'the document open')
+    await app.click('dc-button', '이름 바꾸기')
+
+    // A name another document has is refused, and so is one no file can have; nothing moves.
+    await app.type('input[aria-label="새 이름"]', '접수-1')
+    await enter()
+    await refused('같은 이름의 문서가 이미 있습니다')
+    await app.type('input[aria-label="새 이름"]', '프린터/토너')
+    await enter()
+    await refused('파일 이름에 쓸 수 없는 글자')
+    assert.equal(await readFile(original, 'utf8'), before)
+
+    await app.type('input[aria-label="새 이름"]', '프린터 토너 문의')
+    await enter()
+    await app.status('이름을 바꿨습니다')
+    const names = await documentsIn(vault)
+    assert.ok(names.includes('프린터 토너 문의.md') && !names.includes('접수-2.md'), names.join(', '))
+    const moved = await fileValues(join(vault, '문서', '프린터 토너 문의.md'))
+    // Known by its old path until now, it keeps that path as its id: its events still name it.
+    assert.equal(moved.lowline?.id, '문서/접수-2.md')
+    assert.equal(moved.요청, valuesBefore.요청, 'its values as they were')
+    await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '프린터 토너 문의'`, 'the list showing its new name')
+    assert.equal(await rows(), rowsBefore, 'still one row in its table')
+    await app.noAlert()
+  },
+
   async 'lists apart the documents whose template is not in the vault, while there are any'(app, vault) {
     const stray = join(vault, '문서', '옛 서식 문서.md')
     await writeFile(stray, '---\ntemplate: retired@1\n제목: 남은 기록\n---\n# 옛 서식\n\n제목: ___@제목\n')

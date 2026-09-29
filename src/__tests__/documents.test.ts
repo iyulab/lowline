@@ -3,6 +3,7 @@ import { parseFormdown, readFrontMatter } from '@formdown/core'
 import {
   TemplateError,
   documentFileName,
+  documentFileNameFor,
   documentTitle,
   documentFrontMatter,
   fieldValues,
@@ -189,5 +190,13 @@ describe('setSuggest', () => {
     expect(readFrontMatter(setSuggest(on, '담당', false))?.frontMatter.data).toEqual({ id: 'intake', version: 1 })
     const withOther = on.replace('lowline:', 'lowline:\n  note: keep')
     expect(readFrontMatter(setSuggest(withOther, '담당', false))?.frontMatter.data.lowline).toEqual({ note: 'keep' })
+  })
+
+  it('names a document file after what a person typed, or refuses a name no file can have', () => {
+    expect(documentFileNameFor('  배터리 문의  ')).toBe('배터리 문의.md')
+    expect(documentFileNameFor('끝에 점...')).toBe('끝에 점.md')
+    expect(documentFileNameFor('')).toBeNull()
+    expect(documentFileNameFor(' . ')).toBeNull()
+    for (const bad of ['a/b', 'a\\b', 'a:b', 'a?b', 'a*b', 'a"b', 'a<b', 'a|b', 'a\tb']) expect(documentFileNameFor(bad)).toBeNull()
   })
 })

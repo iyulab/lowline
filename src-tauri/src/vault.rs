@@ -230,6 +230,34 @@ impl Vault {
         })
     }
 
+    /// Gives a file another name in the same folder, refusing to replace one that is already there.
+    ///
+    /// It is a rename, not a copy: the file keeps its creation time and a sync client sees a move.
+    pub fn rename(&self, from: &str, to: &str) -> Result<()> {
+        let src = self.resolve(from)?;
+        let dst = self.resolve(to)?;
+        if src.parent() != dst.parent() {
+            return Err(VaultError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "a file is renamed within its folder",
+            )));
+        }
+        // The file under its new name is this app's write: the watch does not report it back.
+        let content = fs::read(&src).map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => VaultError::NotFound(from.to_string()),
+            _ => VaultError::Io(e),
+        })?;
+        self.own.record(&dst, &content);
+        tauri_kit_fs::rename_new(&src, &dst).map_err(|e| {
+            self.own.forget(&dst);
+            match e.kind() {
+                io::ErrorKind::AlreadyExists => VaultError::AlreadyExists(to.to_string()),
+                io::ErrorKind::NotFound => VaultError::NotFound(from.to_string()),
+                _ => VaultError::Io(e),
+            }
+        })
+    }
+
     /// Appends one line to a file, creating it (and its folders) if needed.
     ///
     /// The line and its newline go out in one write and are flushed to disk before this returns.
@@ -385,6 +413,36 @@ mod tests {
             v.create("문서/a.md", "second"),
             Err(VaultError::AlreadyExists(_))
         ));
+        assert_eq!(v.read("문서/a.md").unwrap(), "first");
+    }
+
+    #[test]
+    fn renames_within_a_folder_and_never_replaces() {
+        let (_dir, v) = vault();
+        v.create("문서/a.md", "first").unwrap();
+        v.create("문서/b.md", "second").unwrap();
+        assert!(matches!(
+            v.rename("문서/a.md", "문서/b.md"),
+            Err(VaultError::AlreadyExists(_))
+        ));
+        assert_eq!(v.read("문서/a.md").unwrap(), "first");
+        assert_eq!(v.read("문서/b.md").unwrap(), "second");
+
+        v.rename("문서/a.md", "문서/c.md").unwrap();
+        assert_eq!(v.read("문서/c.md").unwrap(), "first");
+        assert!(matches!(v.read("문서/a.md"), Err(VaultError::NotFound(_))));
+        assert!(matches!(
+            v.rename("문서/a.md", "문서/d.md"),
+            Err(VaultError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn refuses_to_rename_into_another_folder_or_out_of_the_vault() {
+        let (_dir, v) = vault();
+        v.create("문서/a.md", "first").unwrap();
+        assert!(v.rename("문서/a.md", "서식/a.md").is_err());
+        assert!(v.rename("문서/a.md", "../a.md").is_err());
         assert_eq!(v.read("문서/a.md").unwrap(), "first");
     }
 
