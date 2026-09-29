@@ -614,20 +614,20 @@ const scenarios = {
   async 'shows a sync conflict copy beside its original, and learns from neither until one is kept'(app, vault) {
     // A sync client kept another device's edit of 접수-1 as a copy.
     const copy = join(vault, '문서', '접수-1 (다른 기기의 충돌된 사본 2026-09-29).md')
+    const copyPath = '문서/접수-1 (다른 기기의 충돌된 사본 2026-09-29).md'
     const original = await readFile(join(vault, '문서', '접수-1.md'), 'utf8')
-    // What the shell reports from here on, to tell a missed change from a missed refresh if the end fails.
+    // What the shell announces from here on. A copy made and removed within one debounce window is
+    // no change at all, so each step waits until the app has heard of it before the next is taken.
     await app.cdp.evaluate(`(() => { window.__changes = []; const T = window.__TAURI_INTERNALS__
-        T.invoke('plugin:event|listen', { event: 'vault-changed', target: { kind: 'Any' }, handler: T.transformCallback((e) => window.__changes.push(e.payload)) }); return true })()`)
+      return T.invoke('plugin:event|listen', { event: 'vault-changed', target: { kind: 'Any' }, handler: T.transformCallback((e) => window.__changes.push(e.payload)) }) })()`)
+    const heard = (kind) =>
+      app.cdp.waitFor(`window.__changes.some((c) => c.${kind}.includes(${q(copyPath)}))`, `the copy ${kind} announced`, { timeoutMs: 15_000 })
     await writeFile(copy, original.replace('담당: 장비', '담당: 총무'))
     try {
+      await heard('written')
       await app.click('button', '문서')
       const listed = () => app.cdp.evaluate(`__e2e.all('nav button').map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`)
-      try {
-        await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.includes('충돌 사본 — 원본: 접수-1'))`, 'the copy, with its original', { timeoutMs: 15_000 })
-      } catch (e) {
-        throw new Error(`${e.message}
-${JSON.stringify(await listed())}`)
-      }
+      await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.includes('충돌 사본 — 원본: 접수-1'))`, 'the copy, with its original', { timeoutMs: 15_000 })
       assert.ok((await listed()).includes('접수-1 충돌 사본 있음'), 'the original, marked as having a copy')
 
       // The same request that was suggested 장비 from 접수-1 is now answered only from other records.
@@ -649,13 +649,8 @@ ${JSON.stringify(await listed())}`)
       await rm(copy, { force: true })
     }
     // Keeping one file settles it.
-    try {
-      await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
-    } catch (e) {
-      const shell = await app.cdp.evaluate(`window.__TAURI_INTERNALS__.invoke('list_documents').then((l) => l.map((e) => e.name))`)
-      const changes = await app.cdp.evaluate(`JSON.stringify(window.__changes)`)
-      throw new Error(`${e.message}\n    file still there: ${existsSync(copy)} · the shell lists: ${JSON.stringify(shell)} · changes the window was told of: ${changes}`)
-    }
+    await heard('removed')
+    await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
   },
 
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of
