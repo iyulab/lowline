@@ -124,7 +124,8 @@ export class LlMark extends LitElement {
 
   /** Starts (or restarts) blinking, which rests again after a quiet spell. */
   wake() {
-    if (!this.blink || this.inactive) return
+    // The intro owns the caret until the word is written.
+    if (!this.blink || this.inactive || this.introAt) return
     clearTimeout(this.restTimer)
     this.blinking = true
     this.restTimer = setTimeout(() => this.rest(), REST_AFTER_MS)
@@ -135,6 +136,7 @@ export class LlMark extends LitElement {
    * once input pauses.
    */
   hold() {
+    if (this.introAt) return
     clearTimeout(this.holdTimer)
     clearTimeout(this.restTimer)
     this.blinking = false

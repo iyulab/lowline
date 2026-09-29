@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 
-const BANNER = '// 사본 — 정본은 lowline/src/brand/. 고치려면 정본을 고치고 npm run brand:sync.\n'
+const BANNER = "// Copy of the app's brand module. Edit the original and run brand:sync.\n"
 
 const SYNC: { from: string; to: 'site' | 'releases'; path: string; banner?: boolean }[] = [
   { from: 'src/brand/geometry.ts', to: 'site', path: 'src/brand/geometry.ts', banner: true },
