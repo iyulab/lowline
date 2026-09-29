@@ -615,7 +615,6 @@ const scenarios = {
     const before = new Set(await documentsIn(vault))
     await app.documentsOf(INTAKE)
     await app.click('dc-button', '가져오기')
-    await app.choose('select#import-template', '서식/접수.fd.md')
     const rows = [
       ['요청', '부서', '담당', '비고'],
       ['프린터 토너가 떨어졌어요', '영업', '총무', '지난달'],

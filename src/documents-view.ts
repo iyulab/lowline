@@ -457,7 +457,7 @@ export class LlDocuments extends LitElement {
         ${this.importing
           ? html`<ll-import
               .vaultInfo=${this.vaultInfo}
-              .templates=${this.scope ? [this.scope] : []}
+              .template=${this.scope}
               @ll-imported=${(e: CustomEvent<{ created: number }>) => void this.imported(e.detail.created)}
               @ll-import-cancel=${() => (this.importing = false)}
             ></ll-import>`

@@ -13,7 +13,7 @@ const PROBLEMS_SHOWN = 10
 
 /**
  * Brings existing records in: rows copied from a spreadsheet, the first naming the columns,
- * become documents of the chosen template. Nothing is written until the person confirms what the
+ * become documents of the template. Nothing is written until the person confirms what the
  * preview shows.
  */
 @customElement('ll-import')
@@ -70,7 +70,8 @@ export class LlImport extends LitElement {
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
-  @property({ attribute: false }) templates: TemplateItem[] = []
+  /** The template the rows become documents of. */
+  @property({ attribute: false }) template!: TemplateItem
 
   @state() private templatePath = ''
   @state() private templateSource = ''
@@ -81,11 +82,15 @@ export class LlImport extends LitElement {
   @state() private created = 0
   @state() private error = ''
 
-  private async chooseTemplate(path: string) {
+  willUpdate(changed: Map<string, unknown>) {
+    if (changed.has('template') && this.template.path !== this.templatePath) void this.readTemplate(this.template.path)
+  }
+
+  private async readTemplate(path: string) {
     this.error = ''
     this.plan = undefined
     this.templatePath = path
-    if (!path) return
+    this.fields = []
     try {
       this.templateSource = await vault.read(path)
       this.fields = importFields(this.templateSource)
@@ -137,11 +142,6 @@ export class LlImport extends LitElement {
     return html`
       <h2>${strings.importTitle}</h2>
       <div class="bar">
-        <label for="import-template">${strings.importTemplate}</label>
-        <select id="import-template" @change=${(e: Event) => this.chooseTemplate((e.target as HTMLSelectElement).value)}>
-          <option value="">${strings.pickTemplate}</option>
-          ${this.templates.map((t) => html`<option value=${t.path}>${t.name}</option>`)}
-        </select>
         <dc-button size="sm" variant="ghost" ?disabled=${this.busy} @click=${this.cancel}>${strings.cancel}</dc-button>
       </div>
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
