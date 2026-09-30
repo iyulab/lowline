@@ -1,0 +1,5 @@
+# Commits that only reformat code: `git blame` looks past them.
+# git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format the shell with cargo fmt
+7c274eacd5d2f16c0505a0cd2a8bc2c5be7776c4
