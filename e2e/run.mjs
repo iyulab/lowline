@@ -1014,13 +1014,71 @@ const scenarios = {
       'the whole list',
     )
     const all = await app.documentLabels()
-    await typeIn('이름으로 찾기', 'a-1')
-    await app.cdp.waitFor(`(${JSON.stringify(all.filter((l) => l.toLowerCase().includes('a-1')))}).join('|') === __e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button')]).map((b) => b.textContent.replace(/\\s+/g, ' ').trim()).join('|')`, 'the list narrowed to A-1, ignoring case')
-    await typeIn('이름으로 찾기', '어디에도 없는 이름')
-    await app.cdp.waitFor(`__e2e.all('p.message').some((p) => p.textContent.includes('이름이 맞는 문서가 없습니다'))`, 'nothing matching said')
-    await typeIn('이름으로 찾기', '')
+    // Names are looked in at once; values after the sidecar answers — no value here holds "a-1".
+    const searched = `!__e2e.all('ll-documents').some((d) => [...d.shadowRoot.querySelectorAll('p.message')].some((p) => p.textContent.includes('칸 값에서 찾는 중')))`
+    await typeIn('이름이나 칸 값으로 찾기', 'a-1')
+    await app.cdp.waitFor(`(${JSON.stringify(all.filter((l) => l.toLowerCase().includes('a-1')))}).join('|') === __e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button')]).map((b) => b.textContent.replace(/\\s+/g, ' ').trim()).join('|') && ${searched}`, 'the list narrowed to A-1, ignoring case', { timeoutMs: 15_000 })
+    await typeIn('이름이나 칸 값으로 찾기', '어디에도 없는 이름')
+    await app.cdp.waitFor(`__e2e.all('p.message').some((p) => p.textContent.includes('이름이나 칸 값이 맞는 문서가 없습니다'))`, 'nothing matching said', { timeoutMs: 15_000 })
+    await typeIn('이름이나 칸 값으로 찾기', '')
     assert.deepEqual(await app.documentLabels(), all)
     await app.noAlert()
+  },
+
+  async 'finds documents by the words of their values, and opens one of the cases most like a document'(app, vault) {
+    const CASES = { name: '사례', ref: 'cases@1', path: '서식/사례.fd.md' }
+    const body = '# 사례\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+    const files = [join(vault, CASES.path)]
+    await writeFile(files[0], `---\nid: cases\nversion: 1\n---\n${body}`)
+    const cases = [
+      ['프린터', '프린터 토너가 떨어졌어요', '장비'],
+      ['복합기', '복합기 토너 교체 요청', '장비'],
+      ['연차', '연차를 이월하고 싶어요', '인사'],
+    ]
+    for (const [name, request, owner] of cases) {
+      const file = join(vault, '문서', `${name}.md`)
+      files.push(file)
+      await writeFile(file, `---\ntemplate: cases@1\n요청: ${request}\n담당: ${owner}\n---\n${body}`)
+    }
+    const typeIn = (text) =>
+      app.cdp.evaluate(`(() => { const i = __e2e.all('dc-input').find((el) => el.getAttribute('aria-label') === '이름이나 칸 값으로 찾기')
+        const inner = i.shadowRoot.querySelector('input'); inner.value = ${q(text)}
+        inner.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+    const listed = `__e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button')]).map((b) => b.textContent.replace(/\\s+/g, ' ').trim())`
+    try {
+      await app.tabOf(CASES, '문서', { timeoutMs: 30_000 })
+      await app.cdp.waitFor(`(${listed}).length === 3`, 'the three documents', { timeoutMs: 30_000 })
+
+      // No name holds "토너"; two documents' values do, and each shows the line that matched.
+      await typeIn('토너')
+      const found = await app.cdp.waitFor(`(() => { const l = ${listed}; return l.length === 2 && l })()`, 'the documents holding 토너', { timeoutMs: 30_000 })
+      assert.deepEqual([...found].sort(), ['복합기 복합기 토너 교체 요청', '프린터 프린터 토너가 떨어졌어요'])
+      // A stem finds a word with its ending: "이월" in "이월하고".
+      await typeIn('이월')
+      await app.cdp.waitFor(`(${listed}).join('|') === '연차 연차를 이월하고 싶어요'`, 'the document holding 이월', { timeoutMs: 15_000 })
+      await typeIn('')
+      await app.cdp.waitFor(`(${listed}).length === 3`, 'the whole list again')
+
+      // The cases most like a document: asked for by opening them, the same template's, itself left out.
+      await app.pickDocument('프린터')
+      await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '장비'`, 'the document open')
+      await app.click('summary', '비슷한 사례')
+      const similar = await app.cdp.waitFor(
+        `(() => { const b = __e2e.all('.similar button').map((b) => b.textContent.replace(/\\s+/g, ' ').trim()); return b.length ? b : null })()`,
+        'the similar cases',
+        { timeoutMs: 30_000 },
+      )
+      assert.equal(similar[0], '복합기 복합기 토너 교체 요청')
+      assert.ok(!similar.some((s) => s.startsWith('프린터')), 'itself left out')
+      await app.click('.similar button', similar[0])
+      await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === '복합기 토너 교체 요청'`, 'the similar case open')
+      await app.noAlert()
+    } finally {
+      // Leave the vault as the scenarios after this one expect it.
+      await app.learning()
+      await Promise.all(files.map((f) => rm(f, { force: true })))
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '사례')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
   async "filters a table by a number field's bounds"(app, vault) {

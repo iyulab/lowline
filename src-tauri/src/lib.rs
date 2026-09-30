@@ -509,6 +509,28 @@ async fn host_suggest(
     host_json(blocking(move || client.post_json("/suggest", &body)).await?)
 }
 
+/// Documents whose values hold some words, from the sidecar's text index — of one template when named.
+#[tauri::command]
+async fn host_search(
+    request: serde_json::Value,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let body = request.to_string();
+    host_json(blocking(move || client.post_json("/search", &body)).await?)
+}
+
+/// The documents of the same template most like one, from the sidecar's text index.
+#[tauri::command]
+async fn host_similar(
+    request: serde_json::Value,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let body = request.to_string();
+    host_json(blocking(move || client.post_json("/similar", &body)).await?)
+}
+
 fn host_json(body: String) -> Result<serde_json::Value, String> {
     serde_json::from_str(&body)
         .map_err(|e| format!("the sidecar answered with something else than JSON: {e}"))
@@ -646,6 +668,8 @@ pub fn run() {
             host_projection,
             host_curves,
             host_suggest,
+            host_search,
+            host_similar,
             report_error,
             record_event,
             list_events,

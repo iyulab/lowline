@@ -148,6 +148,17 @@ export interface FieldCurve {
  */
 export type Abstention = 'no-history' | 'none-close' | 'below-target'
 
+/** A document found by the words of its values: where it is, its template, its matching text, how well it matched. */
+export interface CaseHit {
+  path: string
+  template: string
+  /** The document's values, one per line, as the index holds them. */
+  text: string
+  /** A sync client kept another device's edit of it as a copy beside it. */
+  conflicted: boolean
+  score: number
+}
+
 export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
   value: string | null

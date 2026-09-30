@@ -87,6 +87,22 @@ public sealed class CaseIndexTests
     }
 
     [Fact]
+    public async Task Leaves_out_documents_that_share_only_a_value_every_document_has()
+    {
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake],
+        [
+            Doc("문서/충전.md", """{"요청": "노트북 충전이 안 돼요, 배터리 문제 같아요", "부서": "영업", "담당": "장비"}"""),
+            Doc("문서/배터리.md", """{"요청": "노트북 배터리가 금방 닳아요", "부서": "영업", "담당": "장비"}"""),
+            Doc("문서/회의실.md", """{"요청": "회의실 예약이 안 돼요", "부서": "영업", "담당": "총무"}"""),
+            Doc("문서/휴가.md", """{"요청": "휴가 일수를 확인하고 싶어요", "부서": "영업", "담당": "인사"}"""),
+        ]), Ct);
+
+        var similar = (await vault.SimilarAsync(new SimilarQuery("문서/충전.md"), Ct)).Select(h => h.Path).ToList();
+        Assert.Equal(["문서/배터리.md"], similar);
+    }
+
+    [Fact]
     public async Task Finds_a_renamed_document_with_an_id_at_its_new_path_without_indexing_it_again()
     {
         await using var vault = new VaultProjection();

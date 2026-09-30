@@ -1,7 +1,7 @@
 // The UI's only way to the vault: commands handled by the shell, which owns every file.
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { ColumnFilter, FieldCurve, IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
+import type { CaseHit, ColumnFilter, FieldCurve, IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
 
 export interface VaultInfo {
   root: string
@@ -153,4 +153,8 @@ export const host = {
   /** `document` is the draft's vault path once it has been saved; a rejection there is not offered again. */
   suggest: (template: string, field: string, values: Record<string, unknown>, document?: string) =>
     invoke<Suggestion>('host_suggest', { request: { template, field, values, document } }),
+  /** Documents whose values hold these words, best first — of one template when named. */
+  search: (query: string, template?: string) => invoke<CaseHit[]>('host_search', { request: { query, template } }),
+  /** The documents of the same template most like the one at `path`, best first. */
+  similar: (path: string) => invoke<CaseHit[]>('host_similar', { request: { path } }),
 }

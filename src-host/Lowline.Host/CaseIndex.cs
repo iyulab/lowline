@@ -24,6 +24,9 @@ internal sealed class CaseIndex : IAsyncDisposable
     private const string TemplateKey = "template";
     private const string ConflictKey = "conflict";
 
+    /// <summary>The share of the most similar document's score another must reach to be listed as similar.</summary>
+    private const double SimilarFloor = 0.3;
+
     private readonly IFluxIndexContext _context;
     private readonly string _file;
     private readonly Dictionary<string, string> _indexed;
@@ -128,8 +131,13 @@ internal sealed class CaseIndex : IAsyncDisposable
     {
         if (!_indexed.ContainsKey(identity)) return [];
         var filter = new Dictionary<string, object> { [TemplateKey] = template, [ConflictKey] = "no" };
-        var found = await _context.Retriever.FindSimilarAsync(identity, max, 0f, filter, cancellationToken);
-        return [.. found.Select(c => (c.DocumentChunk.DocumentId, c.DocumentChunk.Content, (double)c.Score))];
+        var found = (await _context.Retriever.FindSimilarAsync(identity, max, 0f, filter, cancellationToken)).ToList();
+        // Keyword similarity has no floor of its own: a document sharing one value every document has (a
+        // department, say) scores above nothing. Only those near the best are like it; the rest are not shown.
+        var best = found.Count > 0 ? found.Max(c => c.Score) : 0;
+        return [.. found
+            .Where(c => c.Score >= best * SimilarFloor)
+            .Select(c => (c.DocumentChunk.DocumentId, c.DocumentChunk.Content, (double)c.Score))];
     }
 
     /// <summary>A document's values in template order, one per line; list values one per line too.</summary>

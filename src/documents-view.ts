@@ -20,7 +20,7 @@ import {
 import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
-import type { Abstention, Suggestion, TemplateSnapshot } from './projection.js'
+import type { Abstention, CaseHit, Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -28,6 +28,7 @@ import { readVault, syncVault } from './vault-snapshot.js'
 import { documentsOf, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
 import { conflictLabel, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
+import { found, matchingLine, shownName, type Found } from './cases.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
 import './rename-control.js'
@@ -36,6 +37,8 @@ import './keep-copy-control.js'
 
 /** How long typing pauses before suggestions are asked for again. */
 const SUGGEST_DELAY_MS = 300
+/** How long typing in the list's filter pauses before the documents' values are looked in. */
+const SEARCH_DELAY_MS = 250
 
 /** What is open in the editor: a new document from a template, or an existing document. */
 type Draft =
@@ -78,10 +81,34 @@ export class LlDocuments extends LitElement {
       border-color: var(--dc-color-border, #d0d0d0);
       background: var(--dc-color-surface, #f4f4f4);
     }
-    nav button .note {
+    nav button .note,
+    .similar button .note {
       display: block;
       font-size: 0.85em;
       color: var(--dc-color-text-muted, #666);
+    }
+    .similar summary {
+      cursor: pointer;
+      color: var(--dc-color-text-muted, #666);
+    }
+    .similar ul {
+      list-style: none;
+      margin: var(--dc-space-1, 4px) 0 0;
+      padding: 0;
+    }
+    .similar button {
+      text-align: left;
+      width: 100%;
+      padding: var(--dc-space-2, 8px);
+      border: 1px solid transparent;
+      border-radius: var(--dc-radius-md, 6px);
+      background: none;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+    .similar button:hover {
+      background: var(--dc-color-surface, #f4f4f4);
     }
     .new {
       display: flex;
@@ -137,8 +164,20 @@ export class LlDocuments extends LitElement {
    * otherwise each re-render (and each save) would hand the form its opening values again.
    */
   @state() private initialValues: FieldValues = {}
-  /** Text the listed documents' names are narrowed to, ignoring case; the table filters by values. */
+  /** Text the listed documents are narrowed to: in their names (ignoring case) or the words of their values. */
   @state() private nameFilter = ''
+  /** This template's documents whose values hold the words of the filter text, as the sidecar found them. */
+  @state() private valueHits: CaseHit[] = []
+  /** The sidecar is looking through the values; or it could not, and only names are looked in. */
+  @state() private valueSearch: 'idle' | 'searching' | 'failed' = 'idle'
+  private searchTimer?: ReturnType<typeof setTimeout>
+  /** Counts searches; only the latest one's answer is shown. */
+  private searchRun = 0
+  /** Counts reads of the vault's list, and the latest read the sidecar has been handed since. */
+  private reads = 0
+  private handedOver = -1
+  /** The documents most like the open one, once asked for by opening their list. */
+  @state() private similar?: CaseHit[] | 'loading' | 'failed'
   /** Counts drafts opened; changes only when another draft is opened. */
   @state() private opened = 0
   /** The form's current values, as it reports them. */
@@ -259,6 +298,64 @@ export class LlDocuments extends LitElement {
     } catch (e) {
       this.error = describeError(e)
     }
+    this.reads++
+    // What is being looked for may be in another document now, or in another template.
+    this.scheduleSearch()
+  }
+
+  /**
+   * Hands the sidecar the vault as the list last read it, if it has not been handed it since: what it
+   * searches is what it was given, and the list may show documents written since.
+   */
+  private async handOver() {
+    const read = this.reads
+    if (this.handedOver >= read) return
+    await syncVault()
+    this.handedOver = Math.max(this.handedOver, read)
+  }
+
+  /** Looks for the filter text in this template's values a moment after typing stops. */
+  private scheduleSearch() {
+    clearTimeout(this.searchTimer)
+    const text = this.nameFilter.trim()
+    const run = ++this.searchRun
+    if (!text || !this.scope) {
+      this.valueHits = []
+      this.valueSearch = 'idle'
+      return
+    }
+    this.valueSearch = 'searching'
+    const template = this.scope.ref
+    this.searchTimer = setTimeout(async () => {
+      try {
+        await this.handOver()
+        const hits = await host.search(text, template)
+        if (run === this.searchRun) {
+          this.valueHits = hits
+          this.valueSearch = 'idle'
+        }
+      } catch {
+        // Names are still looked in; the list says the values were not.
+        if (run === this.searchRun) {
+          this.valueHits = []
+          this.valueSearch = 'failed'
+        }
+      }
+    }, SEARCH_DELAY_MS)
+  }
+
+  /** Asks for the documents most like the open one the first time their list is opened. */
+  private async showSimilar(path: string) {
+    if (this.similar !== undefined && this.similar !== 'failed') return
+    this.similar = 'loading'
+    const isOpen = () => this.draft?.kind === 'existing' && this.draft.path === path
+    try {
+      await this.handOver()
+      const similar = await host.similar(path)
+      if (isOpen()) this.similar = similar
+    } catch {
+      if (isOpen()) this.similar = 'failed'
+    }
   }
 
   private reset() {
@@ -276,6 +373,7 @@ export class LlDocuments extends LitElement {
     this.offered = new Map()
     this.filled = []
     this.rejected = new Set()
+    this.similar = undefined
   }
 
   /**
@@ -662,10 +760,33 @@ export class LlDocuments extends LitElement {
       : strings.suggestionSource((this.pathsById.get(s.source) ?? s.source).replace(/^.*\//, '').replace(/\.md$/, ''))
   }
 
-  /** The documents whose names hold the filter text, in the list's order. */
-  private listed() {
-    const text = this.nameFilter.trim().toLocaleLowerCase()
-    return text ? this.documents.filter((d) => d.name.replace(/\.md$/, '').toLocaleLowerCase().includes(text)) : this.documents
+  /** The documents whose names or values hold the filter text: see `found`. */
+  private listed(): Found[] {
+    return found(this.documents, this.nameFilter, this.valueHits)
+  }
+
+  /** The documents most like the open one, folded until opened: a person asks for them, they are not offered. */
+  private renderSimilar(path: string) {
+    const similar = this.similar
+    return html`<details class="similar" @toggle=${(e: Event) => (e.target as HTMLDetailsElement).open && void this.showSimilar(path)}>
+      <summary>${strings.similarCases}</summary>
+      ${similar === undefined || similar === 'loading'
+        ? html`<p class="message" role="status">${strings.similarLoading}</p>`
+        : similar === 'failed'
+          ? html`<p class="message" role="status">${strings.similarFailed}</p>`
+          : similar.length === 0
+            ? html`<p class="message">${strings.similarNone}</p>`
+            : html`<ul>
+                ${similar.map(
+                  (hit) => html`<li>
+                    <button @click=${() => this.leaveFor(() => this.open(hit.path))}>
+                      ${fileName(hit.path, '.md')}
+                      <span class="note">${matchingLine(hit.text, '')}</span>
+                    </button>
+                  </li>`,
+                )}
+              </ul>`}
+    </details>`
   }
 
   render() {
@@ -688,20 +809,31 @@ export class LlDocuments extends LitElement {
               aria-label=${strings.documentsFilter}
               placeholder=${strings.documentsFilter}
               .value=${this.nameFilter}
-              @input=${(e: Event) => (this.nameFilter = (e.target as HTMLInputElement).value)}
+              @input=${(e: Event) => {
+                this.nameFilter = (e.target as HTMLInputElement).value
+                this.scheduleSearch()
+              }}
             ></dc-input>`
           : nothing}
+        ${this.valueSearch === 'idle'
+          ? nothing
+          : html`<p class="message" role="status">
+              ${this.valueSearch === 'searching' ? strings.documentsSearching : strings.documentsSearchFailed}
+            </p>`}
         ${this.documents.length === 0
           ? html`<p class="message">${strings.noDocuments}</p>`
           : this.listed().length === 0
-            ? html`<p class="message">${strings.documentsNoMatch}</p>`
+            ? this.valueSearch === 'searching'
+              ? nothing
+              : html`<p class="message">${strings.documentsNoMatch}</p>`
             : this.listed().map(
-              (d) => html`<button
+              ({ entry: d, line }) => html`<button
                 aria-current=${draft?.kind === 'existing' && draft.path === d.path}
                 @click=${() => this.leaveFor(() => this.open(d.path))}
               >
-                ${d.name.replace(/\.md$/, '')}
+                ${shownName(d)}
                 ${noteFor(conflictLabel(d, this.documents, '.md'))}
+                ${line === undefined ? nothing : html`<span class="note">${line}</span>`}
               </button>`,
             )}
       </nav>
@@ -764,6 +896,7 @@ export class LlDocuments extends LitElement {
                 @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.reject(e.detail.field)}
               ></formdown-ui>`,
               )}
+              ${draft.kind === 'existing' && this.scope ? keyed(opened, this.renderSimilar(draft.path)) : nothing}
             `
           : this.error
             ? html`<p class="error" role="alert">${this.error}</p>`
