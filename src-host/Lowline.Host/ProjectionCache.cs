@@ -20,6 +20,12 @@ internal sealed class ProjectionCache : IAsyncDisposable
 {
     private const int PageSize = 1_000;
 
+    /// <summary>
+    /// Documents written in one durable write. A batch holds the file while it commits, so a large vault
+    /// goes in several.
+    /// </summary>
+    private const int BatchSize = 2_000;
+
     private readonly ServiceProvider _provider;
     private readonly string _connectionString;
     private readonly FormbaseEngine _engine;
@@ -99,20 +105,34 @@ internal sealed class ProjectionCache : IAsyncDisposable
 
             var records = await RecordsAsync(type, cancellationToken);
             var present = documents[template.Ref];
+            // What changed, as batches each written in one durable write: accepting documents one by one
+            // waits for a commit each, which is most of what filling an empty cache costs.
+            var changes = new List<(IntakeDocument Intake, string Key, string? Fingerprint)>();
             foreach (var (key, (_, body)) in present)
             {
                 var fingerprint = Fingerprint(body);
                 if (records.TryGetValue(key, out var known) && known == fingerprint) continue;
-                await _engine.AcceptAsync(
-                    type, DocumentBody.Parse(body.ToJsonString()), recordKey: RecordKey.Create(key), cancellationToken: cancellationToken);
-                records[key] = fingerprint;
-                appended++;
+                changes.Add((IntakeDocument.Accept(DocumentBody.Parse(body.ToJsonString()), RecordKey.Create(key)), key, fingerprint));
             }
-            foreach (var key in records.Keys.Where(k => !present.ContainsKey(k)).ToList())
+            foreach (var key in records.Keys.Where(k => !present.ContainsKey(k)))
+                changes.Add((IntakeDocument.Retire(RecordKey.Create(key)), key, null));
+            foreach (var batch in changes.Chunk(BatchSize))
             {
-                await _engine.RetireAsync(type, RecordKey.Create(key), cancellationToken: cancellationToken);
-                records.Remove(key);
-                retired++;
+                await _engine.AcceptManyAsync(type, [.. batch.Select(c => c.Intake)], cancellationToken);
+                // Only once the batch is durable does the cache count it as seen.
+                foreach (var (_, key, fingerprint) in batch)
+                {
+                    if (fingerprint is null)
+                    {
+                        records.Remove(key);
+                        retired++;
+                    }
+                    else
+                    {
+                        records[key] = fingerprint;
+                        appended++;
+                    }
+                }
             }
 
             // Stale on either axis: the raw stream moved past the table, or the fields were redeclared.
