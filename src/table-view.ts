@@ -1,16 +1,13 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
+import { fileName } from './documents.js'
 import { describeError } from './errors.js'
 import { cellText, type IngestResult, type ProjectionTable, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { host, onVaultChanged, type VaultChanged, type VaultInfo } from './vault-client.js'
+import { tableCsv } from './export.js'
+import { host, onVaultChanged, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
-
-/** A document's name as the vault shows it: its file name without the extension. */
-function documentName(path: string): string {
-  return (path.split('/').pop() ?? path).replace(/\.md$/, '')
-}
 
 /** A template's documents as a table, projected by the sidecar from what is in the vault now. */
 @customElement('ll-table')
@@ -49,6 +46,9 @@ export class LlTable extends LitElement {
   @state() private ingest?: IngestResult
   @state() private waiting = true
   @state() private error = ''
+  /** What the last export wrote, said in place of the row count until the table changes. */
+  @state() private exported = ''
+  @state() private names = new Map<string, string>()
 
   private unlisten?: Promise<UnlistenFn>
 
@@ -78,6 +78,7 @@ export class LlTable extends LitElement {
     try {
       const synced = await syncVault(change)
       this.templates = synced.templates
+      this.names = synced.names
       this.ingest = synced.ingest
       this.waiting = false
       await this.show(this.template)
@@ -89,12 +90,31 @@ export class LlTable extends LitElement {
 
   private async show(template: string) {
     this.selected = template
+    this.exported = ''
     try {
       const table = await host.projection(template)
       // Another template may have been picked while this one loaded: its table wins.
       if (this.selected === template) this.table = table
     } catch (e) {
       if (this.selected === template) this.error = describeError(e)
+    }
+  }
+
+  /**
+   * Saves the table as CSV where the person picks, named after the template. What was written is said
+   * in the bar; a closed dialog says nothing.
+   */
+  private async exportTable() {
+    const table = this.table
+    if (!table) return
+    this.exported = ''
+    this.error = ''
+    try {
+      const name = `${this.names.get(table.template) ?? table.template}.csv`.replace(/[\\/:*?"<>|]/g, ' ')
+      const file = await vault.exportFile(name, tableCsv(table, (f) => this.label(f), strings.tableExportDocument), strings.tableExportFilter, 'csv')
+      if (file) this.exported = strings.tableExported(file)
+    } catch (e) {
+      this.error = describeError(e)
     }
   }
 
@@ -115,7 +135,10 @@ export class LlTable extends LitElement {
     const skipped = this.ingest?.skipped.length ?? 0
     return html`
       <div class="bar">
-        ${table ? html`<span class="message" role="status">${strings.tableCount(table.rows.length)}</span>` : nothing}
+        ${table ? html`<span class="message" role="status">${this.exported || strings.tableCount(table.rows.length)}</span>` : nothing}
+        ${table && table.rows.length
+          ? html`<dc-button size="sm" variant="secondary" @click=${() => void this.exportTable()}>${strings.tableExport}</dc-button>`
+          : nothing}
         ${skipped ? html`<span class="error">${strings.tableSkipped(skipped)}</span>` : nothing}
       </div>
       ${table
@@ -124,7 +147,7 @@ export class LlTable extends LitElement {
             .rows=${table.rows.map((row) => ({
               id: row.path,
               cells: Object.fromEntries(
-                table.columns.map((c, i) => [c.name, cellText(row.values[c.name]) || (i === 0 ? documentName(row.path) : '')]),
+                table.columns.map((c, i) => [c.name, cellText(row.values[c.name]) || (i === 0 ? fileName(row.path, '.md') : '')]),
               ),
             }))}
             empty-label=${strings.tableEmpty}

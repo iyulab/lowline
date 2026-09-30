@@ -9,7 +9,7 @@
 // `open_vault` command the picker's result goes to. Everything after that is clicks and typing.
 
 import { spawn } from 'node:child_process'
-import { cp, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -23,6 +23,8 @@ const exe = join(here, '..', 'src-tauri', 'target', 'debug', process.platform ==
 const PORT = 9223
 /** The e2e build's identifier (src-tauri/tauri.e2e.conf.json), which names its WebView2 profile. */
 const IDENTIFIER = 'com.iyulab.lowline.e2e'
+/** Where the debug shell saves exports instead of asking in a save dialog no script can answer. */
+const EXPORTS = join(tmpdir(), 'lowline-e2e-exports')
 const TEMPLATE = '서식/버그 리포트.fd.md'
 /** The fixture vault's templates: their names, references and files. */
 const BUG = { name: '버그 리포트', ref: 'bug-report@1', path: TEMPLATE }
@@ -58,7 +60,7 @@ class App {
   /** Starts the app and waits for its window. */
   static async launch() {
     const app = new App()
-    app.child = spawn(exe, [], { stdio: 'ignore' })
+    app.child = spawn(exe, [], { stdio: 'ignore', env: { ...process.env, LOWLINE_EXPORT_TO: EXPORTS } })
     try {
       const page = await findPage(PORT)
       app.cdp = await Cdp.connect(page.webSocketDebuggerUrl)
@@ -647,6 +649,17 @@ const scenarios = {
     assert.equal(row.심각도, values.심각도)
     assert.equal(row.재현됨, values.재현됨 === undefined ? '' : values.재현됨 ? '✓' : '✗')
     assert.equal(row.환경, values.환경)
+
+    // Exporting writes the table as CSV where the person picks; the debug shell saves it in EXPORTS.
+    await rm(EXPORTS, { recursive: true, force: true })
+    await mkdir(EXPORTS, { recursive: true })
+    await app.click('dc-button', 'CSV로 내보내기')
+    await app.status('버그 리포트.csv(으)로 내보냈습니다')
+    const lines = (await readFile(join(EXPORTS, '버그 리포트.csv'), 'utf8')).split('\r\n')
+    assert.equal(lines[0], '\uFEFF문서,제목,심각도,재현 절차,재현됨,환경,메모', 'labels as the table shows them, after the document')
+    assert.equal(lines.filter(Boolean).length, 2, 'the heading and one line per document')
+    assert.ok(lines[1].startsWith(`${name.replace(/\.md$/, '')},${values.제목},${values.심각도},`), lines[1])
+    await rm(EXPORTS, { recursive: true, force: true })
     await app.noAlert()
   },
   async 'opens a document from its table row'(app, vault) {

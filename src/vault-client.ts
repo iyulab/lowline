@@ -97,6 +97,12 @@ export const vault = {
   recordPresentation: (presentation: object) => invoke<void>('record_presentation', { presentation }),
   /** This device's record of the suggestions it has shown for the open vault. */
   readPresentations: () => invoke<string>('read_presentations'),
+  /**
+   * Saves an export outside the vault, where the person picks in the save dialog the shell opens.
+   * Resolves to the chosen file's name, or null when the dialog was closed.
+   */
+  exportFile: (name: string, content: string, filter: string, extension: string) =>
+    invoke<string | null>('export_file', { name, content, filter, extension }),
 }
 
 /** What changed in the vault outside the app. Paths are relative to the vault, `/`-separated. */

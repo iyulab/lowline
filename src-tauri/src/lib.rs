@@ -221,6 +221,54 @@ fn trash_file(path: String, state: State<AppState>) -> CommandResult<()> {
 }
 
 /// Deletes a file for good — once the person has chosen that for a file the trash would not take.
+/// In a debug build, `LOWLINE_EXPORT_TO` names a folder exports go to without the save dialog —
+/// the end-to-end scenarios cannot answer a system dialog. Release builds always ask.
+fn export_folder_for_tests() -> Option<PathBuf> {
+    if cfg!(debug_assertions) {
+        std::env::var_os("LOWLINE_EXPORT_TO").map(PathBuf::from)
+    } else {
+        None
+    }
+}
+
+/// Saves `content` (an export — a table as CSV) where the person picks, offering `name` in the
+/// system's save dialog. The file is chosen here, in the shell, so the page never names a path
+/// outside the vault. Returns the chosen file's name, or `None` when the dialog was closed.
+#[tauri::command]
+async fn export_file(
+    name: String,
+    content: String,
+    filter: String,
+    extension: String,
+    app: AppHandle,
+) -> CommandResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let path = match export_folder_for_tests() {
+        Some(folder) => folder.join(&name),
+        None => {
+            // An async command runs off the main thread, where the blocking dialog may wait.
+            let Some(chosen) = app
+                .dialog()
+                .file()
+                .set_file_name(&name)
+                .add_filter(&filter, &[extension.as_str()])
+                .blocking_save_file()
+            else {
+                return Ok(None);
+            };
+            chosen.into_path().map_err(|e| CommandError {
+                kind: "export-failed",
+                message: e.to_string(),
+            })?
+        }
+    };
+    tauri_kit_fs::write_atomic(&path, content.as_bytes()).map_err(|e| CommandError {
+        kind: "export-failed",
+        message: e.to_string(),
+    })?;
+    Ok(path.file_name().map(|n| n.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 fn remove_file(path: String, state: State<AppState>) -> CommandResult<()> {
     with_vault(&state, |v| v.remove(&path))
@@ -579,6 +627,7 @@ pub fn run() {
             rename_file,
             trash_file,
             remove_file,
+            export_file,
             host_status,
             host_ingest,
             host_projection,
