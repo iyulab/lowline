@@ -54,6 +54,21 @@ export const strings = {
   renameConfirm: '바꾸기',
   newName: '새 이름',
   renamed: '이름을 바꿨습니다',
+  delete: '지우기',
+  deleteConfirm: '휴지통으로 옮기기',
+  deleteDocumentHeading: '이 문서를 지울까요?',
+  deleteDocumentBody: (unsaved: boolean) =>
+    `파일을 휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다. 이 문서의 확정 값은 더 이상 제안에 쓰이지 않습니다.${unsaved ? ' 저장하지 않은 편집은 함께 사라집니다.' : ''}`,
+  deleteTemplateHeading: '이 서식을 지울까요?',
+  deleteTemplateBody: (unsaved: boolean) =>
+    `파일을 휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다. 이 서식으로 쓴 문서는 지우지 않습니다 — "서식 없는 문서"에 남습니다.${unsaved ? ' 저장하지 않은 편집은 함께 사라집니다.' : ''}`,
+  notTrashedHeading: '휴지통으로 옮기지 못했습니다',
+  notTrashedBody: '이 위치에는 휴지통이 없을 수 있습니다. 파일은 그대로 있습니다. 영구히 지우면 되살릴 수 없습니다.',
+  deletePermanently: '영구히 지우기',
+  trashed: '휴지통으로 옮겼습니다',
+  removed: '지웠습니다',
+  templateDeleted: (permanently: boolean, orphans: boolean) =>
+    `${permanently ? '서식을 지웠습니다.' : '서식을 휴지통으로 옮겼습니다.'} 그 서식으로 쓴 문서는 지우지 않았습니다${orphans ? ' — "서식 없는 문서"에 있습니다' : ''}.`,
   nameTaken: '같은 이름의 문서가 이미 있습니다.',
   templateNameTaken: '같은 이름의 서식이 이미 있습니다.',
   nameInvalid: '이름이 비었거나 파일 이름에 쓸 수 없는 글자(\\ / :* ? " < > |)가 있습니다.',

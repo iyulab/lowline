@@ -31,6 +31,7 @@ import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.j
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
 import './rename-control.js'
+import './delete-control.js'
 
 /** How long typing pauses before suggestions are asked for again. */
 const SUGGEST_DELAY_MS = 300
@@ -163,6 +164,8 @@ export class LlDocuments extends LitElement {
   @state() private importing = false
   /** The open document changed outside while it had unsaved edits: the person chooses which to keep. */
   @state() private changedOutside = false
+  /** The trash would not take the open document: whether to delete it for good is being asked. */
+  @state() private untrashable = false
   @state() private message = ''
   @state() private error = ''
 
@@ -192,7 +195,8 @@ export class LlDocuments extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('dirty')) markUnsaved('documents', this.dirty)
+    // A view no longer shown holds no edits: an outside change that lands after it left says nothing.
+    if (changed.has('dirty')) markUnsaved('documents', this.isConnected && this.dirty)
   }
 
   /**
@@ -245,6 +249,7 @@ export class LlDocuments extends LitElement {
     this.error = ''
     this.importing = false
     this.changedOutside = false
+    this.untrashable = false
     this.message = ''
     this.dirty = false
     this.template = undefined
@@ -474,6 +479,31 @@ export class LlDocuments extends LitElement {
     }
   }
 
+  /**
+   * Deletes the open document — to the system's trash, or for good once the person chose that for a
+   * file the trash would not take. Unsaved edits go with it: the question said so. What was recorded
+   * about the document stays in the event files under its id; its values no longer teach suggestions.
+   */
+  private async delete(permanently: boolean) {
+    const draft = this.draft
+    if (draft?.kind !== 'existing') return
+    this.untrashable = false
+    this.error = ''
+    this.message = ''
+    try {
+      if (permanently) await vault.remove(draft.path)
+      else await vault.trash(draft.path)
+    } catch (e) {
+      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.untrashable = true
+      else this.error = describeError(e)
+      return
+    }
+    this.reset()
+    this.draft = undefined
+    await this.refresh()
+    this.message = permanently ? strings.removed : strings.trashed
+  }
+
   /** Creates the document under a free name; never replaces an existing file. */
   private createDocument(source: string, title: string | undefined): Promise<string> {
     return createDocumentFile(this.vaultInfo.documentsDir, source, title)
@@ -496,7 +526,13 @@ export class LlDocuments extends LitElement {
     this.message = strings.imported(created)
   }
 
-  private onData(e: CustomEvent<{ formData: Record<string, unknown> }>) {
+  /**
+   * Takes the values of the form opened as draft `opened`. A form that has been replaced — another
+   * draft opened, or the document deleted — can still report once, as its focused field blurs on
+   * the way out: that is not an edit of what is open now.
+   */
+  private onData(e: CustomEvent<{ formData: Record<string, unknown> }>, opened: number) {
+    if (opened !== this.opened || !this.draft) return
     this.setValues(fieldValues(e.detail.formData))
     this.dirty = true
     this.message = ''
@@ -536,6 +572,7 @@ export class LlDocuments extends LitElement {
 
   render() {
     const draft = this.draft
+    const opened = this.opened
     return html`
       <nav aria-label=${strings.navDocuments}>
         ${this.scope
@@ -575,7 +612,14 @@ export class LlDocuments extends LitElement {
                       .name=${fileName(draft.path, '.md')}
                       @ll-rename=${(e: CustomEvent<{ name: string }>) => void this.rename(e.detail.name)}
                       @ll-rename-cancel=${() => (this.error = '')}
-                    ></ll-rename>`
+                    ></ll-rename>
+                    <ll-delete
+                      heading=${strings.deleteDocumentHeading}
+                      body=${strings.deleteDocumentBody(this.dirty)}
+                      .untrashable=${this.untrashable}
+                      @ll-delete=${(e: CustomEvent<{ permanently: boolean }>) => void this.delete(e.detail.permanently)}
+                      @ll-delete-cancel=${() => (this.untrashable = false)}
+                    ></ll-delete>`
                   : nothing}
                 ${draft.templateRef && !this.scope
                   ? html`<span class="message">${strings.documentFrom(this.templateNames.get(draft.templateRef) ?? draft.templateRef)}</span>`
@@ -590,12 +634,12 @@ export class LlDocuments extends LitElement {
               ${draft.kind === 'existing' ? noticeFor(conflictNotice(draft.path, this.documents, '.md', strings.conflictedOriginal)) : nothing}
               ${this.renderJudgment()}
               ${keyed(
-                this.opened,
+                opened,
                 html`<formdown-ui
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .fieldStates=${guard([this.suggestions, this.abstained], () => this.fieldStates())}
-                @formdown-data-update=${this.onData}
+                @formdown-data-update=${(e: CustomEvent<{ formData: Record<string, unknown> }>) => this.onData(e, opened)}
                 @formdown-suggestion-pick=${(e: CustomEvent<{ field: string; value: string }>) => this.accept(e.detail.field, e.detail.value)}
                 @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.reject(e.detail.field)}
               ></formdown-ui>`,

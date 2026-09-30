@@ -35,7 +35,7 @@ export function withoutConflictCopies(entries: readonly VaultEntry[]): { files: 
 
 /** A failed command, as the shell reports it. */
 export interface VaultFailure {
-  kind: 'outside-vault' | 'already-exists' | 'not-found' | 'io' | 'no-vault'
+  kind: 'outside-vault' | 'already-exists' | 'not-found' | 'not-trashed' | 'io' | 'no-vault'
   message: string
 }
 
@@ -75,6 +75,16 @@ export const vault = {
     await invoke<void>('rename_file', { from, to })
     wrote(from)
     wrote(to)
+  },
+  /** Moves a file to the system's trash; rejects with `not-trashed`, leaving it, where there is none. */
+  trash: async (path: string) => {
+    await invoke<void>('trash_file', { path })
+    wrote(path)
+  },
+  /** Deletes a file for good — only once the person chose that for a file the trash would not take. */
+  remove: async (path: string) => {
+    await invoke<void>('remove_file', { path })
+    wrote(path)
   },
   /** Appends a suggestion event to this device's event file in the vault. */
   recordEvent: async (event: object) => {

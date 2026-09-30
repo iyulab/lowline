@@ -4,6 +4,7 @@ import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
 import { fileName, fileNameFor, setSuggest, templateInfo } from './documents.js'
 import './rename-control.js'
+import './delete-control.js'
 import { conflictNotice, noticeFor } from './conflicts.js'
 import { describeError } from './errors.js'
 import { markUnsaved } from './unsaved.js'
@@ -100,6 +101,8 @@ export class LlTemplates extends LitElement {
   @state() private dirty = false
   /** The open template changed outside while it had unsaved edits: the person chooses which to keep. */
   @state() private changedOutside = false
+  /** The trash would not take the open template: whether to delete it for good is being asked. */
+  @state() private untrashable = false
   @state() private message = ''
   @state() private error = ''
   /** A completion is being inserted: its own input is not completed again. */
@@ -124,7 +127,8 @@ export class LlTemplates extends LitElement {
   }
 
   updated(changed: Map<string, unknown>) {
-    if (changed.has('dirty')) markUnsaved('templates', this.dirty)
+    // A view no longer shown holds no edits: an outside change that lands after it left says nothing.
+    if (changed.has('dirty')) markUnsaved('templates', this.isConnected && this.dirty)
   }
 
   /** Shows what another program did to the templates; an edit in progress is never replaced. */
@@ -294,6 +298,31 @@ export class LlTemplates extends LitElement {
     }
   }
 
+  /**
+   * Deletes the template — to the system's trash, or for good once the person chose that for a file
+   * the trash would not take. Its documents stay: they name a template the vault no longer has. The
+   * app is told with `ll-template-deleted`, and shows somewhere else.
+   */
+  private async delete(permanently: boolean) {
+    const path = this.selected
+    if (!path) return
+    this.untrashable = false
+    this.error = ''
+    this.message = ''
+    try {
+      if (permanently) await vault.remove(path)
+      else await vault.trash(path)
+    } catch (e) {
+      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.untrashable = true
+      else this.error = describeError(e)
+      return
+    }
+    this.dirty = false // what was on screen went with the file, as the question said
+    this.dispatchEvent(
+      new CustomEvent('ll-template-deleted', { detail: { path, permanently }, bubbles: true, composed: true }),
+    )
+  }
+
   /** Saves the template as it is on screen; the app's save shortcut calls this too. */
   async save() {
     if (!this.selected) return
@@ -361,6 +390,13 @@ export class LlTemplates extends LitElement {
                   @ll-rename=${(e: CustomEvent<{ name: string }>) => void this.rename(e.detail.name)}
                   @ll-rename-cancel=${() => (this.error = '')}
                 ></ll-rename>
+                <ll-delete
+                  heading=${strings.deleteTemplateHeading}
+                  body=${strings.deleteTemplateBody(this.dirty)}
+                  .untrashable=${this.untrashable}
+                  @ll-delete=${(e: CustomEvent<{ permanently: boolean }>) => void this.delete(e.detail.permanently)}
+                  @ll-delete-cancel=${() => (this.untrashable = false)}
+                ></ll-delete>
                 ${this.error
                   ? html`<span class="error" role="alert">${this.error}</span>`
                   : html`<span class="message" role="status">${this.message}</span>`}

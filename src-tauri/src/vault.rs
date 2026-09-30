@@ -29,6 +29,8 @@ pub enum VaultError {
     /// A create-only write found a file already there.
     AlreadyExists(String),
     NotFound(String),
+    /// The file could not go to the trash — the location may have none — and is still there.
+    NotTrashed(String),
     Io(io::Error),
 }
 
@@ -38,6 +40,7 @@ impl std::fmt::Display for VaultError {
             VaultError::OutsideVault(p) => write!(f, "path is outside the vault: {p}"),
             VaultError::AlreadyExists(p) => write!(f, "file already exists: {p}"),
             VaultError::NotFound(p) => write!(f, "not found: {p}"),
+            VaultError::NotTrashed(reason) => write!(f, "not moved to the trash: {reason}"),
             VaultError::Io(e) => write!(f, "{e}"),
         }
     }
@@ -58,6 +61,7 @@ impl VaultError {
             VaultError::OutsideVault(_) => "outside-vault",
             VaultError::AlreadyExists(_) => "already-exists",
             VaultError::NotFound(_) => "not-found",
+            VaultError::NotTrashed(_) => "not-trashed",
             VaultError::Io(_) => "io",
         }
     }
@@ -258,6 +262,47 @@ impl Vault {
         })
     }
 
+    /// Moves a file to the operating system's trash, where the person can restore it from.
+    ///
+    /// A location with no trash (a network share, some removable drives) is not deleted from
+    /// quietly: on Windows the system asks first, elsewhere this fails with [`VaultError::NotTrashed`]
+    /// and the file stays. [`remove`](Self::remove) deletes for good once the person has chosen that.
+    pub fn trash(&self, rel: &str) -> Result<()> {
+        let abs = self.existing_file(rel)?;
+        trash::delete(&abs).map_err(|e| VaultError::NotTrashed(e.to_string()))?;
+        if abs.exists() {
+            // Declined when the system asked whether to delete for good: nothing was deleted.
+            return Err(VaultError::NotTrashed("the file is still there".into()));
+        }
+        Ok(())
+    }
+
+    /// Deletes a file for good. For a file [`trash`](Self::trash) could not move, once the person
+    /// has chosen to delete it anyway.
+    pub fn remove(&self, rel: &str) -> Result<()> {
+        let abs = self.existing_file(rel)?;
+        tauri_kit_fs::patiently(|| fs::remove_file(&abs)).map_err(|e| match e.kind() {
+            io::ErrorKind::NotFound => VaultError::NotFound(rel.to_string()),
+            _ => VaultError::Io(e),
+        })
+    }
+
+    /// The location of a file that is there — not a folder, which the app never deletes.
+    fn existing_file(&self, rel: &str) -> Result<PathBuf> {
+        let abs = self.resolve(rel)?;
+        match fs::symlink_metadata(&abs) {
+            Ok(meta) if meta.is_file() => Ok(abs),
+            Ok(_) => Err(VaultError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "only a file is deleted",
+            ))),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                Err(VaultError::NotFound(rel.to_string()))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Appends one line to a file, creating it (and its folders) if needed.
     ///
     /// The line and its newline go out in one write and are flushed to disk before this returns.
@@ -444,6 +489,50 @@ mod tests {
         assert!(v.rename("문서/a.md", "서식/a.md").is_err());
         assert!(v.rename("문서/a.md", "../a.md").is_err());
         assert_eq!(v.read("문서/a.md").unwrap(), "first");
+    }
+
+    /// The file goes to the trash — found there, not deleted — and is purged from it again so the
+    /// test leaves nothing behind. The trash is not listable on macOS.
+    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    #[test]
+    fn trashes_a_file_into_the_system_trash() {
+        let (_dir, v) = vault();
+        v.create("문서/지울 문서.md", "gone").unwrap();
+        v.create("문서/남을 문서.md", "stays").unwrap();
+        v.trash("문서/지울 문서.md").unwrap();
+        assert!(matches!(
+            v.read("문서/지울 문서.md"),
+            Err(VaultError::NotFound(_))
+        ));
+        assert_eq!(v.read("문서/남을 문서.md").unwrap(), "stays");
+
+        let folder = v.root().join("문서");
+        let trashed: Vec<_> = trash::os_limited::list()
+            .unwrap()
+            .into_iter()
+            .filter(|item| dunce::simplified(&item.original_parent) == folder)
+            .collect();
+        assert_eq!(trashed.len(), 1, "the file is in the trash");
+        assert_eq!(trashed[0].name, "지울 문서.md");
+        trash::os_limited::purge_all(trashed).unwrap();
+    }
+
+    #[test]
+    fn removes_files_only() {
+        let (_dir, v) = vault();
+        v.create("문서/a.md", "a").unwrap();
+        v.remove("문서/a.md").unwrap();
+        assert!(matches!(v.read("문서/a.md"), Err(VaultError::NotFound(_))));
+        assert!(matches!(v.remove("문서/a.md"), Err(VaultError::NotFound(_))));
+        assert!(matches!(v.trash("문서/a.md"), Err(VaultError::NotFound(_))));
+        // A folder is never deleted, and nothing outside the vault is.
+        assert!(v.remove("문서").is_err());
+        assert!(v.trash("문서").is_err());
+        assert!(v.root().join("문서").is_dir());
+        assert!(matches!(
+            v.trash("../a.md"),
+            Err(VaultError::OutsideVault(_))
+        ));
     }
 
     #[test]

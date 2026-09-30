@@ -47,6 +47,10 @@ export class LlApp extends LitElement {
     .error {
       color: var(--dc-color-danger, #b00020);
     }
+    .notice {
+      margin: 0 0 var(--dc-space-2, 8px);
+      color: var(--dc-color-text-muted, #666);
+    }
     .welcome {
       min-height: 60vh;
       display: flex;
@@ -80,6 +84,8 @@ export class LlApp extends LitElement {
   @state() private sidebarOpen = true
   @state() private vaultInfo?: VaultInfo
   @state() private error = ''
+  /** What the app just did that left the place it showed (a template deleted); gone once elsewhere. */
+  @state() private notice = ''
   /** A document to open in the documents view, asked for from elsewhere (a table row). */
   @state() private openPath?: string
   /** The unsaved-edits question is showing; the answer settles the promise it was asked with. */
@@ -130,6 +136,14 @@ export class LlApp extends LitElement {
       this.openPath = path
       this.place = { kind: 'template', ref: template }
       this.tab = 'documents'
+    })
+    // The template showing was deleted: its place is gone, and the app shows the next one.
+    this.addEventListener('ll-template-deleted', async (e) => {
+      const { permanently } = (e as CustomEvent<{ permanently: boolean }>).detail
+      this.openPath = undefined
+      this.place = undefined
+      await this.refreshPlaces()
+      this.notice = strings.templateDeleted(permanently, this.hasOrphans)
     })
     onWritten.add(this.onTemplateWritten)
     this.unlisten = onVaultChanged(() => void this.refreshPlaces())
@@ -185,6 +199,7 @@ export class LlApp extends LitElement {
     if (this.place && placeId(place) === placeId(this.place)) return
     if (!(await confirmDiscard())) return this.requestUpdate()
     this.openPath = undefined
+    this.notice = ''
     this.place = place
     void this.refreshPlaces() // a template kept while it showed, gone outside, leaves the list
   }
@@ -193,6 +208,7 @@ export class LlApp extends LitElement {
     if (tab === this.tab) return
     if (!(await confirmDiscard())) return this.requestUpdate()
     this.openPath = undefined
+    this.notice = ''
     this.tab = tab
   }
 
@@ -338,6 +354,7 @@ export class LlApp extends LitElement {
         </dp-toolbar>
         <dp-page>
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : ''}
+          ${this.notice ? html`<p class="notice" role="status">${this.notice}</p>` : ''}
           ${!info
             ? html`<div class="welcome">
                 <ll-mark variant="wordmark" size="96" intro></ll-mark>

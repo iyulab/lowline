@@ -1007,6 +1007,73 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async "deletes a document and a template to the system trash; the template's documents stay"(app, vault) {
+    const trashedFrom = (folder) => (process.platform === 'win32' ? takeFromRecycleBin(join(vault, folder)) : Promise.resolve(null))
+    const asked = (heading) =>
+      app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open && d.heading === ${q(heading)})`, `the question "${heading}"`)
+    const doc = join(vault, '문서', '지울 문의.md')
+    await writeFile(doc, `---\ntemplate: intake@1\n요청: 지울 기록\n---\n${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
+    await app.documentsOf(INTAKE)
+    await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.trim() === '지울 문의')`, 'the document listed', { timeoutMs: 15_000 })
+    const others = (await app.documentLabels()).filter((l) => l !== '지울 문의')
+    await app.pickDocument('지울 문의')
+    await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '지울 문의'`, 'the document open')
+
+    // Asked first; cancelling leaves it.
+    await app.click('dc-button', '지우기')
+    await asked('이 문서를 지울까요?')
+    await app.click('dc-button', '취소')
+    await app.cdp.waitFor(`!__e2e.all('dc-confirm-dialog').some((d) => d.open)`, 'the question gone')
+    assert.ok(existsSync(doc), 'kept when cancelled')
+
+    // Unsaved edits: the question says they go too.
+    await app.type('[data-field-name="요청"]', '고치던 중')
+    await app.click('dc-button', '지우기')
+    await asked('이 문서를 지울까요?')
+    await app.cdp.waitFor(
+      `__e2e.all('dc-confirm-dialog').some((d) => d.open && d.textContent.includes('저장하지 않은 편집은 함께 사라집니다'))`,
+      'the unsaved edits named',
+    )
+    await app.click('dc-button', '휴지통으로 옮기기')
+    await app.status('휴지통으로 옮겼습니다')
+    assert.ok(!existsSync(doc), 'gone from the vault')
+    const trashedDoc = await trashedFrom('문서')
+    if (trashedDoc) assert.deepEqual(trashedDoc, ['지울 문의.md'], 'in the Recycle Bin, not deleted')
+    assert.deepEqual(await app.documentLabels(), others, 'the other documents stay')
+    // Deleting its edits with it was asked about: nothing is left unsaved to ask about again.
+    await app.showTable(INTAKE)
+    assert.equal((await app.where()).tab, '표')
+
+    // A template: its documents are not deleted with it, and are listed apart.
+    const template = join(vault, '서식', '지울 서식.fd.md')
+    const templateDoc = join(vault, '문서', '지울 서식 기록.md')
+    await writeFile(template, '---\nid: retiring\nversion: 1\n---\n# 지울 서식\n\n제목: ___@제목\n')
+    await writeFile(templateDoc, '---\ntemplate: retiring@1\n제목: 남길 기록\n---\n# 지울 서식\n\n제목: ___@제목\n')
+    try {
+      await app.tabOf({ name: '지울 서식' }, '서식', { timeoutMs: 15_000 })
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: retiring')`, 'the template source')
+      await app.click('dc-button', '지우기')
+      await asked('이 서식을 지울까요?')
+      await app.click('dc-button', '휴지통으로 옮기기')
+      await app.cdp.waitFor(
+        `__e2e.all('[role=status]').some((el) => el.textContent.includes('서식을 휴지통으로 옮겼습니다') && el.textContent.includes('서식 없는 문서'))`,
+        'the template deleted, its documents pointed to',
+      )
+      assert.ok(!existsSync(template), 'the template gone from the vault')
+      assert.ok(existsSync(templateDoc), 'its document stays')
+      const trashedTemplate = await trashedFrom('서식')
+      if (trashedTemplate) assert.deepEqual(trashedTemplate, ['지울 서식.fd.md'], 'in the Recycle Bin, not deleted')
+      await app.cdp.waitFor(`!__e2e.one('button.item', '지울 서식')`, 'the template gone from the sidebar')
+      await app.sidebar('서식 없는 문서', { timeoutMs: 15_000 })
+      await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.trim() === '지울 서식 기록')`, 'its document listed apart')
+    } finally {
+      await rm(template, { force: true })
+      await rm(templateDoc, { force: true })
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '서식 없는 문서')`, 'the place gone', { timeoutMs: 15_000 })
+    await app.noAlert()
+  },
+
   async 'writes an error report with the kind of failure and nothing of what was on screen'(app) {
     const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
     const before = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).length : 0
@@ -1145,7 +1212,10 @@ async function failureEvidence(app, name) {
       process.env.E2E_SCREENSHOTS ?? join(tmpdir(), 'lowline-e2e-failures', new Date().toISOString().replace(/[:.]/g, '-'))
     await screenshot(app.cdp, dir, `FAILED ${name}`)
     const said = await app.cdp.evaluate(
-      `__e2e.all('[role=alert], [role=status]').map((el) => el.getAttribute('role') + ': ' + el.textContent.trim()).filter((t) => !t.endsWith(': '))`,
+      `[
+        ...__e2e.all('dc-confirm-dialog').filter((d) => d.open).map((d) => 'dialog: ' + d.heading),
+        ...__e2e.all('[role=alert], [role=status]').map((el) => el.getAttribute('role') + ': ' + el.textContent.trim()),
+      ].filter((t) => !t.endsWith(': '))`,
     )
     console.log(`    page: ${JSON.stringify(said)}\n    evidence: ${dir}`)
   } catch (e) {
@@ -1184,6 +1254,30 @@ async function webviewGone(graceMs = 10_000) {
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
   throw new Error(`WebView2 on the ${IDENTIFIER} profile did not exit`)
+}
+
+/**
+ * The names of what the Recycle Bin holds from `folder`, taken out of it for good — so a scenario
+ * checks that a file went to the trash (and was not just deleted) and leaves nothing behind there.
+ */
+async function takeFromRecycleBin(folder) {
+  const { execFileSync } = await import('node:child_process')
+  const script = `[Console]::OutputEncoding = [Text.Encoding]::UTF8
+    $bin = (New-Object -ComObject Shell.Application).NameSpace(10)
+    $names = @()
+    foreach ($item in @($bin.Items())) {
+      if ($bin.GetDetailsOf($item, 1) -ne $env:E2E_TRASHED_FROM) { continue }
+      $names += $bin.GetDetailsOf($item, 0)
+      # Each item is two files: $R… holds the content, $I… where it came from.
+      Remove-Item -LiteralPath $item.Path -Recurse -Force
+      Remove-Item -LiteralPath (Join-Path (Split-Path $item.Path) ('$I' + (Split-Path $item.Path -Leaf).Substring(2))) -Force -ErrorAction SilentlyContinue
+    }
+    ConvertTo-Json -InputObject @($names) -Compress`
+  const out = execFileSync('powershell', ['-NoProfile', '-Command', script], {
+    encoding: 'utf8',
+    env: { ...process.env, E2E_TRASHED_FROM: folder },
+  })
+  return JSON.parse(out.trim() || '[]')
 }
 
 async function sidecarsRunning() {

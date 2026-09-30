@@ -214,6 +214,18 @@ fn rename_file(from: String, to: String, state: State<AppState>) -> CommandResul
     with_vault(&state, |v| v.rename(&from, &to))
 }
 
+/// Moves a file to the system's trash; fails with `not-trashed`, leaving it, where there is none.
+#[tauri::command]
+fn trash_file(path: String, state: State<AppState>) -> CommandResult<()> {
+    with_vault(&state, |v| v.trash(&path))
+}
+
+/// Deletes a file for good — once the person has chosen that for a file the trash would not take.
+#[tauri::command]
+fn remove_file(path: String, state: State<AppState>) -> CommandResult<()> {
+    with_vault(&state, |v| v.remove(&path))
+}
+
 /// Where this install's events go: one append-only file per device, so vaults shared through a
 /// sync service never have two devices writing the same file.
 const EVENTS_DIR: &str = ".lowline/events";
@@ -534,6 +546,8 @@ pub fn run() {
             write_file,
             create_file,
             rename_file,
+            trash_file,
+            remove_file,
             host_status,
             host_ingest,
             host_projection,
