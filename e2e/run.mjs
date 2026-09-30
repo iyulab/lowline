@@ -1323,7 +1323,12 @@ async function failureEvidence(app, name) {
         }
         return out })()`,
     )
-    console.log(`    page: ${JSON.stringify(said)}\n    sidecar: ${JSON.stringify(sidecar)}\n    evidence: ${dir}`)
+    // The error reports hold a failure's kind and frames only, nothing of the page: safe to print.
+    const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
+    const reported = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).slice(-3) : []
+    console.log(
+      `    page: ${JSON.stringify(said)}\n    sidecar: ${JSON.stringify(sidecar)}\n    reports: ${reported.join('\n             ')}\n    evidence: ${dir}`,
+    )
   } catch (e) {
     console.log(`    (no evidence: ${e.message})`)
   }
