@@ -85,6 +85,20 @@ export function newDocument(templateSource: string, values: FieldValues, id: str
   return updateFrontMatter(templateBody(templateSource), { template: ref, lowline: { id }, ...valueChanges(values) })
 }
 
+/**
+ * A document moved to its template's revision now: its front matter stays as it is — every value it holds,
+ * one in a field the revision no longer has included — naming the revision, above the revision's body. The
+ * document is still the same document: it keeps its id and what it confirmed.
+ */
+export function reviseDocument(documentSource: string, templateSource: string): string {
+  const { ref } = templateInfo(templateSource)
+  const span = readFrontMatter(documentSource)?.frontMatter.span
+  const newline = documentSource.includes('\r\n') ? '\r\n' : '\n'
+  const body = templateBody(templateSource)
+  const moved = span ? documentSource.slice(0, span.end) + newline + body : body
+  return updateFrontMatter(moved, { template: ref })
+}
+
 /** Gives a document the id `id`; other keys under `lowline`, and the rest of the file, stay as they are. */
 export function setDocumentId(documentSource: string, id: string): string {
   const lowline = readFrontMatter(documentSource)?.frontMatter.data.lowline

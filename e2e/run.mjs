@@ -1355,6 +1355,18 @@ const scenarios = {
       assert.match(await readFile(files.at(-1), 'utf8'), /template: desk@2/)
       assert.match(await readFile(files[1], 'utf8'), /template: desk@1/)
 
+      // A document of the earlier revision opens as it was written, says so, and moves to the revision now on request.
+      await app.openDocument(DESK, '안내-2')
+      const written = await app.cdp.waitFor(`__e2e.all('p.message').map((p) => p.textContent.trim()).find((t) => t.startsWith('이 문서는 서식 1판으로'))`, 'the line about its revision')
+      assert.match(written, /\(지금 2판\)/)
+      await app.click('dc-button', '지금 판으로 옮기기')
+      await app.status('지금 판으로 옮겼습니다')
+      const moved = await readFile(files[2], 'utf8')
+      assert.match(moved, /template: desk@2/)
+      assert.match(moved, /요청: 노트북 화면이 깨졌어요/)
+      assert.match(moved, /담당: 장비/)
+      assert.ok(!(await app.cdp.evaluate(`__e2e.all('p.message').some((p) => p.textContent.includes('판으로 쓰였습니다'))`)), 'the line gone once moved')
+
       // A second file with the same id is one template twice: its page says so.
       const copy = join(vault, '서식', '안내 데스크 (옛).fd.md')
       files.push(copy)

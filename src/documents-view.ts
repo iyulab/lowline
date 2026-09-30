@@ -11,6 +11,7 @@ import {
   documentFrontMatter,
   fieldValues,
   newDocument,
+  reviseDocument,
   setDocumentId,
   templateBody,
   templateInfo,
@@ -18,7 +19,7 @@ import {
   type FieldValues,
 } from './documents.js'
 import { documentId, newDocumentId, sharedIds } from './identity.js'
-import { currentRefs, revisedRef } from './template-revision.js'
+import { currentRefs, revisedRef, templateVersion } from './template-revision.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import type { Abstention, CaseHit, Suggestion, TemplateSnapshot } from './projection.js'
@@ -210,6 +211,8 @@ export class LlDocuments extends LitElement {
   @state() private templateNames = new Map<string, string>()
   /** Each template id's reference now: a document of an earlier revision is read as its template now. */
   private currentRefs = new Map<string, string>()
+  /** The open document's template reference as its file names it, when that is an earlier revision. */
+  @state() private writtenWith?: string
   /** Counts accepted suggestions, so the form is handed its values again. */
   @state() private applied = 0
   private suggestTimer?: ReturnType<typeof setTimeout>
@@ -365,6 +368,7 @@ export class LlDocuments extends LitElement {
   private reset() {
     this.error = ''
     this.importing = false
+    this.writtenWith = undefined
     this.changedOutside = false
     this.untrashable = false
     this.originalUntrashable = false
@@ -526,6 +530,7 @@ export class LlDocuments extends LitElement {
       // Written with an earlier revision, it is a document of its template as the template is now.
       const templateRef = template === undefined ? template : revisedRef(template, this.currentRefs)
       this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef }
+      this.writtenWith = template !== templateRef && template !== undefined ? template : undefined
       this.opened++
       void this.prepareSuggestions(this.draft.templateRef)
     } catch (e) {
@@ -541,6 +546,29 @@ export class LlDocuments extends LitElement {
   /** Puts the cursor in the box that finds documents, if there are any to find; the app's Ctrl+F calls this. */
   focusFinder() {
     this.renderRoot.querySelector<HTMLElement>('nav dc-input')?.focus()
+  }
+
+  /**
+   * Moves the open document, written with an earlier revision, to its template's revision now: its values
+   * stay, its body becomes the revision's (`reviseDocument`). Unsaved edits are saved first.
+   */
+  private readonly reviseDocument = async () => {
+    if (this.dirty) {
+      await this.save()
+      if (this.dirty) return // not saved: the error says why
+    }
+    const draft = this.draft
+    if (draft?.kind !== 'existing' || !this.scope) return
+    this.error = ''
+    try {
+      const source = reviseDocument(draft.source, await vault.read(this.scope.path))
+      await vault.writeIfUnchanged(draft.path, draft.source, source)
+      await this.refresh()
+      await this.open(draft.path)
+      this.message = strings.revised
+    } catch (e) {
+      this.error = (e as { kind?: string }).kind === 'changed-outside' ? strings.changedOutsideDirty : describeError(e)
+    }
   }
 
   /** Saves the open document; the app's save shortcut calls this too. */
@@ -905,6 +933,10 @@ export class LlDocuments extends LitElement {
                       @ll-keep-copy-cancel=${() => (this.originalUntrashable = false)}
                     ></ll-keep-copy>`,
                   })
+                : nothing}
+              ${draft.kind === 'existing' && this.writtenWith && draft.templateRef
+                ? html`<p class="message">${strings.writtenWith(templateVersion(this.writtenWith), templateVersion(draft.templateRef))}</p>
+                    <div class="bar"><dc-button size="sm" variant="secondary" @click=${this.reviseDocument}>${strings.reviseDocument}</dc-button></div>`
                 : nothing}
               ${this.renderJudgment()}
               ${keyed(

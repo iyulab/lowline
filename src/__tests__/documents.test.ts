@@ -11,6 +11,7 @@ import {
   newDocument,
   setDocumentId,
   setSuggest,
+  reviseDocument,
   sharedId,
   strayFields,
   templateBody,
@@ -280,5 +281,22 @@ describe('sharedId', () => {
   it('has none for a template alone with its id, or one whose front matter cannot be read', () => {
     expect(sharedId(source, '서식/접수.fd.md', templates.slice(0, 1))).toEqual([])
     expect(sharedId('# 앞부분 없음\n', '서식/접수.fd.md', templates)).toEqual([])
+  })
+})
+
+describe('reviseDocument', () => {
+  const v2 = '---\nid: intake\nversion: 2\n---\n# 접수 (2판)\n\n요청: ___@요청\n\n@긴급: [select options="보통,급함"]\n'
+  const old = '---\ntemplate: intake@1\nlowline:\n  id: d-1\n  keep: yes\n요청: 노트북\n담당: 장비\n---\n# 접수\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+
+  it("keeps every value and the document's id, names the revision now, and takes its body", () => {
+    const moved = reviseDocument(old, v2)
+    const { template, id, values } = documentFrontMatter(moved)
+    expect(template).toBe('intake@2')
+    expect(id).toBe('d-1')
+    // A field the revision no longer has keeps its value in the file.
+    expect(values).toEqual({ 요청: '노트북', 담당: '장비' })
+    expect(readFrontMatter(moved)?.frontMatter.data.lowline).toEqual({ id: 'd-1', keep: 'yes' })
+    expect(moved.endsWith('# 접수 (2판)\n\n요청: ___@요청\n\n@긴급: [select options="보통,급함"]\n')).toBe(true)
+    expect(parseFormdown(moved).forms.map((f) => f.name)).toEqual(['요청', '긴급'])
   })
 })

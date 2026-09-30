@@ -185,6 +185,9 @@ export const strings = {
   learningAt: '시각',
   learningShare: '제안이 나온 칸 중 맞은 비율',
   suggestion: '제안',
+  writtenWith: (version: string, now: string) => `이 문서는 서식 ${version}판으로 쓰였습니다(지금 ${now}판). 값과 배운 것은 이 서식의 것으로 이어집니다 — 본문도 지금 판으로 옮길 수 있습니다.`,
+  reviseDocument: '지금 판으로 옮기기',
+  revised: '지금 판으로 옮겼습니다',
   suggestionSource: (name: string) => `제안 · 비슷한 기록: ${name}`,
   /** Each similar record with the value it confirmed: the evidence behind one suggestion, other values included. */
   suggestionSources: (cases: { name: string; value: string }[]) =>
