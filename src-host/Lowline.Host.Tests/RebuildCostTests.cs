@@ -73,6 +73,10 @@ public sealed class RebuildCostTests
                 var thresholds = Stopwatch.StartNew();
                 await vault.ThresholdsSelected.WaitAsync(Ct);
                 thresholds.Stop();
+                // The text index fills apart from the ingest too; a search waits for it.
+                var cases = Stopwatch.StartNew();
+                Assert.Equal(count, await vault.CasesIndexed.WaitAsync(Ct));
+                cases.Stop();
                 var unchanged = Stopwatch.StartNew();
                 Assert.Equal(0, (await vault.IngestAsync(snapshot, Ct)).Appended);
                 unchanged.Stop();
@@ -110,7 +114,7 @@ public sealed class RebuildCostTests
                 Assert.Equal(0, (await vault.IngestAsync(widened, Ct)).Appended);
                 project.Stop();
 
-                line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms (suggestions from nothing {fresh.ElapsedMilliseconds} ms, projection {project.ElapsedMilliseconds} ms) · thresholds {thresholds.ElapsedMilliseconds} ms · "
+                line = $"{count} docs · first ingest {first.ElapsedMilliseconds} ms (suggestions from nothing {fresh.ElapsedMilliseconds} ms, projection {project.ElapsedMilliseconds} ms) · thresholds {thresholds.ElapsedMilliseconds} ms · text index {cases.ElapsedMilliseconds} ms (after thresholds) · "
                     + $"unchanged {unchanged.ElapsedMilliseconds} ms · one edit {edit.ElapsedMilliseconds} ms (suggestions {suggestions.ElapsedMilliseconds} ms) · "
                     + $"table {table.ElapsedMilliseconds} ms · suggest {suggest.ElapsedMilliseconds} ms · curves {curves.ElapsedMilliseconds} ms · "
                     + $"managed heap {GC.GetTotalMemory(forceFullCollection: true) / (1024 * 1024)} MB";
