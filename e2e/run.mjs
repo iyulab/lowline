@@ -1435,6 +1435,32 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '경계 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'lists a template once after its version is edited and saved on its page'(app, vault) {
+    const REVISED = { name: '개정 서식', ref: 'revised@1', path: '서식/개정 서식.fd.md' }
+    const file = join(vault, REVISED.path)
+    const source = '---\nid: revised\nversion: 1\n---\n# 개정\n\n제목: ___@제목\n'
+    await writeFile(file, source)
+    await app.tabOf(REVISED, '서식', { timeoutMs: 30_000 })
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: revised')`, 'the template source')
+
+    await app.type('textarea', source.replace('version: 1', 'version: 2'))
+    await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
+    await app.status('저장했습니다')
+    assert.match(await readFile(file, 'utf8'), /version: 2/)
+    // The same file under its new reference: listed once, and still the place showing.
+    const listed = `__e2e.all('button.item:not(.group-toggle)').filter((b) => b.textContent.replace(/\\s+/g, ' ').trim().endsWith(' 개정 서식')).length`
+    await app.cdp.waitFor(`(${listed}) === 1 && __e2e.one('button.item[aria-current="page"]')?.textContent.trim().endsWith('개정 서식')`, 'the template listed once and showing', { timeoutMs: 15_000 })
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    assert.equal(await app.cdp.evaluate(listed), 1, 'still listed once after the vault is read again')
+    assert.equal(await app.value('textarea'), source.replace('version: 1', 'version: 2'), 'the source on screen is the file')
+    await app.noAlert()
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await rm(file)
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '개정 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'saves a document whose values were all cleared, named by its day alone'(app, vault) {
     const before = new Set(await documentsIn(vault))
     await app.newDocument(INTAKE)

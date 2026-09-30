@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, type TemplateItem } from '../template-scope.js'
+import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesAfterRead, type TemplateItem } from '../template-scope.js'
 import type { VaultEntry } from '../vault-client.js'
 
 const intake: TemplateItem = { ref: 'intake@1', name: '접수', path: '서식/접수.fd.md' }
@@ -54,5 +54,28 @@ describe('documentsOf', () => {
 
   it('lists as without a template the documents naming none or one not in the vault', () => {
     expect(documentsOf(entries, templateOf, null, known).map((d) => d.path)).toEqual(['문서/c.md', '문서/메모.md'])
+  })
+})
+
+describe('templatesAfterRead', () => {
+  const v1: TemplateItem = { ref: 'intake@1', name: '접수', path: '서식/접수.fd.md' }
+  const v2: TemplateItem = { ...v1, ref: 'intake@2' }
+
+  it('lists what was read, and finds the one showing by its reference', () => {
+    expect(templatesAfterRead([bug, intake], intake)).toEqual({ templates: [bug, intake], shown: intake })
+    expect(templatesAfterRead([bug, intake], undefined)).toEqual({ templates: [bug, intake] })
+  })
+
+  it('keeps the one showing listed when its file was removed outside', () => {
+    expect(templatesAfterRead([bug], intake)).toEqual({ templates: [bug, intake], shown: intake })
+  })
+
+  it('lists a template whose version was edited once, under the reference its file has now', () => {
+    expect(templatesAfterRead([bug, v2], v1)).toEqual({ templates: [bug, v2], shown: v2 })
+  })
+
+  it('finds a renamed template by its reference, not its old file', () => {
+    const renamed = { ...intake, name: '받기', path: '서식/받기.fd.md' }
+    expect(templatesAfterRead([bug, renamed], intake)).toEqual({ templates: [bug, renamed], shown: renamed })
   })
 })

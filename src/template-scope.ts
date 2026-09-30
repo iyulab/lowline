@@ -19,6 +19,21 @@ export const NEW_TEMPLATE = 'new-template'
 
 const TEMPLATE_PREFIX = 'template:'
 
+/**
+ * The templates to list once the vault is read again, and which of them is the one that was showing.
+ * A template removed outside while it shows stays listed until it is left: what is on screen is held
+ * nowhere else, and saving makes it again. One whose file is still there under another reference —
+ * its id or version edited — was not removed: it is listed once, under the reference its file has now.
+ */
+export function templatesAfterRead(
+  read: readonly TemplateItem[],
+  shown: TemplateItem | undefined,
+): { templates: TemplateItem[]; shown?: TemplateItem } {
+  if (!shown) return { templates: [...read] }
+  const now = read.find((t) => t.ref === shown.ref) ?? read.find((t) => t.path === shown.path)
+  return now ? { templates: [...read], shown: now } : { templates: [...read, shown], shown }
+}
+
 export function placeId(place: Place): string {
   return place.kind === 'template' ? TEMPLATE_PREFIX + place.ref : place.kind
 }

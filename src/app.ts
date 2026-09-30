@@ -11,7 +11,7 @@ import { createSampleTemplate, createTemplateFile } from './document-files.js'
 import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
 import { strings } from './strings.js'
-import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, type Place, type TemplateItem } from './template-scope.js'
+import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesAfterRead, type Place, type TemplateItem } from './template-scope.js'
 import { onVaultChanged, onWritten, type VaultInfo } from './vault-client.js'
 import { openVault, readVault } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
@@ -175,16 +175,17 @@ export class LlApp extends LitElement {
       const templateOf = new Map(read.documents.map((d) => [d.path, d.template]))
       const place = this.place
       const shown = place?.kind === 'template' ? this.templates.find((t) => t.ref === place.ref) : undefined
-      // A template removed outside while it shows stays listed until it is left: what is on screen
-      // is held nowhere else, and saving makes it again.
-      const gone = shown && !read.templateItems.some((t) => t.ref === shown.ref) ? [shown] : []
-      this.templates = [...read.templateItems, ...gone]
+      const after = templatesAfterRead(read.templateItems, shown)
+      this.templates = after.templates
       this.hasOrphans = documentsOf(read.documentEntries, templateOf, null, new Set(read.names.keys())).length > 0
+      // The template showing may be the same file under a reference edited in it: the place follows the file.
+      const now: Place | undefined = after.shown && place?.kind === 'template' ? { kind: 'template', ref: after.shown.ref } : place
       const stays =
-        place?.kind === 'learning' ||
-        (place?.kind === 'orphans' && this.hasOrphans) ||
-        (place?.kind === 'template' && this.templates.some((t) => t.ref === place.ref))
+        now?.kind === 'learning' ||
+        (now?.kind === 'orphans' && this.hasOrphans) ||
+        (now?.kind === 'template' && this.templates.some((t) => t.ref === now.ref))
       if (!stays) this.place = this.templates[0] ? { kind: 'template', ref: this.templates[0].ref } : undefined
+      else if (now?.kind === 'template' && place?.kind === 'template' && now.ref !== place.ref) this.place = now
     } catch (e) {
       this.error = describeError(e)
     }
