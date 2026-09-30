@@ -121,6 +121,23 @@ jobs:
       - name: End-to-end scenarios
         run: npm run test:e2e
 
+      # The same scenarios with the vault opened through this machine's administrative share, as a
+      # vault on a network share is: no trash, paths starting \\. Runs where the share is reachable;
+      # where it is not, the run says so rather than passing quietly.
+      - name: Administrative share
+        id: share
+        run: |
+          # The vault is made under the temp folder, so it is that drive's share the scenarios go through.
+          $share = "\\localhost\" + (Split-Path $env:TEMP -Qualifier).TrimEnd(':') + "$"
+          if (Test-Path "$share\") { "reachable=true" >> $env:GITHUB_OUTPUT }
+          else { Write-Output "::warning::$share is not reachable on this runner; the scenarios did not run over SMB" }
+
+      - name: End-to-end scenarios over SMB
+        if: steps.share.outputs.reachable == 'true'
+        env:
+          E2E_VAULT_UNC: '1'
+        run: npm run test:e2e
+
       # What the app runs the sidecar from, when a scenario failed: a missing file shows here.
       - name: Sidecar files
         if: failure()
