@@ -292,4 +292,52 @@ public sealed class SuggestionsTests
         Assert.Equal("memory", fromSimilar!.Mode);
         Assert.Contains(fromSimilar.Source, new[] { "문서/1.md", "doc-2", "문서/3.md" });
     }
+
+    [Fact]
+    public async Task A_value_that_backs_another_about_one_time_in_three_does_not_answer_for_it()
+    {
+        // Support requests written from a few stock sentences, so settled documents repeat one another and
+        // answer each other right by their own requests. 채널 전화 leans to 배송 but backs it only about a third of
+        // the time, and 제품 backs nothing: neither may answer 분류 for a request unlike any settled one, however
+        // well the repeats did on the replay.
+        var support = new TemplateSnapshot("support@1",
+        [
+            new TemplateField("문의", "textarea"),
+            new TemplateField("채널", "select"),
+            new TemplateField("제품", "select"),
+            new TemplateField("분류", "select"),
+        ], Suggest: ["분류"]);
+        var sentences = new Dictionary<string, string[]>
+        {
+            ["고장"] = ["정수기에서 물이 새요", "전원이 들어오지 않아요", "소음이 심해졌어요"],
+            ["배송"] = ["주문한 제품이 아직 안 왔어요", "배송 조회가 안 돼요", "다른 주소로 받고 싶어요"],
+            ["환불"] = ["환불 받고 싶어요", "결제가 두 번 됐어요", "반품 접수는 어떻게 하나요"],
+            ["설치"] = ["설치 기사 방문 일정을 잡고 싶어요", "벽걸이로 달 수 있나요", "이사 후 재설치 문의"],
+        };
+        var kinds = sentences.Keys.ToArray();
+        string[] products = ["정수기", "공기청정기", "비데"];
+        var random = new Random(586);
+        var vault = new VaultSnapshot([support],
+            [.. Enumerable.Range(0, 200).Select(i =>
+            {
+                var kind = kinds[random.Next(kinds.Length)];
+                var phone = random.NextDouble() < (kind == "배송" ? 0.6 : 0.25);
+                var channel = phone ? "전화" : random.Next(2) == 0 ? "채팅" : "이메일";
+                var json = $$"""{"문의": "{{sentences[kind][random.Next(3)]}}", "채널": "{{channel}}", "제품": "{{products[random.Next(3)]}}", "분류": "{{kind}}"}""";
+                return new DocumentSnapshot($"문서/{i:D3}.md", "support@1", Values(json), Modified: i);
+            })]);
+        var byPhone = vault.Documents.Where(d => d.Values["채널"].GetString() == "전화").ToList();
+        var deliveryShare = (double)byPhone.Count(d => d.Values["분류"].GetString() == "배송") / byPhone.Count;
+        Assert.InRange(deliveryShare, 0.25, 0.45); // the lean the case is about, measured on the data itself
+        Assert.Equal("배송", byPhone.GroupBy(d => d.Values["분류"].GetString()).MaxBy(g => g.Count())!.Key);
+
+        var suggestions = await Suggestions.BuildAsync(vault, Ct);
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
+
+        var suggestion = await suggestions.SuggestAsync(new SuggestRequest("support@1", "분류",
+            Values("""{"문의": "정수기에서 물이 조금씩 흘러나와요", "채널": "전화", "제품": "정수기"}""")), Ct);
+        Assert.NotNull(suggestion);
+        Assert.NotEqual("key", suggestion.Mode);
+        Assert.NotEqual("배송", suggestion.Value);
+    }
 }
