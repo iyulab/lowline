@@ -1006,6 +1006,20 @@ const scenarios = {
     assert.ok(await app.cdp.evaluate(`__e2e.all('dc-data-table').some((t) => t.shadowRoot.textContent.includes('조건에 맞는 문서가 없습니다'))`))
     await typeIn('칸에 든 글자', '')
     await shows(intake.length, `문서 ${intake.length}건`)
+
+    // The document list narrows by name as it is typed.
+    await app.documentsOf(INTAKE)
+    await app.cdp.waitFor(
+      `__e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button')]).length === ${intake.length}`,
+      'the whole list',
+    )
+    const all = await app.documentLabels()
+    await typeIn('이름으로 찾기', 'a-1')
+    await app.cdp.waitFor(`(${JSON.stringify(all.filter((l) => l.toLowerCase().includes('a-1')))}).join('|') === __e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button')]).map((b) => b.textContent.replace(/\\s+/g, ' ').trim()).join('|')`, 'the list narrowed to A-1, ignoring case')
+    await typeIn('이름으로 찾기', '어디에도 없는 이름')
+    await app.cdp.waitFor(`__e2e.all('p.message').some((p) => p.textContent.includes('이름이 맞는 문서가 없습니다'))`, 'nothing matching said')
+    await typeIn('이름으로 찾기', '')
+    assert.deepEqual(await app.documentLabels(), all)
     await app.noAlert()
   },
 
@@ -1440,6 +1454,42 @@ const scenarios = {
 
     await app.learning()
     await rm(join(vault, '문서', created[0]))
+  },
+
+  async "shows a field only while its condition holds, and keeps its value when it is hidden"(app, vault) {
+    const ORDER = { name: '주문', ref: 'order@1', path: '서식/주문.fd.md' }
+    const template = join(vault, ORDER.path)
+    await writeFile(
+      template,
+      '---\nid: order\nversion: 1\n---\n# 주문\n\n품목: ___@품목\n\n@구분: [radio options="개인,법인"]\n\n@회사명: [text visible-if="구분=법인" required-if="구분=법인"]\n',
+    )
+    const shown = `(() => { const el = __e2e.one('input[name="회사명"]'); return !!el && !el.closest('.formdown-field').hidden })()`
+    const before = new Set(await readdir(join(vault, '문서')))
+    try {
+      await app.newDocument(ORDER)
+      await app.cdp.waitFor(`!!__e2e.one('input[name="회사명"]')`, 'the form')
+      await app.cdp.waitFor(`!${shown}`, 'the company field hidden before 구분 is 법인')
+      await app.click('input[name="구분"][value="법인"]')
+      await app.cdp.waitFor(shown, 'the company field shown for 법인')
+      assert.equal(await app.cdp.evaluate(`__e2e.one('input[name="회사명"]').required`), true, 'and required')
+      await app.type('input[name="회사명"]', '주식회사 경계')
+
+      // Hidden again, the value stays — and is saved with the document.
+      await app.click('input[name="구분"][value="개인"]')
+      await app.cdp.waitFor(`!${shown}`, 'the company field hidden for 개인')
+      await app.type('[data-field-name="품목"]', '의자')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
+      await app.noAlert()
+      const [created] = (await readdir(join(vault, '문서'))).filter((n) => !before.has(n))
+      const saved = await fileValues(join(vault, '문서', created))
+      assert.deepEqual([saved.구분, saved.회사명, saved.품목], ['개인', '주식회사 경계', '의자'])
+      await app.learning()
+      await rm(join(vault, '문서', created))
+    } finally {
+      await rm(template, { force: true })
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '주문')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
   async 'writes an error report with the kind of failure and nothing of what was on screen'(app) {
