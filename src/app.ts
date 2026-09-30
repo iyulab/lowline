@@ -17,11 +17,19 @@ import { openVault, readVault } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
 import './templates-view.js'
 import './documents-view.js'
+import type { LlDocuments } from './documents-view.js'
 import './table-view.js'
 import './learning-view.js'
 
 /** What of a template shows: its table, its source, or its documents. */
 type Tab = 'table' | 'template' | 'documents'
+
+/** Whether a modal dialog is open anywhere in the page — dialogs live in components' shadow roots. */
+function modalOpen(root: Document | ShadowRoot): boolean {
+  if (root.querySelector('dialog[open]')) return true
+  for (const el of root.querySelectorAll('*')) if (el.shadowRoot && modalOpen(el.shadowRoot)) return true
+  return false
+}
 
 @customElement('ll-app')
 export class LlApp extends LitElement {
@@ -104,22 +112,44 @@ export class LlApp extends LitElement {
   }
 
   /**
-   * Ctrl+S (⌘S) saves whatever is being edited — a template or a document — the same way from any
-   * field in it, or with focus on the page itself (after a button that went away). It is heard on the
-   * window, so the web view's own "save page" never runs.
+   * The app's shortcuts, heard on the window so the web view's own (save page, new window, find in
+   * page) never run, and the same from any field or with focus on the page itself:
+   * - Ctrl+S (⌘S) saves whatever is being edited — a template or a document.
+   * - Ctrl+N starts a new document of the template shown, on its documents tab.
+   * - Ctrl+F goes to the box that finds the template's documents.
+   * While a dialog is open they do nothing: the question on screen is answered first.
    */
-  private readonly onSaveShortcut = (e: KeyboardEvent) => {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's') return
+  private readonly onShortcut = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
+    const key = e.key.toLowerCase()
+    if (key !== 's' && key !== 'n' && key !== 'f') return
     e.preventDefault()
-    const editor = this.renderRoot.querySelector<HTMLElement & { save(): Promise<void> }>('ll-templates, ll-documents')
-    void editor?.save()
+    if (modalOpen(document)) return
+    if (key === 's') {
+      const editor = this.renderRoot.querySelector<HTMLElement & { save(): Promise<void> }>('ll-templates, ll-documents')
+      void editor?.save()
+    } else void this.toDocuments((documents) => (key === 'n' ? documents.newDocument() : documents.focusFinder()))
+  }
+
+  /** Shows the documents tab of the template shown, then does `then` there; elsewhere does nothing. */
+  private async toDocuments(then: (documents: LlDocuments) => void) {
+    if (this.place?.kind !== 'template') return
+    if (this.tab !== 'documents') {
+      await this.switchTab('documents')
+      if ((this.tab as Tab) !== 'documents') return // the edits were kept: the tab stayed
+      await this.updateComplete
+    }
+    const documents = this.renderRoot.querySelector<LlDocuments>('ll-documents')
+    if (!documents) return
+    await documents.updateComplete
+    then(documents)
   }
 
   connectedCallback() {
     super.connectedCallback()
     // Typing holds the caret solid; a pause lets it blink again.
     this.addEventListener('keydown', () => this.marks.forEach((m) => m.hold()))
-    window.addEventListener('keydown', this.onSaveShortcut)
+    window.addEventListener('keydown', this.onShortcut)
     this.addEventListener('pointerdown', () => this.marks.forEach((m) => m.wake()))
     // A save is a confirmation: the mark shows "not yet" becoming "confirmed".
     this.addEventListener('ll-confirmed', () => this.marks.forEach((m) => m.confirm()))
@@ -157,7 +187,7 @@ export class LlApp extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
-    window.removeEventListener('keydown', this.onSaveShortcut)
+    window.removeEventListener('keydown', this.onShortcut)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
   }

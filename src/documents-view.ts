@@ -527,6 +527,16 @@ export class LlDocuments extends LitElement {
     }
   }
 
+  /** Starts a new document of the template, once unsaved edits are let go; the app's Ctrl+N calls this. */
+  newDocument() {
+    if (this.scope) this.leaveFor(() => this.startNew(this.scope!.path))
+  }
+
+  /** Puts the cursor in the box that finds documents, if there are any to find; the app's Ctrl+F calls this. */
+  focusFinder() {
+    this.renderRoot.querySelector<HTMLElement>('nav dc-input')?.focus()
+  }
+
   /** Saves the open document; the app's save shortcut calls this too. */
   async save() {
     const draft = this.draft

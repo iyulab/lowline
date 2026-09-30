@@ -1471,6 +1471,31 @@ const scenarios = {
     }
   },
 
+  async 'starts a new document with Ctrl+N and finds with Ctrl+F; while a question is open, the shortcuts wait'(app, vault) {
+    const ctrl = (key) => app.cdp.press(key, { code: `Key${key.toUpperCase()}`, modifiers: 2, keyCode: key.toUpperCase().charCodeAt(0) })
+    const emptyForm = `__e2e.one('[data-field-name="요청"]')?.textContent === ''`
+    await app.showTable(INTAKE)
+    await ctrl('n')
+    await app.cdp.waitFor(emptyForm, 'a new document from the table')
+    assert.deepEqual(await app.where(), { place: INTAKE.name, tab: '문서' })
+
+    // A shortcut does not act under the question it would answer.
+    const before = await documentsIn(vault)
+    await app.type('[data-field-name="요청"]', '프린터 용지가 걸려요')
+    await ctrl('n')
+    await app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open)`, 'the unsaved-edits question')
+    await ctrl('s')
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    assert.deepEqual(await documentsIn(vault), before, 'nothing saved under the question')
+    assert.ok(await app.cdp.evaluate(`__e2e.all('dc-confirm-dialog').some((d) => d.open)`), 'the question still open')
+    await app.answerUnsaved('편집 버리기')
+    await app.cdp.waitFor(emptyForm, 'a new document again')
+
+    await ctrl('f')
+    await app.cdp.waitFor(`(() => { let el = document.activeElement; while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement; return el?.type === 'search' })()`, 'the find box focused')
+    await app.noAlert()
+  },
+
   async 'keeps a narrow window usable: the sidebar is a drawer that gives way to a pick and to its backdrop'(app) {
     // Below the shell's desktop breakpoint (1024px), and above the window's minimum width (720).
     const drawerOpen = () => app.cdp.evaluate(`__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`)
