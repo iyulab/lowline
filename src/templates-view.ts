@@ -34,13 +34,24 @@ export class LlTemplates extends LitElement {
       gap: var(--dc-space-2, 8px);
       min-height: 0;
     }
+    /* The source is written here, so it is a plain text area (caret, selection, typing that undoes
+       as one) drawn in the design system's colors, like its fields. */
     textarea {
       flex: 1;
       min-height: 20rem;
+      box-sizing: border-box;
       font-family: ui-monospace, monospace;
       font-size: 13px;
       padding: var(--dc-space-2, 8px);
+      border: 1px solid var(--dc-color-border, #e2e2e4);
+      border-radius: var(--dc-radius-sm, 4px);
+      background: var(--dc-color-bg, #ffffff);
+      color: var(--dc-color-text, #1a1a1e);
       resize: none;
+    }
+    textarea:focus-visible {
+      outline: var(--dc-focus-ring-width, 2px) solid var(--dc-color-accent, #2563eb);
+      outline-offset: 1px;
     }
     .preview {
       flex: 1;
@@ -49,10 +60,19 @@ export class LlTemplates extends LitElement {
       border-radius: var(--dc-radius-md, 6px);
       padding: var(--dc-space-3, 12px);
     }
+    /* When the column is narrow the status goes to a line of its own; a heading or a button never breaks. */
     .bar {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: var(--dc-space-2, 8px);
+    }
+    .bar > * {
+      white-space: nowrap;
+    }
+    .bar > [role='status'],
+    .bar > [role='alert'] {
+      white-space: normal;
     }
     .message {
       color: var(--dc-color-text-muted, #666);

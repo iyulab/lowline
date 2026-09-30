@@ -94,10 +94,19 @@ export class LlDocuments extends LitElement {
       min-height: 0;
       overflow: auto;
     }
+    /* When the column is narrow the status goes to a line of its own; a heading or a button never breaks. */
     .bar {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: var(--dc-space-2, 8px);
+    }
+    .bar > * {
+      white-space: nowrap;
+    }
+    .bar > [role='status'],
+    .bar > [role='alert'] {
+      white-space: normal;
     }
     .message {
       color: var(--dc-color-text-muted, #666);
