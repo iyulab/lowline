@@ -95,6 +95,9 @@ export const strings = {
   importColumn: '붙여 넣은 열',
   importField: '채울 칸',
   importUnmatched: '가져오지 않음',
+  importUseDate: '기록한 날짜 — 파일 이름의 날짜',
+  importUseName: '번호 — 파일 이름 앞에',
+  importUseOf: (heading: string) => `${heading} 열을 어디에 쓸지`,
   importSummary: (documents: number, skipped: number) =>
     skipped ? `문서 ${documents}건을 만듭니다 · 빈 행 ${skipped}개는 건너뜁니다` : `문서 ${documents}건을 만듭니다`,
   importProblems: (n: number) => `선택지와 맞지 않는 값 ${n}개 — 적힌 그대로 가져옵니다`,

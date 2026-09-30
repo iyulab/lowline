@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cellValue, importFields, matchColumns, planImport } from '../import.js'
+import { cellValue, importFields, matchColumns, parseRecordDate, planImport } from '../import.js'
 
 const template = `---
 id: bug-report
@@ -67,10 +67,12 @@ describe('planImport', () => {
       fields,
     )
     expect(plan.columns.map((c) => c.field)).toEqual(['제목', '심각도', undefined])
-    expect(plan.documents).toEqual([
+    expect(plan.documents.map((d) => d.values)).toEqual([
       { 제목: '저장 후 멈춤', 심각도: '높음' },
       { 제목: '느린 열기', 심각도: '치명' },
     ])
+    // A column that is not on every record names none of them.
+    expect(plan.columns[2].use).toBeUndefined()
     expect(plan.skipped).toBe(1)
     expect(plan.problems).toEqual([{ row: 4, field: '심각도', value: '치명' }])
   })
@@ -78,5 +80,59 @@ describe('planImport', () => {
   it('has nothing to create from a heading row alone', () => {
     expect(planImport([['제목']], fields)).toMatchObject({ documents: [], skipped: 0 })
     expect(planImport([], fields).documents).toEqual([])
+  })
+})
+
+describe('keeping who the imported records were', () => {
+  const rows = [
+    ['번호', '접수일', '제목', '심각도'],
+    ['C-1001', '2026-01-15', '저장 후 멈춤', '높음'],
+    ['C-1002', '2026.01.16', '저장 후 멈춤', '보통'],
+    ['C-1003', '2026년 2월 3일', '느린 열기', '낮음'],
+  ]
+
+  it('takes a column of dates as when each record was made, and a column of unique codes as its name', () => {
+    const plan = planImport(rows, fields)
+    expect(plan.columns.map((c) => [c.heading, c.field, c.use])).toEqual([
+      ['번호', undefined, 'name'],
+      ['접수일', undefined, 'date'],
+      ['제목', '제목', undefined],
+      ['심각도', '심각도', undefined],
+    ])
+    expect(plan.documents.map((d) => [d.name, d.date && [d.date.getFullYear(), d.date.getMonth() + 1, d.date.getDate()]])).toEqual([
+      ['C-1001', [2026, 1, 15]],
+      ['C-1002', [2026, 1, 16]],
+      ['C-1003', [2026, 2, 3]],
+    ])
+  })
+
+  it('follows the uses the person chose instead', () => {
+    const plan = planImport(rows, fields, [undefined, undefined, undefined, undefined])
+    expect(plan.columns.map((c) => c.use)).toEqual([undefined, undefined, undefined, undefined])
+    expect(plan.documents.every((d) => d.name === undefined && d.date === undefined)).toBe(true)
+  })
+
+  it('reports a date it cannot read, and makes that record today', () => {
+    const plan = planImport([['접수일', '제목'], ['2026-01-15', 'a'], ['어제', 'b']], fields, ['date', undefined])
+    expect(plan.documents[1].date).toBeUndefined()
+    expect(plan.problems).toEqual([{ row: 3, field: '접수일', value: '어제' }])
+  })
+
+  it('does not take a column for dates when any of its values is not one', () => {
+    expect(planImport([['접수일', '제목'], ['2026-01-15', 'a'], ['어제', 'b']], fields).columns[0].use).toBeUndefined()
+  })
+
+  it('reads the ways a spreadsheet writes a day, and nothing that is not a real one', () => {
+    const day = (text: string) => {
+      const d = parseRecordDate(text)
+      return d && [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+    }
+    expect(day('2026-01-15')).toEqual([2026, 1, 15])
+    expect(day('2026/1/5 14:30')).toEqual([2026, 1, 5])
+    expect(day('2026. 1. 5.')).toEqual([2026, 1, 5])
+    expect(day('2026년 1월 5일')).toEqual([2026, 1, 5])
+    expect(day('2026-02-30')).toBeUndefined()
+    expect(day('C-1001')).toBeUndefined()
+    expect(day('')).toBeUndefined()
   })
 })

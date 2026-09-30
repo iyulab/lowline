@@ -827,11 +827,11 @@ const scenarios = {
     await app.documentsOf(INTAKE)
     await app.click('dc-button', '가져오기')
     const rows = [
-      ['요청', '부서', '담당', '비고'],
-      ['프린터 토너가 떨어졌어요', '영업', '총무', '지난달'],
+      ['번호', '접수일', '요청', '부서', '담당', '비고'],
+      ['A-1', '2026-01-15', '프린터 토너가 떨어졌어요', '영업', '총무', '지난달'],
       // A cell with a line break comes quoted, the way spreadsheets copy it.
-      ['"회의실 프로젝터가\n안 켜져요"', '개발', '경비', ''],
-      ['', '', '', '비고만 있는 행'],
+      ['A-2', '2026. 1. 16.', '"회의실 프로젝터가\n안 켜져요"', '개발', '경비', ''],
+      ['', '', '', '', '', '비고만 있는 행'],
     ]
     const text = rows.map((r) => r.join('\t')).join('\n')
     const zone = `__e2e.all('textarea').find((t) => t.getRootNode().host?.localName === 'dc-paste-rows-zone')`
@@ -847,9 +847,11 @@ const scenarios = {
       await app.cdp.evaluate(`__e2e.all('li').some((li) => li.textContent.trim() === '3행 담당: 경비')`),
       'a value the field does not offer is shown',
     )
-    assert.ok(
-      await app.cdp.evaluate(`__e2e.all('td').some((td) => td.textContent.trim() === '가져오지 않음')`),
-      'an unmatched column is shown',
+    // Columns that fill no field: the day each record was made, its code, and one left out.
+    assert.deepEqual(
+      await app.cdp.evaluate(`__e2e.all('td select').map((s) => s.value)`),
+      ['name', 'date', ''],
+      'a column of codes names the records, a column of days dates them, the rest is not imported',
     )
     await app.click('dc-button', '2건 가져오기')
     await app.status('2건을 가져왔습니다')
@@ -857,6 +859,11 @@ const scenarios = {
 
     const created = (await documentsIn(vault)).filter((n) => !before.has(n))
     assert.equal(created.length, 2, 'one document per row that fills a field')
+    assert.deepEqual(
+      created.map((n) => n.slice(0, 15)).sort(),
+      ['2026-01-15-A-1 ', '2026-01-16-A-2 '],
+      'named by the day each record was made and its code',
+    )
     const values = await Promise.all(created.map((n) => fileValues(join(vault, '문서', n))))
     const toner = values.find((v) => v.요청 === '프린터 토너가 떨어졌어요')
     assert.deepEqual([toner?.template, toner?.부서, toner?.담당], ['intake@1', '영업', '총무'])

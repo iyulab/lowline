@@ -4,7 +4,7 @@ import { createDocumentFile } from './document-files.js'
 import { documentTitle, newDocument } from './documents.js'
 import { newDocumentId } from './identity.js'
 import { describeError } from './errors.js'
-import { importFields, planImport, type ImportField, type ImportPlan } from './import.js'
+import { importFields, planImport, type ColumnUse, type ImportField, type ImportPlan } from './import.js'
 import { strings } from './strings.js'
 import type { TemplateItem } from './template-scope.js'
 import { vault, type VaultInfo } from './vault-client.js'
@@ -78,6 +78,8 @@ export class LlImport extends LitElement {
   @state() private templateSource = ''
   @state() private fields: ImportField[] = []
   @state() private plan?: ImportPlan
+  /** The pasted rows, kept to plan again when the person changes what a column is kept for. */
+  private rows: string[][] = []
   @state() private busy = false
   /** Documents created so far in the running import. */
   @state() private created = 0
@@ -102,11 +104,20 @@ export class LlImport extends LitElement {
 
   private onRows(e: CustomEvent<{ rows: string[][] }>) {
     this.error = ''
-    this.plan = planImport(e.detail.rows, this.fields)
+    this.rows = e.detail.rows
+    this.plan = planImport(this.rows, this.fields)
   }
 
+  /** A column that fills no field is kept for `use` — one column for each use. */
+  private keepFor(index: number, use: ColumnUse | undefined) {
+    if (!this.plan) return
+    const uses = this.plan.columns.map((c, i) => (i === index ? use : c.use === use ? undefined : c.use))
+    this.plan = planImport(this.rows, this.fields, uses)
+  }
+
+  /** A field's label; a problem about a day names the column, which is no field. */
   private label(field: string | undefined): string {
-    return this.fields.find((f) => f.name === field)?.label ?? ''
+    return this.fields.find((f) => f.name === field)?.label ?? field ?? ''
   }
 
   private async importDocuments() {
@@ -117,10 +128,12 @@ export class LlImport extends LitElement {
     this.created = 0
     let created = 0
     try {
-      const date = new Date()
-      for (const values of plan.documents) {
-        const source = newDocument(this.templateSource, values, newDocumentId())
-        await createDocumentFile(this.vaultInfo.documentsDir, source, documentTitle(this.templateSource, values), date)
+      const today = new Date()
+      for (const record of plan.documents) {
+        const source = newDocument(this.templateSource, record.values, newDocumentId())
+        // Named as the record was: its own day, and its code before the title the fields give.
+        const title = [record.name, documentTitle(this.templateSource, record.values)].filter(Boolean).join(' ') || undefined
+        await createDocumentFile(this.vaultInfo.documentsDir, source, title, record.date ?? today)
         created++
         this.created = created
       }
@@ -166,9 +179,21 @@ export class LlImport extends LitElement {
         </thead>
         <tbody>
           ${plan.columns.map(
-            (c) => html`<tr>
+            (c, i) => html`<tr>
               <td>${c.heading}</td>
-              <td class=${c.field ? '' : 'unmatched'}>${c.field ? this.label(c.field) : strings.importUnmatched}</td>
+              <td class=${c.field || c.use ? '' : 'unmatched'}>
+                ${c.field
+                  ? this.label(c.field)
+                  : html`<select
+                      aria-label=${strings.importUseOf(c.heading)}
+                      .value=${c.use ?? ''}
+                      @change=${(e: Event) => this.keepFor(i, ((e.target as HTMLSelectElement).value || undefined) as ColumnUse | undefined)}
+                    >
+                      <option value="" ?selected=${!c.use}>${strings.importUnmatched}</option>
+                      <option value="date" ?selected=${c.use === 'date'}>${strings.importUseDate}</option>
+                      <option value="name" ?selected=${c.use === 'name'}>${strings.importUseName}</option>
+                    </select>`}
+              </td>
             </tr>`,
           )}
         </tbody>
