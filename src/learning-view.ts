@@ -221,6 +221,18 @@ export class LlLearning extends LitElement {
   private renderCurve(curve: FieldCurve) {
     const label = this.label(curve)
     const points = curve.points
+    // Nothing decided yet — imported or saved without a suggestion shown. The replay of what is saved is all
+    // there is to say, and it is not a decision: it stands apart from the curve that decisions draw.
+    if (points.length === 0)
+      return html`<section>
+        <h2>${strings.learningTitle(this.names.get(curve.template) ?? curve.template, label)}</h2>
+        <p class="message">${strings.learningUndecided}</p>
+        <p class="secondary replay">
+          ${curve.replay
+            ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
+            : strings.learningNoReplay}
+        </p>
+      </section>`
     const last = points[points.length - 1]
     const recent = Math.min(points.length, WINDOW)
     // The first full window, shown beside the latest once the two no longer overlap.

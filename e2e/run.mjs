@@ -1225,6 +1225,16 @@ const scenarios = {
       const why = await app.cdp.waitFor(`__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim())[0]`, 'why 담당 has no suggestion yet')
       assert.match(why, /^확정한 문서가 아직 없어/)
       await app.noAlert()
+
+      // The learning view names the sample's judgment field before anything is decided about it.
+      await app.learning()
+      const undecided = await app.cdp.waitFor(
+        `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim().endsWith('· 담당')); return h && h.parentElement.textContent.replace(/\\s+/g, ' ').trim() })()`,
+        "the sample's judgment field in the learning view",
+        { timeoutMs: 30_000 },
+      )
+      assert.match(undecided, /아직 결정된 제안이 없습니다/)
+      await app.noAlert()
     } finally {
       await app.openVault(vault) // back to the vault the scenarios after this one use
       await rm(empty, { recursive: true, force: true })

@@ -201,8 +201,8 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     }
 
     /// <summary>
-    /// The correction curve of every judgment field that has had a suggestion decided, with how its saved
-    /// documents did on replay once its threshold has been chosen.
+    /// The correction curve of every judgment field — empty until a suggestion for it is decided — with how its
+    /// saved documents did on replay once its threshold has been chosen.
     /// </summary>
     public async Task<IReadOnlyList<FieldCurve>> CurvesAsync(CancellationToken cancellationToken)
     {

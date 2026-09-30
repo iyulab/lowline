@@ -23,7 +23,7 @@ public sealed class CurvesTests
         var kinds = new[] { "reject", "correct", "accept", "accept" };
         var events = kinds.Select((k, i) => Event(i, "문서/1.md", "담당", k)).Reverse().ToList();
 
-        var curve = Assert.Single(Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], events)));
+        var curve = Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], events)).Single(c => c.Field == "담당");
 
         Assert.Equal(("intake@1", "담당", 2, 1, 1), (curve.Template, curve.Field, curve.Accepted, curve.Corrected, curve.Rejected));
         Assert.Equal([0.0, 0.0, 1 / 3.0, 0.5], curve.Points.Select(p => p.Rate));
@@ -39,7 +39,7 @@ public sealed class CurvesTests
             .Append(Event(Curves.Window + 1, "문서/1.md", "담당", "accept"))
             .ToList();
 
-        var curve = Assert.Single(Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], events)));
+        var curve = Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], events)).Single(c => c.Field == "담당");
 
         Assert.Equal(2.0 / Curves.Window, curve.Points[^1].Rate, 6);
     }
@@ -61,6 +61,17 @@ public sealed class CurvesTests
     }
 
     [Fact]
+    public void Lists_every_judgment_field_even_before_any_decision_about_it()
+    {
+        // Documents imported or saved without a suggestion shown: nothing decided yet, and each field still listed
+        // — its replay is what there is to show until the first decision.
+        var curves = Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], []));
+
+        Assert.Equal([("담당", 0), ("긴급", 0)], curves.Select(c => (c.Field, c.Points.Count)));
+        Assert.All(curves, c => Assert.Equal((0, 0, 0), (c.Accepted, c.Corrected, c.Rejected)));
+    }
+
+    [Fact]
     public async Task Carries_how_the_fields_history_did_on_replay_once_its_threshold_is_chosen()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -68,10 +79,13 @@ public sealed class CurvesTests
             JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}""")!,
             Modified: i)).ToList();
         await using var vault = new VaultProjection();
-        await vault.IngestAsync(new VaultSnapshot([Intake], documents, [Event(1, "문서/15.md", "담당", "accept")]), ct);
+        // Saved or imported, with no suggestion decided yet: the replay is there before the first decision.
+        await vault.IngestAsync(new VaultSnapshot([Intake], documents, []), ct);
         await vault.ThresholdsSelected.WaitAsync(ct);
 
-        var replay = Assert.Single(await vault.CurvesAsync(ct)).Replay;
+        var curve = (await vault.CurvesAsync(ct)).Single(c => c.Field == "담당");
+        Assert.Empty(curve.Points);
+        var replay = curve.Replay;
 
         Assert.NotNull(replay);
         Assert.Equal(14, replay.Lookups); // every document but the first is asked of the ones before it

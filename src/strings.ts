@@ -107,7 +107,10 @@ export const strings = {
   tableCount: (n: number) => `문서 ${n}건`,
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,
   hostStarting: '표를 준비하고 있습니다…',
-  learningEmpty: '아직 결정된 제안이 없습니다. 판단 칸의 제안을 수락·교정·거절하며 저장하면 여기서 곡선이 자랍니다.',
+  learningEmpty: '제안을 받는 판단 칸이 아직 없습니다. 서식에서 판단 칸을 정하면 여기서 곡선이 자랍니다.',
+  learningUndecided: '아직 결정된 제안이 없습니다 — 제안을 수락·교정·거절하며 저장하면 곡선이 자랍니다.',
+  // Which of the two it is, the sidecar does not say yet (B-37): the text names both rather than guess.
+  learningNoReplay: '저장된 기록으로 다시 물어본 결과가 아직 없습니다 — 기록이 적거나, 목표만큼 맞히는 기준을 아직 찾지 못했습니다.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
   learningRate: (rate: number, of: number) => `제안이 나온 최근 ${of}건 중 맞음 ${Math.round(rate * 100)}%`,

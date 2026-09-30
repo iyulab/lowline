@@ -31,22 +31,24 @@ public static class Curves
     /// <summary>How many of the latest decisions each point's rate is taken over.</summary>
     public const int Window = 10;
 
+    /// <summary>
+    /// A curve for every judgment field of every template, in the templates' order and each template's own —
+    /// a field nothing has been decided about yet has one with no points, so its replay still has a place.
+    /// </summary>
     public static IReadOnlyList<FieldCurve> Compute(VaultSnapshot vault)
     {
         // A copied file carries its original's id: either names the template.
         var templateOf = vault.Documents
             .GroupBy(d => d.Identity, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().Template, StringComparer.Ordinal);
-        var judged = vault.Templates.ToDictionary(t => t.Ref, t => t.Suggest ?? [], StringComparer.Ordinal);
-        return (vault.Events ?? [])
-            // An event names its template; older ones are placed through their document, if it is still there.
+        // An event names its template; older ones are placed through their document, if it is still there.
+        var decided = (vault.Events ?? [])
             .Select(e => (Event: e, Template: e.Template ?? templateOf.GetValueOrDefault(e.Doc)))
-            .Where(x => x.Template is not null
-                && judged.TryGetValue(x.Template, out var fields) && fields.Contains(x.Event.Field))
-            .GroupBy(x => (Template: x.Template!, x.Event.Field))
-            .OrderBy(g => g.Key.Template, StringComparer.Ordinal)
-            .ThenBy(g => Array.IndexOf(judged[g.Key.Template].ToArray(), g.Key.Field))
-            .Select(g => Curve(g.Key.Template, g.Key.Field, g.Select(x => x.Event)))
+            .Where(x => x.Template is not null)
+            .ToLookup(x => (Template: x.Template!, x.Event.Field), x => x.Event);
+        return vault.Templates
+            .SelectMany(t => (t.Suggest ?? []).Distinct(StringComparer.Ordinal).Select(field => (t.Ref, Field: field)))
+            .Select(f => Curve(f.Ref, f.Field, decided[(f.Ref, f.Field)]))
             .ToList();
     }
 
