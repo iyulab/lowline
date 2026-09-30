@@ -5,7 +5,8 @@ namespace Lowline.Host.Tests;
 
 /// <summary>
 /// What ingesting the vault costs at 1,000 and 10,000 documents: filling an empty cache, a snapshot with
-/// nothing changed, one outside edit, and a later launch over the filled cache.
+/// nothing changed, one outside edit, and a later launch over the filled cache — and what a long-used vault's edit
+/// history adds.
 /// Runs only with <c>LOWLINE_PERF=1</c>; writes its figures to <c>LOWLINE_PERF_OUT</c> when set.
 /// </summary>
 public sealed class RebuildCostTests
@@ -135,7 +136,75 @@ public sealed class RebuildCostTests
         }
         finally
         {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            // Each cache clears its own file's pool when disposed: nothing of another test's is touched.
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// What a vault used for a long time costs: the cache keeps every saved version of a document (raw is
+    /// append-only), so its size and a later launch grow with the edits made, not with the documents held.
+    /// </summary>
+    [Fact]
+    public async Task Measures_a_long_used_vault()
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
+        const int count = 1_000, rounds = 10;
+        var snapshot = Synthetic(count);
+        var directory = Directory.CreateTempSubdirectory("lowline-perf-").FullName;
+        try
+        {
+            var lines = new List<string>();
+            long CacheBytes(VaultProjection vault) => new FileInfo(vault.CacheFileOf("")).Length
+                + (File.Exists(vault.CacheFileOf("") + "-wal") ? new FileInfo(vault.CacheFileOf("") + "-wal").Length : 0);
+            long IndexBytes(VaultProjection vault) => new FileInfo(vault.CasesFileOf("")).Length;
+            async Task<long> OneEdit(VaultProjection vault, VaultSnapshot now)
+            {
+                var edit = Stopwatch.StartNew();
+                Assert.Equal(1, (await vault.IngestAsync(now with { Documents = [Edited(now.Documents[0]), .. now.Documents.Skip(1)] }, Ct)).Appended);
+                edit.Stop();
+                await vault.IngestAsync(now, Ct); // back as it was
+                return edit.ElapsedMilliseconds;
+            }
+
+            await using (var vault = new VaultProjection(directory))
+            {
+                await vault.IngestAsync(snapshot, Ct);
+                await vault.CasesIndexed.WaitAsync(Ct);
+                lines.Add($"edits ×0: cache {CacheBytes(vault) / 1024} KB · index {IndexBytes(vault) / 1024} KB · one edit {await OneEdit(vault, snapshot)} ms");
+                // Every document saved again, round after round — each save a new version in raw.
+                for (var round = 1; round <= rounds; round++)
+                {
+                    snapshot = snapshot with
+                    {
+                        Documents = [.. snapshot.Documents.Select(d => d with
+                        {
+                            Values = new Dictionary<string, JsonElement>(d.Values) { ["부서"] = JsonSerializer.SerializeToElement(Departments[round % Departments.Length] + $" {round}") },
+                        })],
+                    };
+                    Assert.Equal(count, (await vault.IngestAsync(snapshot, Ct)).Appended);
+                    await vault.CasesIndexed.WaitAsync(Ct);
+                    if (round % 5 == 0)
+                        lines.Add($"edits ×{round}: cache {CacheBytes(vault) / 1024} KB · index {IndexBytes(vault) / 1024} KB · one edit {await OneEdit(vault, snapshot)} ms");
+                }
+            }
+
+            // A later launch reads the raw stream again to learn each record's latest version.
+            await using (var restarted = new VaultProjection(directory))
+            {
+                var start = Stopwatch.StartNew();
+                Assert.Equal(0, (await restarted.IngestAsync(snapshot, Ct)).Appended);
+                start.Stop();
+                lines.Add($"restart after {count * rounds} saved versions: {start.ElapsedMilliseconds} ms");
+            }
+
+            var line = $"{count} docs, long used · " + string.Join(" · ", lines);
+            TestContext.Current.TestOutputHelper?.WriteLine(line);
+            if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
+                await File.AppendAllTextAsync(output, line + Environment.NewLine, Ct);
+        }
+        finally
+        {
             Directory.Delete(directory, recursive: true);
         }
     }
