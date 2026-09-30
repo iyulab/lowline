@@ -264,11 +264,15 @@ impl Vault {
 
     /// Moves a file to the operating system's trash, where the person can restore it from.
     ///
-    /// A location with no trash (a network share, some removable drives) is not deleted from
-    /// quietly: on Windows the system asks first, elsewhere this fails with [`VaultError::NotTrashed`]
-    /// and the file stays. [`remove`](Self::remove) deletes for good once the person has chosen that.
+    /// A location with no trash (a network share, a removable drive) is not deleted from quietly:
+    /// this fails with [`VaultError::NotTrashed`] and the file stays. [`remove`](Self::remove)
+    /// deletes for good once the person has chosen that.
     pub fn trash(&self, rel: &str) -> Result<()> {
         let abs = self.existing_file(rel)?;
+        // Told to recycle there, Windows deletes for good without asking.
+        if !has_trash(&abs) {
+            return Err(VaultError::NotTrashed("this location has no trash".into()));
+        }
         trash::delete(&abs).map_err(|e| VaultError::NotTrashed(e.to_string()))?;
         if abs.exists() {
             // Declined when the system asked whether to delete for good: nothing was deleted.
@@ -338,9 +342,51 @@ impl Vault {
     }
 }
 
+/// Whether a file at `path` can go to a trash the person restores it from. On Windows a network
+/// share (`\\server\share`, or a drive letter mapped to one) and a removable drive have no Recycle
+/// Bin. A root the system cannot place is left to the trash to refuse.
+#[cfg(windows)]
+fn has_trash(path: &Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
+    use windows_sys::Win32::System::WindowsProgramming::{DRIVE_REMOTE, DRIVE_REMOVABLE};
+
+    let Some(Component::Prefix(prefix)) = path.components().next() else {
+        return true;
+    };
+    let root: Vec<u16> = prefix
+        .as_os_str()
+        .encode_wide()
+        .chain("\\".encode_utf16())
+        .chain(Some(0))
+        .collect();
+    // SAFETY: `root` is a NUL-terminated wide string that outlives the call.
+    let kind = unsafe { GetDriveTypeW(root.as_ptr()) };
+    !matches!(kind, DRIVE_REMOTE | DRIVE_REMOVABLE)
+}
+
+/// Elsewhere the trash itself refuses a location it cannot take.
+#[cfg(not(windows))]
+fn has_trash(_: &Path) -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn a_local_folder_has_a_trash_and_a_network_share_has_none() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(has_trash(dir.path()));
+        // This PC's administrative share of its system drive: the same folder, reached over SMB.
+        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
+        let share = format!(r"\\localhost\{}$\Windows", system.trim_end_matches(':'));
+        if Path::new(&share).exists() {
+            assert!(!has_trash(Path::new(&share)));
+        }
+    }
 
     fn vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();

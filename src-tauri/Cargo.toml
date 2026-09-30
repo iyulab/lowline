@@ -36,5 +36,10 @@ tauri-kit-watch = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" 
 # person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"
 
+# Whether a location has a Recycle Bin at all: on a network share or a removable drive the system
+# deletes for good, without asking, when told to recycle.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_WindowsProgramming"] }
+
 [dev-dependencies]
 tempfile = "3"
