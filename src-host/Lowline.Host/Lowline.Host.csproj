@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- Published by `npm run build:host` as one self-contained file inside the app's resources. -->
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- SQLite's native library goes inside that file too, unpacked on first run: which SDK publishes it
+         decides nothing about what the app ships next to the sidecar. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <!-- Not hosted by IIS and serves no static files. -->
     <PublishIISAssets>false</PublishIISAssets>
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
