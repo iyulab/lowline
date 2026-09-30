@@ -65,6 +65,15 @@ export const vault = {
     await invoke<void>('write_file', { path, content })
     wrote(path)
   },
+  /**
+   * Replaces the file atomically while it still holds `expected` — what the app last read or wrote
+   * there — and rejects with `changed-outside`, leaving it, when it holds something else. A file that
+   * is gone is made again.
+   */
+  writeIfUnchanged: async (path: string, expected: string, content: string) => {
+    await invoke<void>('write_file_if_unchanged', { path, expected, content })
+    wrote(path)
+  },
   /** Creates the file atomically; rejects with `already-exists` instead of replacing one. */
   create: async (path: string, content: string) => {
     await invoke<void>('create_file', { path, content })

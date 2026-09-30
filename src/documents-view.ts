@@ -439,7 +439,17 @@ export class LlDocuments extends LitElement {
         const id = this.sharedIds.has(draft.id) ? newDocumentId() : draft.id
         const updated = updateDocument(draft.source, this.values)
         const source = id === draft.id ? updated : setDocumentId(updated, id)
-        await vault.write(draft.path, source)
+        // Unless the person was told the file changed outside, an edit made there since it was read is
+        // not overwritten unseen — the watch may not have reported it yet, or at all.
+        try {
+          if (this.changedOutside) await vault.write(draft.path, source)
+          else await vault.writeIfUnchanged(draft.path, draft.source, source)
+        } catch (e) {
+          if ((e as { kind?: string }).kind !== 'changed-outside') throw e
+          this.error = strings.changedOutsideDirty
+          this.changedOutside = true
+          return
+        }
         this.draft = { ...draft, id, source }
       } else {
         const id = newDocumentId()
@@ -487,7 +497,7 @@ export class LlDocuments extends LitElement {
     if (draft?.kind !== 'existing') return
     try {
       const source = documentFrontMatter(draft.source).id ? draft.source : setDocumentId(draft.source, draft.id)
-      if (source !== draft.source) await vault.write(draft.path, source)
+      if (source !== draft.source) await vault.writeIfUnchanged(draft.path, draft.source, source)
       try {
         await vault.rename(draft.path, to)
       } catch (e) {
@@ -501,7 +511,9 @@ export class LlDocuments extends LitElement {
       // The sidecar knows documents by their paths too: it is handed the vault as it is now.
       void this.prepareSuggestions(draft.templateRef)
     } catch (e) {
-      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.nameTaken : describeError(e)
+      const kind = (e as { kind?: string }).kind
+      if (kind === 'changed-outside') this.changedOutside = true
+      this.error = kind === 'already-exists' ? strings.nameTaken : kind === 'changed-outside' ? strings.changedOutsideDirty : describeError(e)
     }
   }
 

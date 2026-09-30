@@ -431,7 +431,16 @@ export class LlTemplates extends LitElement {
         return
       }
       templateInfo(this.source) // a template must name itself
-      await vault.write(this.selected, this.source)
+      // Unless the person was told the file changed outside, an edit made there since is not overwritten unseen.
+      try {
+        if (this.changedOutside) await vault.write(this.selected, this.source)
+        else await vault.writeIfUnchanged(this.selected, this.loaded, this.source)
+      } catch (e) {
+        if ((e as { kind?: string }).kind !== 'changed-outside') throw e
+        this.error = strings.changedOutsideDirty
+        this.changedOutside = true
+        return
+      }
       this.loaded = this.source
       // The app's own writes are not reported back: a template made again after it was removed
       // outside rejoins the list here.

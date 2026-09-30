@@ -31,6 +31,8 @@ pub enum VaultError {
     NotFound(String),
     /// The file could not go to the trash — the location may have none — and is still there.
     NotTrashed(String),
+    /// A conditional write found the file holding something else than the app last read there.
+    Changed(String),
     Io(io::Error),
 }
 
@@ -41,6 +43,7 @@ impl std::fmt::Display for VaultError {
             VaultError::AlreadyExists(p) => write!(f, "file already exists: {p}"),
             VaultError::NotFound(p) => write!(f, "not found: {p}"),
             VaultError::NotTrashed(reason) => write!(f, "not moved to the trash: {reason}"),
+            VaultError::Changed(p) => write!(f, "changed since it was read: {p}"),
             VaultError::Io(e) => write!(f, "{e}"),
         }
     }
@@ -62,6 +65,7 @@ impl VaultError {
             VaultError::AlreadyExists(_) => "already-exists",
             VaultError::NotFound(_) => "not-found",
             VaultError::NotTrashed(_) => "not-trashed",
+            VaultError::Changed(_) => "changed-outside",
             VaultError::Io(_) => "io",
         }
     }
@@ -221,6 +225,20 @@ impl Vault {
         Ok(())
     }
 
+    /// Replaces a file atomically, but only while it still holds `expected` — what the app last read
+    /// or wrote there — so an edit made elsewhere since is not overwritten unseen; otherwise this fails
+    /// with [`VaultError::Changed`] and the file is left as it is. A file that is gone is written again:
+    /// making it loses nothing. The check and the write are moments apart, not one step — this narrows
+    /// a lost update to that moment; it is not a lock.
+    pub fn write_if_unchanged(&self, rel: &str, expected: &str, content: &str) -> Result<()> {
+        match self.read(rel) {
+            Ok(current) if current != expected => return Err(VaultError::Changed(rel.to_string())),
+            Ok(_) | Err(VaultError::NotFound(_)) => {}
+            Err(e) => return Err(e),
+        }
+        self.write(rel, content)
+    }
+
     /// Creates a file atomically, refusing to replace one that is already there.
     pub fn create(&self, rel: &str, content: &str) -> Result<()> {
         let abs = self.prepare(rel)?;
@@ -374,6 +392,27 @@ fn has_trash(_: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_only_what_it_last_read_unless_the_file_is_gone() {
+        let (_dir, v) = vault();
+        v.write("문서/a.md", "opened").unwrap();
+        v.write_if_unchanged("문서/a.md", "opened", "mine").unwrap();
+        assert_eq!(v.read("문서/a.md").unwrap(), "mine");
+
+        // Someone else's edit since: left as it is.
+        fs::write(v.resolve("문서/a.md").unwrap(), "theirs").unwrap();
+        let refused = v.write_if_unchanged("문서/a.md", "mine", "mine again");
+        assert!(matches!(refused, Err(VaultError::Changed(_))));
+        assert_eq!(refused.unwrap_err().kind(), "changed-outside");
+        assert_eq!(v.read("문서/a.md").unwrap(), "theirs");
+
+        // Removed since: made again.
+        fs::remove_file(v.resolve("문서/a.md").unwrap()).unwrap();
+        v.write_if_unchanged("문서/a.md", "theirs", "made again")
+            .unwrap();
+        assert_eq!(v.read("문서/a.md").unwrap(), "made again");
+    }
 
     #[cfg(windows)]
     #[test]

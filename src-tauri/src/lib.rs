@@ -202,6 +202,17 @@ fn write_file(path: String, content: String, state: State<AppState>) -> CommandR
     with_vault(&state, |v| v.write(&path, &content))
 }
 
+/// Replaces a file atomically while it still holds `expected`; fails with `changed-outside` otherwise.
+#[tauri::command]
+fn write_file_if_unchanged(
+    path: String,
+    expected: String,
+    content: String,
+    state: State<AppState>,
+) -> CommandResult<()> {
+    with_vault(&state, |v| v.write_if_unchanged(&path, &expected, &content))
+}
+
 /// Creates a file atomically; fails with `already-exists` rather than replace one.
 #[tauri::command]
 fn create_file(path: String, content: String, state: State<AppState>) -> CommandResult<()> {
@@ -623,6 +634,7 @@ pub fn run() {
             read_file,
             read_files,
             write_file,
+            write_file_if_unchanged,
             create_file,
             rename_file,
             trash_file,

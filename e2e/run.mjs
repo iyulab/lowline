@@ -585,6 +585,23 @@ const scenarios = {
     await app.status('밖에서 바뀌어 다시 읽었습니다')
     assert.equal(await app.value('select[name="심각도"]'), '높음', 'the outside edit is shown')
     assert.equal((await fileValues(path)).심각도, '높음', 'the file is left as the outside edit made it')
+
+    // Saved straight after an outside edit the watch has not reported yet: the file is not overwritten unseen.
+    // (It ends at 높음, as the scenarios after this one expect.)
+    await app.choose('select[name="심각도"]', '보통')
+    await severity('낮음')
+    await app.click('dc-button', '저장')
+    await app.cdp.waitFor(
+      `__e2e.all('[role=alert]').some((el) => el.textContent.includes('밖에서 바뀌었습니다'))`,
+      'the outside edit announced at saving',
+    )
+    assert.equal((await fileValues(path)).심각도, '낮음', 'the outside edit is still in the file')
+    assert.equal(await app.value('select[name="심각도"]'), '보통', 'and the unsaved edit on screen')
+    // Told, the person decides: saving again replaces it.
+    await app.choose('select[name="심각도"]', '높음')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    assert.equal((await fileValues(path)).심각도, '높음')
     await app.noAlert()
   },
 
