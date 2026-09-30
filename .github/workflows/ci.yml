@@ -120,3 +120,9 @@ jobs:
       # A failing scenario names the step it was waiting for; nothing is uploaded.
       - name: End-to-end scenarios
         run: npm run test:e2e
+
+      # What the app runs the sidecar from, when a scenario failed: a missing file shows here.
+      - name: Sidecar files
+        if: failure()
+        run: |
+          Get-ChildItem src-host/publish, src-tauri/target/debug/host | Format-Table Directory, Name, Length, LastWriteTime
