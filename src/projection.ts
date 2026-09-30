@@ -51,7 +51,11 @@ export interface VaultSnapshot {
 export function templateSnapshot(source: string): TemplateSnapshot {
   const { ref } = templateInfo(source)
   const parsed = parseFormdown(source)
-  const fields = parsed.forms.map((f) => ({
+  // A document holds one value per field name, so a name used twice in the source is one field — as it
+  // first appears. The template page says the name is used twice; the projection and suggestions go on.
+  const seen = new Set<string>()
+  const unique = parsed.forms.filter((f) => !seen.has(f.name) && seen.add(f.name))
+  const fields = unique.map((f) => ({
     name: f.name,
     label: f.label ?? f.name,
     type: f.type,

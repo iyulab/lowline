@@ -36,6 +36,14 @@ describe('templateSnapshot', () => {
     })
   })
 
+  it('lists a field whose name is used twice once, as it first appears — a document holds one value per name', () => {
+    const twice = template.replace('@재현됨: [checkbox]', '@심각도: [text]')
+    const fields = templateSnapshot(twice).fields
+    expect(fields.map((f) => f.name)).toEqual(['제목', '심각도', '재현_절차', '태그'])
+    expect(fields[1].type).toBe('select')
+    expect(templateSnapshot(twice).suggest).toEqual(['심각도'])
+  })
+
   it('turns suggestions on only for fields the author names', () => {
     expect(templateSnapshot(template.replace(/lowline:\n  suggest: .*\n/, '')).suggest).toEqual([])
     expect(templateSnapshot(template.replace('suggest: [심각도, 없는칸]', 'suggest: 심각도')).suggest).toEqual([])

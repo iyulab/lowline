@@ -1245,6 +1245,9 @@ const scenarios = {
     const EDGE = { name: '경계 서식', ref: 'edge@1', path: '서식/경계 서식.fd.md' }
     const file = join(vault, EDGE.path)
     const source = '---\nid: edge\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n# 경계\n\n@담당: [select options="장비,인사"]\n\n@담당: [text]\n\n@메모: [text visible-if="분류=급함"]\n'
+    const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
+    const hostReports = async () => (existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter((l) => l.includes('"layer":"host"')).length : 0)
+    const hostBefore = await hostReports()
     await writeFile(file, source)
     await app.tabOf(EDGE, '서식', { timeoutMs: 30_000 })
     const problems = await app.cdp.waitFor(
@@ -1262,6 +1265,11 @@ const scenarios = {
       1,
       'a name used twice is listed once',
     )
+    // The sidecar takes the template in too — one field of that name — rather than failing the whole vault.
+    await app.showTable(EDGE)
+    await app.cdp.waitFor(`__e2e.all('ll-table').some((t) => /문서 0건/.test(t.shadowRoot.textContent))`, "the template's table", { timeoutMs: 30_000 })
+    assert.equal(await hostReports(), hostBefore, 'no failure reported by the sidecar')
+    await app.templateOf(EDGE)
 
     // Front matter that cannot be read is said as that, not as a missing id, and the file is left as it was.
     await app.type('textarea', source.replace('version: 1', 'version: [1'))
