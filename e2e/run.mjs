@@ -953,7 +953,7 @@ const scenarios = {
   },
 
   async "keeps a conflict copy in its original's place, and learns from it again"(app, vault) {
-    const trashedFrom = (folder) => (process.platform === 'win32' ? takeFromRecycleBin(join(vault, folder)) : Promise.resolve(null))
+    const trashedFrom = (folder) => trashed(join(vault, folder))
     const asked = (heading) =>
       app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open && d.heading === ${q(heading)})`, `the question "${heading}"`)
     await app.cdp.evaluate(`(() => { window.__changes = []; const T = window.__TAURI_INTERNALS__
@@ -1106,7 +1106,7 @@ const scenarios = {
   },
 
   async "deletes a document and a template to the system trash; the template's documents stay"(app, vault) {
-    const trashedFrom = (folder) => (process.platform === 'win32' ? takeFromRecycleBin(join(vault, folder)) : Promise.resolve(null))
+    const trashedFrom = (folder) => trashed(join(vault, folder))
     const asked = (heading) =>
       app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open && d.heading === ${q(heading)})`, `the question "${heading}"`)
     const doc = join(vault, '문서', '지울 문의.md')
@@ -1365,6 +1365,15 @@ async function webviewGone(graceMs = 10_000) {
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
   throw new Error(`WebView2 on the ${IDENTIFIER} profile did not exit`)
+}
+
+/**
+ * What the system's trash took from `folder` (see `takeFromRecycleBin`), or `null` where it cannot be
+ * looked into: off Windows, and on a CI runner, whose service session sees an empty Recycle Bin.
+ * Scenarios still check that the file left the vault.
+ */
+function trashed(folder) {
+  return process.platform === 'win32' && !process.env.CI ? takeFromRecycleBin(folder) : Promise.resolve(null)
 }
 
 /**
