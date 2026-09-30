@@ -15,8 +15,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# One Linux job: the UI, the shell and the sidecar are each tested where they build. The end-to-end
-# scenarios drive the real Windows window and run locally (npm run test:e2e).
+# The UI, the shell and the sidecar are each tested where they build, on Linux. The end-to-end
+# scenarios drive the real app window, which the app ships for Windows first: they run on a Windows
+# runner — the one job here that needs that OS.
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -77,3 +78,45 @@ jobs:
 
       - name: Sidecar tests
         run: npm run test:host
+
+  e2e:
+    runs-on: windows-latest
+    # Builds the sidecar and a debug shell, then drives the app through every scenario.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: dtolnay/rust-toolchain@stable
+        id: toolchain
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-e2e-${{ steps.toolchain.outputs.cachekey }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-${{ steps.toolchain.outputs.cachekey }}-cargo-
+
+      - name: Install
+        run: npm ci
+
+      - name: Build the sidecar and the app
+        run: |
+          npm run build:host
+          npm run build:e2e
+
+      # A failing scenario names the step it was waiting for; nothing is uploaded.
+      - name: End-to-end scenarios
+        run: npm run test:e2e
