@@ -1463,6 +1463,33 @@ const scenarios = {
     }
   },
 
+  async 'keeps a narrow window usable: the sidebar is a drawer that gives way to a pick and to its backdrop'(app) {
+    // Below the shell's desktop breakpoint (1024px), and above the window's minimum width (720).
+    const drawerOpen = () => app.cdp.evaluate(`__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`)
+    const openDrawer = async () => {
+      await app.click(`button[aria-label="사이드바 접기/펼치기"]`)
+      await app.cdp.waitFor(`__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer open')
+    }
+    await app.cdp.send('Emulation.setDeviceMetricsOverride', { width: 800, height: 560, deviceScaleFactor: 1, mobile: false })
+    try {
+      await app.cdp.waitFor(`innerWidth === 800`, 'the narrow window')
+      assert.equal(await drawerOpen(), false, 'the content is not covered to begin with')
+
+      await openDrawer()
+      await app.learning()
+      await app.cdp.waitFor(`!__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer closed on the pick')
+      assert.equal((await app.where()).place, '학습')
+
+      await openDrawer()
+      await app.cdp.clickAt({ x: 600, y: 300 }) // the backdrop, right of the drawer
+      await app.cdp.waitFor(`!__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer closed on its backdrop')
+      assert.equal((await app.where()).place, '학습', 'the backdrop picked nothing')
+      await app.noAlert()
+    } finally {
+      await app.cdp.send('Emulation.clearDeviceMetricsOverride')
+    }
+  },
+
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of
   // the vault repeats once per document.
   ...(process.env.LOWLINE_PERF === '1' && {

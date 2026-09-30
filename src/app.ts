@@ -81,7 +81,12 @@ export class LlApp extends LitElement {
   @state() private templates: TemplateItem[] = []
   /** Whether some documents name no template the vault has. */
   @state() private hasOrphans = false
-  @state() private sidebarOpen = true
+  /**
+   * Whether the sidebar is open as a drawer. The shell shows the sidebar beside the content at desktop
+   * width whatever this says, and below it as a drawer over the content only while this is set — so it
+   * starts closed, and closes when the shell asks (its backdrop) or a place is picked from it.
+   */
+  @state() private sidebarOpen = false
   @state() private vaultInfo?: VaultInfo
   @state() private error = ''
   /** What the app just did that left the place it showed (a template deleted); gone once elsewhere. */
@@ -216,6 +221,7 @@ export class LlApp extends LitElement {
   }
 
   private onSidebarSelect(e: DpSidebarSelectEvent) {
+    this.sidebarOpen = false // a drawer over the content gives way to what was picked
     if (e.itemId === NEW_TEMPLATE) {
       e.preventDefault() // an action, not a place: the selection stays where it is
       void this.createTemplate()
@@ -327,7 +333,7 @@ export class LlApp extends LitElement {
   render() {
     const info = this.vaultInfo
     return html`
-      <dp-shell ?sidebar-open=${this.sidebarOpen}>
+      <dp-shell ?sidebar-open=${this.sidebarOpen} @dp-shell-sidebar-close=${() => (this.sidebarOpen = false)}>
         <dp-sidebar
           slot="sidebar"
           header=${info?.name ?? strings.appName}
