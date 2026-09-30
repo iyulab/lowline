@@ -16,9 +16,15 @@ public sealed record SuggestRequest(
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
 /// nothing is guessed to fill the gap — and <see cref="Reason"/> then says why, as one of
 /// <see cref="Abstention"/>'s. <see cref="Source"/> is the document whose confirmed value it comes from, and
-/// <see cref="Similarity"/> how close that document's other values are.
+/// <see cref="Similarity"/> how close that document's other values are. A suggestion from similar documents also
+/// carries <see cref="Similar"/>: the most similar confirmed documents the lookup found, <see cref="Source"/>'s first,
+/// with the value each confirmed — the evidence as it is, other values included. The value offered is still one.
 /// </summary>
-public sealed record Suggestion(string? Value, string Mode, string? Source, double? Similarity, string? Reason = null);
+public sealed record Suggestion(
+    string? Value, string Mode, string? Source, double? Similarity, string? Reason = null, IReadOnlyList<SimilarCase>? Similar = null);
+
+/// <summary>A confirmed document like the one asked about: its id, how close it is, and the value it confirmed.</summary>
+public sealed record SimilarCase(string Source, double Similarity, string? Value);
 
 /// <summary>Why a judgment field gets no suggestion — each is said differently, so "none" is never a wrong reason.</summary>
 public static class Abstention
@@ -78,7 +84,10 @@ public sealed class Suggestions
     /// settled alongside the document's observed values, once replay has shown they decide the field
     /// (<see cref="FieldDefinition.KeyThreshold"/>), and similar documents at the field's similarity threshold.
     /// </summary>
-    private readonly FormResolver _resolver = new(new FieldMemory(), new LexicalMemory());
+    private readonly FormResolver _resolver = new(new FieldMemory(), new LexicalMemory(), similarDocumentCount: SimilarCount);
+
+    /// <summary>How many similar confirmed documents a suggestion from similar documents shows as its evidence.</summary>
+    public const int SimilarCount = 3;
     private readonly Dictionary<string, TemplateSnapshot> _templates;
     private readonly Dictionary<string, List<SettledDocument>> _settled;
     private Dictionary<(string Template, string Field), FieldThreshold> _thresholds;
@@ -242,9 +251,15 @@ public sealed class Suggestions
         // Only a layer that answered is offered: a guess leaves the field to the person.
         if (suggestion is not { Answered: true }) return Abstain(request.Template, request.Field);
         var answer = suggestion.Candidates[0];
+        // The documents shown as similar are the ones as close as the field's threshold asks — the bar the value
+        // offered passed — not every document the lookup ranked.
+        var threshold = _thresholds[(request.Template, request.Field)].Threshold ?? double.PositiveInfinity;
         return answer.Source switch
         {
-            FieldSource.SimilarDocument => new Suggestion(answer.Value, "memory", answer.Evidence, answer.Score),
+            FieldSource.SimilarDocument => new Suggestion(answer.Value, "memory", answer.Evidence, answer.Score,
+                Similar: [.. suggestion.SimilarDocuments
+                    .Where(m => m.Similarity >= threshold)
+                    .Select(m => new SimilarCase(m.Source, m.Similarity, m.Answer))]),
             FieldSource.SettledFieldMemory => new Suggestion(answer.Value, "key", answer.Evidence, null),
             _ => Abstain(request.Template, request.Field),
         };

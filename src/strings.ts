@@ -184,6 +184,9 @@ export const strings = {
   learningShare: '제안이 나온 칸 중 맞은 비율',
   suggestion: '제안',
   suggestionSource: (name: string) => `제안 · 비슷한 기록: ${name}`,
+  /** Each similar record with the value it confirmed: the evidence behind one suggestion, other values included. */
+  suggestionSources: (cases: { name: string; value: string }[]) =>
+    `제안 · 비슷한 기록 ${cases.length}건: ${cases.map((c) => `${c.name}(${c.value})`).join(' · ')}`,
   suggestionKey: (value: string) => `제안 · 함께 확정된 값: ${value}`,
   reject: '거절',
   hostFailed: (message: string) => `표를 만드는 도우미가 시작되지 않았습니다: ${message}`,

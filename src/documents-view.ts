@@ -765,9 +765,15 @@ export class LlDocuments extends LitElement {
   /** What a suggestion rests on, in words: the similar document by its name, or the value it was settled with. */
   private sourceOf(s: Suggestion): string {
     if (!s.source) return strings.suggestion
-    return s.mode === 'key'
-      ? strings.suggestionKey(s.source)
-      : strings.suggestionSource((this.pathsById.get(s.source) ?? s.source).replace(/^.*\//, '').replace(/\.md$/, ''))
+    if (s.mode === 'key') return strings.suggestionKey(s.source)
+    const cases = s.similar ?? []
+    if (cases.length > 1) return strings.suggestionSources(cases.map((c) => ({ name: this.nameOf(c.source), value: c.value ?? '' })))
+    return strings.suggestionSource(this.nameOf(s.source))
+  }
+
+  /** A document as the list names it: its file's name, found by its id. */
+  private nameOf(id: string): string {
+    return (this.pathsById.get(id) ?? id).replace(/^.*\//, '').replace(/\.md$/, '')
   }
 
   /** The documents whose names or values hold the filter text: see `found`. */

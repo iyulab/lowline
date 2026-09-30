@@ -173,4 +173,16 @@ export interface Suggestion {
   similarity: number | null
   /** Why there is none, when `value` is null and the field was asked (`abstain`). */
   reason?: Abstention | null
+  /**
+   * From similar documents (`memory`): the most similar confirmed documents the suggestion rests on, `source`
+   * first, each with the value it confirmed — the evidence as it is, other values included.
+   */
+  similar?: SimilarCase[] | null
+}
+
+/** A confirmed document like the one asked about: its id, how close it is, and the value it confirmed. */
+export interface SimilarCase {
+  source: string
+  similarity: number
+  value: string | null
 }

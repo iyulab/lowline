@@ -44,6 +44,35 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task Shows_the_similar_documents_behind_a_suggestion_with_the_values_they_confirmed()
+    {
+        // A month at a small desk: twelve requests, each asked three times over.
+        (string Request, string Owner)[] requests =
+        [
+            ("노트북 배터리가 금방 닳아요", "장비"), ("노트북 화면에 줄이 생겨요", "장비"), ("노트북 충전이 안 돼요", "장비"),
+            ("휴가 일수를 확인하고 싶어요", "인사"), ("휴가 신청을 취소하고 싶어요", "인사"), ("휴가 이월이 되나요", "인사"),
+            ("회의실 예약이 안 돼요", "총무"), ("회의실 에어컨이 고장났어요", "총무"), ("회의실 의자가 부족해요", "총무"),
+        ];
+        var documents = Enumerable.Range(0, 3).SelectMany(round => requests.Select((r, i) => Document(
+            $"문서/{round}-{i}.md",
+            JsonSerializer.Serialize(new Dictionary<string, string> { ["요청"] = round == 0 ? r.Request : $"{r.Request} ({round + 1}차)", ["부서"] = "영업", ["담당"] = r.Owner }))));
+        await using var vault = await Vault([.. documents]);
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "회의실 에어컨이 고장났어요", "부서": "영업"}""")), Ct);
+
+        Assert.True(suggestion is { Mode: "memory" }, $"{suggestion}");
+        var similar = Assert.IsAssignableFrom<IReadOnlyList<SimilarCase>>(suggestion.Similar);
+        Assert.True(similar.Count is > 1 and <= Suggestions.SimilarCount, string.Join(", ", similar));
+        // The suggestion's own source first, closest first, each with the value it confirmed.
+        Assert.Equal(suggestion.Source, similar[0].Source);
+        Assert.Equal(suggestion.Value, similar[0].Value);
+        Assert.Equal(similar.OrderByDescending(c => c.Similarity), similar);
+        // Only as close as the bar the offered value passed.
+        Assert.All(similar, c => Assert.True(c.Similarity >= Suggestions.PriorThreshold, $"{c}"));
+    }
+
+    [Fact]
     public async Task Does_not_offer_a_value_only_another_fields_value_backs()
     {
         // 인사 was confirmed with 부서 개발, but the request itself resembles nothing confirmed.
