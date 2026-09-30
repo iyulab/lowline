@@ -29,7 +29,7 @@
   "dependencies": {
     "@formdown/core": "0.10.0",
     "@formdown/ui": "0.10.0",
-    "@iyulab/desktop-compact": "0.8.1",
+    "@iyulab/desktop-compact": "0.8.2",
     "@iyulab/desktop-patterns": "0.3.4",
     "@tauri-apps/api": "^2.12.0",
     "@tauri-apps/plugin-dialog": "^2.8.0",
