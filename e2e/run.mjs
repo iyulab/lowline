@@ -952,6 +952,100 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
   },
 
+  async "keeps a conflict copy in its original's place, and learns from it again"(app, vault) {
+    const trashedFrom = (folder) => (process.platform === 'win32' ? takeFromRecycleBin(join(vault, folder)) : Promise.resolve(null))
+    const asked = (heading) =>
+      app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open && d.heading === ${q(heading)})`, `the question "${heading}"`)
+    await app.cdp.evaluate(`(() => { window.__changes = []; const T = window.__TAURI_INTERNALS__
+      return T.invoke('plugin:event|listen', { event: 'vault-changed', target: { kind: 'Any' }, handler: T.transformCallback((e) => window.__changes.push(e.payload)) }) })()`)
+    const written = (path) =>
+      app.cdp.waitFor(`window.__changes.some((c) => c.written.includes(${q(path)}))`, `${path} announced`, { timeoutMs: 15_000 })
+
+    // A document: another device's edit of 접수-1, kept from the original's page.
+    const originalDoc = join(vault, '문서', '접수-1.md')
+    const copyDocPath = '문서/접수-1 (다른 기기의 충돌된 사본 2026-09-30).md'
+    const before = await readFile(originalDoc, 'utf8')
+    await writeFile(join(vault, copyDocPath), before.replace('담당: 장비', '담당: 총무'))
+    try {
+      await written(copyDocPath)
+      await app.documentsOf(INTAKE)
+      await app.cdp.waitFor(`!!__e2e.one('nav button', '접수-1 충돌 사본 있음')`, 'the original with its copy', { timeoutMs: 15_000 })
+      await app.pickDocument('접수-1 충돌 사본 있음')
+      await app.click('dc-button', '사본 보기')
+      await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.includes('충돌 사본 — 원본: 접수-1')`, 'the copy open')
+      await app.click('dc-button', '이 사본을 남기기')
+      await asked('이 사본을 남길까요?')
+      await app.click('dc-button', '사본 남기기')
+      await app.status('사본을 남겼습니다. 원본은 휴지통에 있습니다.')
+      await app.noAlert()
+      assert.ok(!existsSync(join(vault, copyDocPath)), 'the copy took the original’s name')
+      assert.match(await readFile(originalDoc, 'utf8'), /담당: 총무/, 'the original’s name holds what the copy held')
+      const trashed = await trashedFrom('문서')
+      if (trashed) assert.deepEqual(trashed, ['접수-1.md'], 'the original in the Recycle Bin')
+      await app.cdp.waitFor(
+        `__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '접수-1' && __e2e.all('p.conflict').length === 0`,
+        'the original’s name open, settled',
+      )
+
+      // Settled, it is a similar record again — with the value that was kept.
+      await app.newDocument(INTAKE)
+      await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      await app.cdp.waitFor(
+        `__e2e.all('.formdown-suggestion').some((el) => { const n = el.closest('[data-formdown-note]').textContent; return n.includes('접수-1') && n.includes('총무') })`,
+        '총무 suggested from 접수-1',
+        { timeoutMs: 15_000 },
+      )
+      await app.templateOf(INTAKE)
+      await app.answerUnsaved('편집 버리기')
+    } finally {
+      await rm(join(vault, copyDocPath), { force: true })
+      await writeFile(originalDoc, before)
+    }
+    await written('문서/접수-1.md')
+
+    // A template: its copy is not in the sidebar; the original's page shows it.
+    const originalTemplate = join(vault, INTAKE.path)
+    const copyTemplatePath = '서식/접수.fd.sync-conflict-20260930-101500-ABCDEFG.md'
+    const templateBefore = await readFile(originalTemplate, 'utf8')
+    const showCopy = async () => {
+      await writeFile(join(vault, copyTemplatePath), `${templateBefore.trimEnd()}\n\n메모: ___@메모\n`)
+      await written(copyTemplatePath)
+      await app.templateOf(INTAKE)
+      await app.click('dc-button', '사본 보기')
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('메모: ___@메모')`, 'the copy’s source')
+    }
+    try {
+      // Deleting the copy keeps the original, which is shown again.
+      await showCopy()
+      await app.click('dc-button', '지우기')
+      await asked('이 사본을 지울까요?')
+      await app.click('dc-button', '휴지통으로 옮기기')
+      await app.status('사본을 휴지통으로 옮기고 원본을 남겼습니다.')
+      assert.ok(!existsSync(join(vault, copyTemplatePath)), 'the copy gone')
+      assert.equal(await app.value('textarea'), templateBefore, 'the original shown again')
+      const trashedCopy = await trashedFrom('서식')
+      if (trashedCopy) assert.deepEqual(trashedCopy, ['접수.fd.sync-conflict-20260930-101500-ABCDEFG.md'])
+
+      // Keeping the copy: the template the app knows under the original's name holds what the copy held.
+      await showCopy()
+      await app.click('dc-button', '이 사본을 남기기')
+      await asked('이 사본을 남길까요?')
+      await app.click('dc-button', '사본 남기기')
+      await app.status('사본을 남겼습니다. 원본은 휴지통에 있습니다.')
+      assert.ok(!existsSync(join(vault, copyTemplatePath)), 'the copy took the original’s name')
+      assert.match(await readFile(originalTemplate, 'utf8'), /메모: ___@메모/)
+      assert.match(await app.value('textarea'), /메모: ___@메모/, 'the kept template shown')
+      const trashedOriginal = await trashedFrom('서식')
+      if (trashedOriginal) assert.deepEqual(trashedOriginal, ['접수.fd.md'], 'the original in the Recycle Bin')
+      await app.cdp.waitFor(`__e2e.all('p.conflict').length === 0`, 'settled')
+      await app.noAlert()
+    } finally {
+      await rm(join(vault, copyTemplatePath), { force: true })
+      await writeFile(originalTemplate, templateBefore)
+    }
+    await written(INTAKE.path)
+  },
+
   async 'renames a document, and what was recorded about it stays with it'(app, vault) {
     const rows = async () => {
       await app.showTable(INTAKE)

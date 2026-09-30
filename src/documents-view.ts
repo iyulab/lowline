@@ -27,11 +27,12 @@ import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, typ
 import { readVault, syncVault } from './vault-snapshot.js'
 import { documentsOf, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
-import { conflictLabel, conflictNotice, noteFor, noticeFor } from './conflicts.js'
+import { conflictLabel, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
 import './rename-control.js'
 import './delete-control.js'
+import './keep-copy-control.js'
 
 /** How long typing pauses before suggestions are asked for again. */
 const SUGGEST_DELAY_MS = 300
@@ -175,6 +176,8 @@ export class LlDocuments extends LitElement {
   @state() private changedOutside = false
   /** The trash would not take the open document: whether to delete it for good is being asked. */
   @state() private untrashable = false
+  /** The trash would not take the original of the open conflict copy being kept: whether to delete it for good is being asked. */
+  @state() private originalUntrashable = false
   @state() private message = ''
   @state() private error = ''
 
@@ -259,6 +262,7 @@ export class LlDocuments extends LitElement {
     this.importing = false
     this.changedOutside = false
     this.untrashable = false
+    this.originalUntrashable = false
     this.message = ''
     this.dirty = false
     this.template = undefined
@@ -496,6 +500,7 @@ export class LlDocuments extends LitElement {
   private async delete(permanently: boolean) {
     const draft = this.draft
     if (draft?.kind !== 'existing') return
+    const conflict = conflictOf(draft.path, this.documents)
     this.untrashable = false
     this.error = ''
     this.message = ''
@@ -507,10 +512,58 @@ export class LlDocuments extends LitElement {
       else this.error = describeError(e)
       return
     }
+    if (conflict !== undefined && 'copyOf' in conflict) {
+      // Deleting a conflict copy keeps its original: that is where the person is taken.
+      await this.refresh()
+      await this.open(conflict.copyOf)
+      this.message = strings.keptOriginal(permanently)
+      return
+    }
     this.reset()
     this.draft = undefined
     await this.refresh()
     this.message = permanently ? strings.removed : strings.trashed
+  }
+
+  /**
+   * Keeps the open conflict copy in its original's place: the original goes to the system's trash (or
+   * for good, once the person chose that for a file the trash would not take), and the copy takes its
+   * name. Unsaved edits to the copy are saved first. The copy is not given an id of its own: it holds
+   * the original's, or — a document known by its path — takes the original's path, and with it what
+   * was recorded about the original.
+   */
+  private async keepCopy(permanently: boolean) {
+    const draft = this.draft
+    if (draft?.kind !== 'existing') return
+    const conflict = conflictOf(draft.path, this.documents)
+    if (conflict === undefined || !('copyOf' in conflict)) return
+    const original = conflict.copyOf
+    this.originalUntrashable = false
+    this.error = ''
+    this.message = ''
+    if (this.dirty) {
+      await this.save()
+      if (this.dirty) return // not saved: the error says why
+    }
+    try {
+      if (permanently) await vault.remove(original)
+      else await vault.trash(original)
+    } catch (e) {
+      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.originalUntrashable = true
+      else this.error = describeError(e)
+      return
+    }
+    try {
+      await vault.rename(draft.path, original)
+    } catch (e) {
+      // The original is gone as asked; the copy stays under its own name, still a copy.
+      await this.refresh()
+      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
+      return
+    }
+    await this.refresh()
+    await this.open(original)
+    this.message = strings.keptCopy(permanently)
   }
 
   /** Creates the document under a free name; never replaces an existing file. */
@@ -623,8 +676,8 @@ export class LlDocuments extends LitElement {
                       @ll-rename-cancel=${() => (this.error = '')}
                     ></ll-rename>
                     <ll-delete
-                      heading=${strings.deleteDocumentHeading}
-                      body=${strings.deleteDocumentBody(this.dirty)}
+                      heading=${isCopy(draft.path, this.documents) ? strings.deleteCopyHeading : strings.deleteDocumentHeading}
+                      body=${(isCopy(draft.path, this.documents) ? strings.deleteCopyBody : strings.deleteDocumentBody)(this.dirty)}
                       .untrashable=${this.untrashable}
                       @ll-delete=${(e: CustomEvent<{ permanently: boolean }>) => void this.delete(e.detail.permanently)}
                       @ll-delete-cancel=${() => (this.untrashable = false)}
@@ -640,7 +693,17 @@ export class LlDocuments extends LitElement {
                   ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
                   : nothing}
               </div>
-              ${draft.kind === 'existing' ? noticeFor(conflictNotice(draft.path, this.documents, '.md', strings.conflictedOriginal)) : nothing}
+              ${draft.kind === 'existing'
+                ? conflictNoticeFor(draft.path, this.documents, '.md', strings.conflictedOriginal, {
+                    view: (copy) => void this.leaveFor(() => this.open(copy)),
+                    keep: (original) => html`<ll-keep-copy
+                      original=${original}
+                      .untrashable=${this.originalUntrashable}
+                      @ll-keep-copy=${(e: CustomEvent<{ permanently: boolean }>) => void this.keepCopy(e.detail.permanently)}
+                      @ll-keep-copy-cancel=${() => (this.originalUntrashable = false)}
+                    ></ll-keep-copy>`,
+                  })
+                : nothing}
               ${this.renderJudgment()}
               ${keyed(
                 opened,

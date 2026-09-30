@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conflictLabel, conflictNotice, shownName } from '../conflicts.js'
+import { conflictLabel, conflictNotice, conflictOf, isCopy, shownName } from '../conflicts.js'
 import { strings } from '../strings.js'
 import { withoutConflictCopies, type VaultEntry } from '../vault-client.js'
 
@@ -34,6 +34,16 @@ describe('conflict labels', () => {
     expect(conflictNotice(copy.path, listing, '.md', strings.conflictedOriginal)).toBe(strings.conflictCopy('보고서'))
     expect(conflictNotice(original.path, listing, '.md', strings.conflictedOriginal)).toBe(strings.conflictedOriginal)
     expect(conflictNotice(other.path, listing, '.md', strings.conflictedOriginal)).toBeUndefined()
+  })
+
+  it('knows an open copy by its original, and an open original by its copies', () => {
+    const second = entry('문서/보고서.sync-conflict-20260930-101500-ABCDEFG.md', '문서/보고서.md')
+    const both = [...listing, second]
+    expect(conflictOf(copy.path, both)).toEqual({ copyOf: original.path })
+    expect(conflictOf(original.path, both)).toEqual({ copies: [copy.path, second.path] })
+    expect(conflictOf(other.path, both)).toBeUndefined()
+    expect(isCopy(copy.path, both)).toBe(true)
+    expect(isCopy(original.path, both)).toBe(false)
   })
 
   it('names a template without its suffix', () => {

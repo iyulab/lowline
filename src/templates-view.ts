@@ -5,9 +5,10 @@ import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute 
 import { fileName, fileNameFor, setSuggest, templateInfo } from './documents.js'
 import './rename-control.js'
 import './delete-control.js'
-import { conflictNotice, noticeFor } from './conflicts.js'
+import './keep-copy-control.js'
+import { conflictNoticeFor, conflictOf, isCopy } from './conflicts.js'
 import { describeError } from './errors.js'
-import { markUnsaved } from './unsaved.js'
+import { confirmDiscard, markUnsaved } from './unsaved.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -123,6 +124,8 @@ export class LlTemplates extends LitElement {
   @state() private changedOutside = false
   /** The trash would not take the open template: whether to delete it for good is being asked. */
   @state() private untrashable = false
+  /** The trash would not take the original of the open conflict copy being kept: whether to delete it for good is being asked. */
+  @state() private originalUntrashable = false
   @state() private message = ''
   @state() private error = ''
   /** A completion is being inserted: its own input is not completed again. */
@@ -338,10 +341,63 @@ export class LlTemplates extends LitElement {
       return
     }
     this.dirty = false // what was on screen went with the file, as the question said
+    const conflict = conflictOf(path, this.entries)
+    if (conflict !== undefined && 'copyOf' in conflict) {
+      // Deleting a conflict copy keeps its original, which is still the app's template: shown again.
+      await this.refresh()
+      await this.select(conflict.copyOf)
+      this.message = strings.keptOriginal(permanently)
+      return
+    }
     this.dispatchEvent(
       new CustomEvent('ll-template-deleted', { detail: { path, permanently }, bubbles: true, composed: true }),
     )
   }
+  /**
+   * Keeps the open conflict copy in its original's place: the original goes to the system's trash (or
+   * for good, once the person chose that for a file the trash would not take), and the copy takes its
+   * name — the one the app knows the template by. Unsaved edits to the copy are saved first.
+   */
+  private async keepCopy(permanently: boolean) {
+    const copy = this.selected
+    if (!copy) return
+    const conflict = conflictOf(copy, this.entries)
+    if (conflict === undefined || !('copyOf' in conflict)) return
+    const original = conflict.copyOf
+    this.originalUntrashable = false
+    this.error = ''
+    this.message = ''
+    if (this.dirty) {
+      await this.save()
+      if (this.dirty) return // not saved: the error says why
+    }
+    try {
+      if (permanently) await vault.remove(original)
+      else await vault.trash(original)
+    } catch (e) {
+      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.originalUntrashable = true
+      else this.error = describeError(e)
+      return
+    }
+    try {
+      await vault.rename(copy, original)
+    } catch (e) {
+      // The original is gone as asked; the copy stays under its own name, still a copy.
+      await this.refresh()
+      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
+      return
+    }
+    await this.refresh()
+    await this.select(original)
+    this.message = strings.keptCopy(permanently)
+  }
+
+  /** Shows a conflict copy of the open template, once unsaved edits to it are let go. */
+  private async viewCopy(copy: string) {
+    if (!(await confirmDiscard())) return
+    await this.select(copy).catch((e) => (this.error = describeError(e)))
+  }
+
 
   /** Saves the template as it is on screen; the app's save shortcut calls this too. */
   async save() {
@@ -411,8 +467,8 @@ export class LlTemplates extends LitElement {
                   @ll-rename-cancel=${() => (this.error = '')}
                 ></ll-rename>
                 <ll-delete
-                  heading=${strings.deleteTemplateHeading}
-                  body=${strings.deleteTemplateBody(this.dirty)}
+                  heading=${isCopy(this.selected, this.entries) ? strings.deleteCopyHeading : strings.deleteTemplateHeading}
+                  body=${(isCopy(this.selected, this.entries) ? strings.deleteCopyBody : strings.deleteTemplateBody)(this.dirty)}
                   .untrashable=${this.untrashable}
                   @ll-delete=${(e: CustomEvent<{ permanently: boolean }>) => void this.delete(e.detail.permanently)}
                   @ll-delete-cancel=${() => (this.untrashable = false)}
@@ -424,7 +480,15 @@ export class LlTemplates extends LitElement {
                   ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
                   : nothing}
               </div>
-              ${noticeFor(conflictNotice(this.selected, this.entries, TEMPLATE_SUFFIX, strings.conflictedTemplate))}
+              ${conflictNoticeFor(this.selected, this.entries, TEMPLATE_SUFFIX, strings.conflictedTemplate, {
+                view: (copy) => void this.viewCopy(copy),
+                keep: (original) => html`<ll-keep-copy
+                  original=${original}
+                  .untrashable=${this.originalUntrashable}
+                  @ll-keep-copy=${(e: CustomEvent<{ permanently: boolean }>) => void this.keepCopy(e.detail.permanently)}
+                  @ll-keep-copy-cancel=${() => (this.originalUntrashable = false)}
+                ></ll-keep-copy>`,
+              })}
               <textarea
                 spellcheck="false"
                 aria-label=${strings.templateSource}

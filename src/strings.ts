@@ -45,9 +45,22 @@ export const strings = {
   noDocuments: '문서가 없습니다.',
   conflictCopyOf: (original: string) => `충돌 사본 — 원본: ${original}`,
   hasConflictCopy: '충돌 사본 있음',
-  conflictedOriginal: '다른 기기에서 고친 사본이 있습니다. 하나로 정할 때까지 제안이 이 문서에서 배우지 않습니다. 남길 쪽을 정해 다른 파일을 지우세요.',
-  conflictCopy: (original: string) => `동기화 도구가 남긴 충돌 사본입니다(원본: ${original}). 남길 쪽을 정해 다른 파일을 지우세요.`,
-  conflictedTemplate: '다른 기기에서 고친 사본이 있습니다. 남길 쪽을 정해 다른 파일을 지우세요.',
+  conflictedOriginal: '다른 기기에서 고친 사본이 있습니다. 하나로 정할 때까지 제안이 이 문서에서 배우지 않습니다. 사본을 열어 남길 쪽을 고르세요.',
+  conflictCopy: (original: string) =>
+    `동기화 도구가 남긴 충돌 사본입니다(원본: ${original}). 이 사본을 남기면 원본은 휴지통으로 가고 이 사본이 원본 이름을 받습니다. 원본을 남기려면 이 사본을 지우세요.`,
+  conflictedTemplate: '다른 기기에서 고친 사본이 있습니다. 사본을 열어 남길 쪽을 고르세요.',
+  viewCopy: (name?: string) => (name === undefined ? '사본 보기' : `사본 보기: ${name}`),
+  keepCopy: '이 사본을 남기기',
+  keepCopyHeading: '이 사본을 남길까요?',
+  keepCopyBody: (original: string) =>
+    `원본(${original})을 휴지통으로 옮기고, 이 사본이 그 이름을 받습니다. 휴지통에서 원본을 되살릴 수 있습니다.`,
+  keepCopyConfirm: '사본 남기기',
+  keepCopyNotTrashedBody: '이 위치에는 휴지통이 없을 수 있습니다. 두 파일 모두 그대로 있습니다. 원본을 영구히 지우면 되살릴 수 없습니다.',
+  keepCopyPermanently: '원본 영구히 지우기',
+  keptCopy: (permanently: boolean) => (permanently ? '사본을 남겼습니다. 원본은 지웠습니다.' : '사본을 남겼습니다. 원본은 휴지통에 있습니다.'),
+  keptCopyNameTaken: (permanently: boolean) =>
+    `원본 이름의 파일이 다시 생겨 이 사본에 그 이름을 줄 수 없습니다. ${permanently ? '원본은 지웠고' : '원본은 휴지통에 있고'} 이 사본은 그대로입니다.`,
+  keptOriginal: (permanently: boolean) => (permanently ? '사본을 지우고 원본을 남겼습니다.' : '사본을 휴지통으로 옮기고 원본을 남겼습니다.'),
   documentFrom: (name: string) => `서식: ${name}`,
   cancel: '취소',
   rename: '이름 바꾸기',
@@ -62,6 +75,9 @@ export const strings = {
   deleteTemplateHeading: '이 서식을 지울까요?',
   deleteTemplateBody: (unsaved: boolean) =>
     `파일을 휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다. 이 서식으로 쓴 문서는 지우지 않습니다 — "서식 없는 문서"에 남습니다.${unsaved ? ' 저장하지 않은 편집은 함께 사라집니다.' : ''}`,
+  deleteCopyHeading: '이 사본을 지울까요?',
+  deleteCopyBody: (unsaved: boolean) =>
+    `사본을 휴지통으로 옮기고 원본을 남깁니다. 휴지통에서 되살릴 수 있습니다.${unsaved ? ' 저장하지 않은 편집은 함께 사라집니다.' : ''}`,
   notTrashedHeading: '휴지통으로 옮기지 못했습니다',
   notTrashedBody: '이 위치에는 휴지통이 없을 수 있습니다. 파일은 그대로 있습니다. 영구히 지우면 되살릴 수 없습니다.',
   deletePermanently: '영구히 지우기',
