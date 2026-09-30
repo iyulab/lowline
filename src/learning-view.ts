@@ -230,7 +230,7 @@ export class LlLearning extends LitElement {
         <p class="secondary replay">
           ${curve.replay
             ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
-            : strings.learningNoReplay}
+            : strings.learningNoReplay(curve.whyNoReplay)}
         </p>
       </section>`
     const last = points[points.length - 1]
@@ -246,11 +246,11 @@ export class LlLearning extends LitElement {
         ${first ? html`<span class="secondary">${strings.learningFirst(first.rate, WINDOW)}</span>` : nothing}
         <span class="secondary">${strings.learningCounts(curve.accepted, curve.corrected, curve.rejected)}</span>
       </div>
-      ${curve.replay
-        ? html`<p class="secondary replay">
-            ${strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)}
-          </p>`
-        : nothing}
+      <p class="secondary replay">
+        ${curve.replay
+          ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
+          : strings.learningNoReplay(curve.whyNoReplay)}
+      </p>
       ${this.renderChart(curve, label)}
       <details>
         <summary>${strings.learningTable}</summary>

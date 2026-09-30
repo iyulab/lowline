@@ -9,10 +9,11 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// <summary>
 /// How a judgment field's suggestions have fared: every decision people made about them, in order.
 /// A suggestion was right when it was accepted as offered; corrected or rejected, it was not.
+/// Without a <see cref="Replay"/>, <see cref="WhyNoReplay"/> says why (see <see cref="Suggestions.WhyNoReplay"/>).
 /// </summary>
 public sealed record FieldCurve(
     string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
-    FieldReplay? Replay = null);
+    FieldReplay? Replay = null, string? WhyNoReplay = null);
 
 /// <summary>
 /// How a field's suggestions did when its saved documents were replayed in the order they were saved, each asked

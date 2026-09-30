@@ -14,10 +14,37 @@ public sealed record SuggestRequest(
 
 /// <summary>
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
-/// nothing is guessed to fill the gap. <see cref="Source"/> is the document whose confirmed value it
-/// comes from, and <see cref="Similarity"/> how close that document's other values are.
+/// nothing is guessed to fill the gap — and <see cref="Reason"/> then says why, as one of
+/// <see cref="Abstention"/>'s. <see cref="Source"/> is the document whose confirmed value it comes from, and
+/// <see cref="Similarity"/> how close that document's other values are.
 /// </summary>
-public sealed record Suggestion(string? Value, string Mode, string? Source, double? Similarity);
+public sealed record Suggestion(string? Value, string Mode, string? Source, double? Similarity, string? Reason = null);
+
+/// <summary>Why a judgment field gets no suggestion — each is said differently, so "none" is never a wrong reason.</summary>
+public static class Abstention
+{
+    /// <summary>No document holding a confirmed value for the field has been saved yet.</summary>
+    public const string NoHistory = "no-history";
+
+    /// <summary>The field answers from similar documents, and none of those confirmed is close enough to this one.</summary>
+    public const string NoneClose = "none-close";
+
+    /// <summary>
+    /// Replaying the field's history found no similarity at which its answers were right often enough, so similar
+    /// documents are not offered for it at all until more are confirmed.
+    /// </summary>
+    public const string BelowTarget = "below-target";
+}
+
+/// <summary>Why a judgment field has no replay to show yet — one of these, or <see cref="Abstention.BelowTarget"/>.</summary>
+public static class NoReplay
+{
+    /// <summary>Its history is too short to choose a threshold from; the prior threshold serves.</summary>
+    public const string Few = "few";
+
+    /// <summary>Its history is long enough, and the replay that chooses its threshold has not finished yet.</summary>
+    public const string Pending = "pending";
+}
 
 /// <summary>
 /// Suggestions for judgment fields from what people already confirmed in the vault — no model.
@@ -213,15 +240,37 @@ public sealed class Suggestions
             .SingleOrDefault(s => s.Field == request.Field);
 
         // Only a layer that answered is offered: a guess leaves the field to the person.
-        if (suggestion is not { Answered: true }) return new Suggestion(null, "abstain", null, null);
+        if (suggestion is not { Answered: true }) return Abstain(request.Template, request.Field);
         var answer = suggestion.Candidates[0];
         return answer.Source switch
         {
             FieldSource.SimilarDocument => new Suggestion(answer.Value, "memory", answer.Evidence, answer.Score),
             FieldSource.SettledFieldMemory => new Suggestion(answer.Value, "key", answer.Evidence, null),
-            _ => new Suggestion(null, "abstain", null, null),
+            _ => Abstain(request.Template, request.Field),
         };
     }
+
+    /// <summary>No value, with why: nothing confirmed yet, the field held back by its replay, or nothing close enough.</summary>
+    private Suggestion Abstain(string template, string field)
+    {
+        var threshold = _thresholds[(template, field)];
+        var reason = threshold.Confirmed == 0 ? Abstention.NoHistory
+            : threshold.Threshold is null ? Abstention.BelowTarget
+            : Abstention.NoneClose;
+        return new Suggestion(null, "abstain", null, null, reason);
+    }
+
+    /// <summary>
+    /// Why a judgment field has no replay to show, as one of <see cref="NoReplay"/>'s or
+    /// <see cref="Abstention.BelowTarget"/>; null once its threshold has been chosen.
+    /// </summary>
+    public string? WhyNoReplay(string template, string field) => _thresholds.GetValueOrDefault((template, field)) switch
+    {
+        null or { Choice: not null } => null,
+        { Threshold: null } => Abstention.BelowTarget,
+        { Confirmed: var confirmed } when confirmed - 1 < MinimumAnswered => NoReplay.Few,
+        _ => NoReplay.Pending,
+    };
 
     /// <summary>A value as text, or null when it holds nothing.</summary>
     private static string? Answer(JsonElement value) => value.ValueKind switch

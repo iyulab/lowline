@@ -72,6 +72,19 @@ public sealed class CurvesTests
     }
 
     [Fact]
+    public async Task Says_why_a_field_has_no_replay_while_its_history_is_short()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake], [Document("문서/1.md")], []), ct);
+
+        var curve = (await vault.CurvesAsync(ct)).Single(c => c.Field == "담당");
+
+        Assert.Null(curve.Replay);
+        Assert.Equal(NoReplay.Few, curve.WhyNoReplay);
+    }
+
+    [Fact]
     public async Task Carries_how_the_fields_history_did_on_replay_once_its_threshold_is_chosen()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -88,6 +101,7 @@ public sealed class CurvesTests
         var replay = curve.Replay;
 
         Assert.NotNull(replay);
+        Assert.Null(curve.WhyNoReplay);
         Assert.Equal(14, replay.Lookups); // every document but the first is asked of the ones before it
         Assert.InRange(replay.AnswerRate, 0, 1);
         Assert.True(replay.Precision >= Suggestions.TargetPrecision);

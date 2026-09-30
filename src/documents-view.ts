@@ -20,7 +20,7 @@ import {
 import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
-import type { Suggestion, TemplateSnapshot } from './projection.js'
+import type { Abstention, Suggestion, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -143,8 +143,10 @@ export class LlDocuments extends LitElement {
   private values: FieldValues = {}
   /** The open draft's template as the sidecar knows it; undefined when suggestions are unavailable. */
   private template?: TemplateSnapshot
-  /** Judgment fields asked for a suggestion and given none: nothing confirmed was close enough. */
-  @state() private abstained = new Set<string>()
+  /** Judgment fields asked for a suggestion and given none, with why — or `unavailable` when asking failed. */
+  @state() private abstained = new Map<string, Abstention | null | 'unavailable'>()
+  /** The open draft's template has judgment fields, and the sidecar that suggests for them did not start. */
+  @state() private unavailable = false
   /** Ids more than one document holds (a file copied outside the app); see `sharedIds`. */
   private sharedIds = new Set<string>()
   /** Documents' paths by id: a suggestion from a similar document names the document by its id. */
@@ -267,7 +269,8 @@ export class LlDocuments extends LitElement {
     this.dirty = false
     this.template = undefined
     this.suggestions = new Map()
-    this.abstained = new Set()
+    this.abstained = new Map()
+    this.unavailable = false
     this.offered = new Map()
     this.filled = []
     this.rejected = new Set()
@@ -288,9 +291,18 @@ export class LlDocuments extends LitElement {
       const settled = synced.documents.filter((d) => d.template === templateRef && !d.conflicted)
       this.pathsById = new Map(synced.documents.map((d) => [d.id, d.path]))
       this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f])).length]))
+      this.unavailable = false
       await this.suggest()
     } catch {
       this.template = undefined
+      // Saying nothing would read as "no suggestion to make": say they failed, if the template has fields to suggest for.
+      try {
+        const read = await readVault()
+        if (this.draft?.templateRef !== templateRef) return
+        this.unavailable = !!read.templates.find((t) => t.ref === templateRef)?.suggest.length
+      } catch {
+        // the vault itself could not be read: nothing more to say about suggestions
+      }
     }
   }
 
@@ -301,17 +313,18 @@ export class LlDocuments extends LitElement {
     const run = ++this.suggestRun
     const values = { ...this.values }
     const next = new Map<string, Suggestion>()
-    const abstained = new Set<string>()
+    const abstained = new Map<string, Abstention | null | 'unavailable'>()
     for (const field of template.suggest) {
       if (!isEmpty(values[field])) continue
       try {
         const document = this.draft?.kind === 'existing' ? this.draft.id : undefined
         const suggestion = await host.suggest(template.ref, field, values, document)
-        if (this.rejected.has(field)) continue
+        // Declined here, now or before it was last saved: not offered again, and nothing to explain.
+        if (this.rejected.has(field) || suggestion.mode === 'rejected') continue
         if (suggestion.value !== null) next.set(field, suggestion)
-        else abstained.add(field)
+        else abstained.set(field, suggestion.reason ?? null)
       } catch {
-        // no suggestion for this field
+        abstained.set(field, 'unavailable')
       }
     }
     // Values may have changed (or another draft opened) while these were asked for.
@@ -603,6 +616,7 @@ export class LlDocuments extends LitElement {
 
   /** Which fields of this template learn from confirmed documents — set on the template's page. */
   private renderJudgment() {
+    if (this.unavailable) return html`<p class="message judgment" role="status">${strings.suggestionsUnavailable}</p>`
     const template = this.template
     if (!template) return nothing
     return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map((f) => this.label(f)))}</p>`
@@ -618,8 +632,10 @@ export class LlDocuments extends LitElement {
     for (const [field, s] of this.suggestions) {
       states[field] = { suggestions: [s.value!], note: this.sourceOf(s), decline: strings.reject }
     }
-    for (const field of this.abstained) {
-      states[field] = { note: strings.judgmentAbstained(this.learned.get(field) ?? 0) }
+    for (const [field, reason] of this.abstained) {
+      states[field] = {
+        note: reason === 'unavailable' ? strings.judgmentUnavailable : strings.judgmentAbstained(reason, this.learned.get(field) ?? 0),
+      }
     }
     return states
   }

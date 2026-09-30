@@ -117,7 +117,7 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         var suggestion = await client.PostAsJsonAsync("/suggest",
             new { template = "intake@1", field = "담당", values = new { 요청 = "노트북 배터리가 금방 닳아요!" } }, ct);
 
-        Assert.Equal(new Suggestion(null, "abstain", null, null), await suggestion.Content.ReadFromJsonAsync<Suggestion>(ct));
+        Assert.Equal(new Suggestion(null, "abstain", null, null, Abstention.NoHistory), await suggestion.Content.ReadFromJsonAsync<Suggestion>(ct));
     }
 
     [Theory]

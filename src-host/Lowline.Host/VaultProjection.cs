@@ -202,7 +202,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
 
     /// <summary>
     /// The correction curve of every judgment field — empty until a suggestion for it is decided — with how its
-    /// saved documents did on replay once its threshold has been chosen.
+    /// saved documents did on replay once its threshold has been chosen, and why not until then.
     /// </summary>
     public async Task<IReadOnlyList<FieldCurve>> CurvesAsync(CancellationToken cancellationToken)
     {
@@ -211,7 +211,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         {
             return [.. _curves.Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
                 ? c with { Replay = new FieldReplay(choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups) }
-                : c)];
+                : c with { WhyNoReplay = _suggestions?.WhyNoReplay(c.Template, c.Field) ?? NoReplay.Pending })];
         }
         finally
         {

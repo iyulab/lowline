@@ -118,7 +118,18 @@ export interface FieldCurve {
    * the history is long enough to choose a threshold from.
    */
   replay?: { threshold: number; precision: number; answerRate: number; answered: number; lookups: number } | null
+  /**
+   * Why there is no replay: `few` confirmed documents to choose a threshold from, the replay still `pending`, or
+   * `below-target` — no threshold was right often enough, so similar documents are not offered for the field.
+   */
+  whyNoReplay?: 'few' | 'pending' | 'below-target' | null
 }
+
+/**
+ * Why a judgment field got no suggestion: `no-history` — nothing confirmed yet; `none-close` — nothing confirmed is
+ * close enough; `below-target` — replaying its history, no similarity was right often enough to offer from.
+ */
+export type Abstention = 'no-history' | 'none-close' | 'below-target'
 
 export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
@@ -128,4 +139,6 @@ export interface Suggestion {
   /** What it rests on: the similar document's path, or the other field's value (`부서: 영업`). */
   source: string | null
   similarity: number | null
+  /** Why there is none, when `value` is null and the field was asked (`abstain`). */
+  reason?: Abstention | null
 }

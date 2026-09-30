@@ -1,4 +1,5 @@
 // Every user-facing string lives here, so a change of UI language touches one file.
+import type { Abstention, FieldCurve } from './projection.js'
 export const strings = {
   appName: 'Lowline',
   navLabel: '탐색',
@@ -37,10 +38,16 @@ export const strings = {
   fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다.',
   fieldsNone: '이 서식에는 칸이 없습니다.',
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
-  judgmentAbstained: (learned: number) =>
-    learned === 0
+  judgmentAbstained: (reason: Abstention | null | undefined, learned: number) =>
+    reason === 'no-history' || (!reason && learned === 0)
       ? `확정한 문서가 아직 없어 제안하지 않습니다. 저장할 때마다 배웁니다.`
-      : `확정한 ${learned}건 중 비슷한 기록이 없어 제안하지 않습니다.`,
+      : reason === 'below-target'
+        ? `확정한 ${learned}건을 순서대로 다시 물어도 목표만큼 맞히지 못해, 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.`
+        : `확정한 ${learned}건 중 비슷한 기록이 없어 제안하지 않습니다.`,
+  // Asked after each pause in typing, so the next pause asks again.
+  judgmentUnavailable: '이 칸의 제안을 준비하지 못했습니다 — 입력을 이어 가면 다시 묻습니다.',
+  // The sidecar did not start: filling in and saving do not need it.
+  suggestionsUnavailable: '제안을 준비하지 못했습니다. 입력과 저장은 그대로 됩니다 — 앱을 다시 열면 다시 시도합니다.',
   newDocument: '새 문서',
   noDocuments: '문서가 없습니다.',
   conflictCopyOf: (original: string) => `충돌 사본 — 원본: ${original}`,
@@ -116,8 +123,12 @@ export const strings = {
   hostStarting: '표를 준비하고 있습니다…',
   learningEmpty: '제안을 받는 판단 칸이 아직 없습니다. 서식에서 판단 칸을 정하면 여기서 곡선이 자랍니다.',
   learningUndecided: '아직 결정된 제안이 없습니다 — 제안을 수락·교정·거절하며 저장하면 곡선이 자랍니다.',
-  // Which of the two it is, the sidecar does not say yet (B-37): the text names both rather than guess.
-  learningNoReplay: '저장된 기록으로 다시 물어본 결과가 아직 없습니다 — 기록이 적거나, 목표만큼 맞히는 기준을 아직 찾지 못했습니다.',
+  learningNoReplay: (why: FieldCurve['whyNoReplay']) =>
+    why === 'few'
+      ? '기록이 아직 적어 다시 물어보지 않았습니다 — 확정한 문서가 늘면 저장된 기록을 순서대로 다시 물어 제안 기준을 고릅니다.'
+      : why === 'below-target'
+        ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.'
+        : '저장된 기록을 순서대로 다시 물어 제안 기준을 고르는 중입니다 — 끝나면 이 화면을 다시 열어 보세요.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
   learningRate: (rate: number, of: number) => `제안이 나온 최근 ${of}건 중 맞음 ${Math.round(rate * 100)}%`,

@@ -931,6 +931,47 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'says why a field is not suggested for when replaying its history never reaches the target'(app, vault) {
+    // Alike requests whose owners alternate: whichever earlier record is nearest, it is right half the time.
+    const ASSIGN = { name: '배정', ref: 'assign@1', path: '서식/배정.fd.md' }
+    const body = '# 배정\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+    const template = join(vault, ASSIGN.path)
+    await writeFile(template, `---\nid: assign\nversion: 1\nlowline:\n  suggest: [담당]\n---\n${body}`)
+    const files = Array.from({ length: 15 }, (_, i) => join(vault, '문서', `배정-${i + 1}.md`))
+    for (const [i, file] of files.entries()) {
+      await writeFile(file, `---\ntemplate: assign@1\n요청: 노트북 배터리 문제 ${i + 1}\n담당: ${i % 2 ? '장비' : '인사'}\n---\n${body}`)
+    }
+
+    // The replay runs apart from reading the vault; the learning view says what it found once it is read again.
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '배정 · 담당'); return h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim() })()`
+    let said = ''
+    for (const until = Date.now() + 30_000; Date.now() < until && !said.includes('목표만큼'); ) {
+      await app.sidebar(ASSIGN.name, { timeoutMs: 30_000 })
+      await app.learning()
+      said = (await app.cdp.waitFor(replay, 'the replay line of 배정 · 담당', { timeoutMs: 30_000 })) ?? ''
+    }
+    assert.match(said, /^저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어/)
+
+    // A new record like all of them gets no suggestion, and the reason says it is the field, not the record.
+    await app.newDocument(ASSIGN)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.type('[data-field-name="요청"]', '노트북 배터리 문제 16')
+    const why = await app.cdp.waitFor(
+      `__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim()).find((t) => t.includes('목표만큼'))`,
+      'why 담당 has no suggestion',
+      { timeoutMs: 30_000 },
+    )
+    assert.equal(why, '확정한 15건을 순서대로 다시 물어도 목표만큼 맞히지 못해, 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.')
+    assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'nothing offered')
+    await app.noAlert()
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await Promise.all([template, ...files].map((f) => rm(f)))
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '배정')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'shows a sync conflict copy beside its original, and learns from neither until one is kept'(app, vault) {
     // A sync client kept another device's edit of 접수-1 as a copy.
     const copy = join(vault, '문서', '접수-1 (다른 기기의 충돌된 사본 2026-09-29).md')
