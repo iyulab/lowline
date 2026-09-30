@@ -70,6 +70,19 @@ public sealed class CaseIndexTests
     }
 
     [Fact]
+    public async Task A_document_whose_values_are_all_cleared_is_not_found_by_what_it_held()
+    {
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Intake, Bug], Documents), Ct);
+        var cleared = Documents.Select(d => d.Path == "문서/휴가.md" ? Doc(d.Path, "{}") : d).ToList();
+        await vault.IngestAsync(new VaultSnapshot([Intake, Bug], cleared), Ct);
+
+        Assert.Empty(await Search(vault, "연차"));
+        Assert.Empty(await Search(vault, "일수"));
+        Assert.Equal(["문서/배터리.md", "문서/충전.md"], (await Search(vault, "배터리", "intake@1")).Order());
+    }
+
+    [Fact]
     public async Task Finds_the_documents_of_the_same_template_most_like_one_leaving_out_itself_and_conflicted_ones()
     {
         await using var vault = new VaultProjection();

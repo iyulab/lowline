@@ -84,15 +84,26 @@ internal sealed class CaseIndex : IAsyncDisposable
         File.Delete(ManifestFile);
 
         var indexed = 0;
-        foreach (var (identity, (text, metadata, fingerprint)) in changed)
+        // A document with no values has nothing to find by: what it held before leaves the index.
+        foreach (var (identity, (_, _, fingerprint)) in changed.Where(c => c.Value.Text.Length == 0))
         {
-            _indexed.TryGetValue(identity, out var known);
-            // Indexing an id again adds to what it had: a changed document is removed first.
-            // TODO(upstream: FluxIndex — indexing text under an id already indexed keeps both versions)
-            if (known is not null) await _context.Indexer.DeleteByDocumentIdAsync(identity, cancellationToken);
-            await _context.Indexer.IndexDocumentAsync(text, identity, metadata, cancellationToken);
+            if (_indexed.ContainsKey(identity)) await _context.Indexer.DeleteByDocumentIdAsync(identity, cancellationToken);
             _indexed[identity] = fingerprint;
-            indexed++;
+        }
+        var toIndex = changed.Where(c => c.Value.Text.Length > 0).ToList();
+        if (toIndex.Count > 0)
+        {
+            // Written together, one transaction per store; an id already indexed is replaced, not added to.
+            var result = await _context.Indexer.IndexDocumentsBatchAsync(
+                toIndex.Select(c => (c.Key, c.Value.Text, c.Value.Metadata)), new IndexingOptions(), null, cancellationToken);
+            var failed = result.Results.Where(r => !r.Success).Select(r => r.DocumentId).ToHashSet(StringComparer.Ordinal);
+            foreach (var (identity, (_, _, fingerprint)) in toIndex)
+            {
+                // One that could not be prepared is left out of the manifest, so the next sync tries it again.
+                if (failed.Contains(identity)) continue;
+                _indexed[identity] = fingerprint;
+                indexed++;
+            }
         }
         foreach (var identity in gone)
         {
