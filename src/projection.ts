@@ -92,10 +92,13 @@ export interface IngestResult {
   skipped: { path: string; reason: string }[]
 }
 
-/** A cell as text: lists joined, booleans as a check mark, missing values empty. */
+/**
+ * A cell as text: lists joined, booleans as a check or a cross, missing values empty — a box someone
+ * left unchecked is an answer, and reads differently from a field nobody has filled in.
+ */
 export function cellText(value: unknown): string {
   if (value === null || value === undefined) return ''
-  if (typeof value === 'boolean') return value ? '✓' : ''
+  if (typeof value === 'boolean') return value ? '✓' : '✗'
   if (Array.isArray(value)) return value.join(', ')
   return String(value)
 }

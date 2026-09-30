@@ -68,9 +68,14 @@ describe('cellText', () => {
       'a',
       '3',
       '✓',
-      '',
+      '✗',
       'x, y',
       '',
     ])
+  })
+
+  it('tells a box left unchecked apart from a value never given', () => {
+    expect(cellText(false)).not.toBe(cellText(undefined))
+    expect(cellText(undefined)).toBe('')
   })
 })

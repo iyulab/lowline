@@ -645,7 +645,7 @@ const scenarios = {
     const row = Object.fromEntries(headers.map((h, i) => [h, rows[0][i]]))
     assert.equal(row.제목, values.제목)
     assert.equal(row.심각도, values.심각도)
-    assert.equal(row.재현됨, values.재현됨 ? '✓' : '')
+    assert.equal(row.재현됨, values.재현됨 === undefined ? '' : values.재현됨 ? '✓' : '✗')
     assert.equal(row.환경, values.환경)
     await app.noAlert()
   },
