@@ -32,6 +32,8 @@ ureq = { version = "3", default-features = false, features = ["native-tls", "win
 tauri-kit-fs = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
 tauri-kit-sidecar = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
 tauri-kit-watch = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
+# Deleting moves a file to the system's trash (Recycle Bin, Trash, freedesktop trash), where the
+# person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"
 
 [dev-dependencies]
