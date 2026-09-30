@@ -13,6 +13,7 @@ import {
   setSuggest,
   templateBody,
   templateInfo,
+  templateProblems,
   updateDocument,
 } from '../documents.js'
 import { starterTemplate } from '../strings.js'
@@ -202,5 +203,29 @@ describe('setSuggest', () => {
     expect(fileNameFor('고객 문의', '.fd.md')).toBe('고객 문의.fd.md')
     expect(fileName('서식/고객 문의.fd.md', '.fd.md')).toBe('고객 문의')
     expect(fileName('문서/접수-1.md', '.md')).toBe('접수-1')
+  })
+})
+
+describe('templateProblems', () => {
+  const head = '---\nid: intake\nversion: 1\nlowline:\n  suggest: [담당]\n---\n'
+
+  it('finds none in a template that works as written', () => {
+    expect(templateProblems(`${head}요청: ___@요청\n\n@담당: [select options="장비,인사"]\n`)).toEqual([])
+  })
+
+  it('names a field name used more than once, once', () => {
+    const source = `${head}@담당: [select options="장비"]\n\n@담당: [text]\n\n@담당: [text]\n`
+    expect(templateProblems(source)).toEqual([{ kind: 'duplicate-field', name: '담당' }])
+  })
+
+  it('names a suggest entry that is not a field', () => {
+    const source = '---\nid: intake\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n@담당: [text]\n'
+    expect(templateProblems(source)).toEqual([{ kind: 'unknown-suggest', name: '분류' }])
+  })
+
+  it('says front matter cannot be read, before anything else', () => {
+    const [first] = templateProblems('---\nid: intake\nversion: [1\n---\n@담당: [text]\n')
+    expect(first.kind).toBe('front-matter')
+    expect(first.kind === 'front-matter' && first.detail).toMatch(/YAML/)
   })
 })

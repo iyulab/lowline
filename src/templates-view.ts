@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, setSuggest, templateInfo } from './documents.js'
+import { fileName, fileNameFor, setSuggest, templateInfo, templateProblems } from './documents.js'
 import './rename-control.js'
 import './delete-control.js'
 import './keep-copy-control.js'
@@ -80,6 +80,13 @@ export class LlTemplates extends LitElement {
     }
     .error {
       color: var(--dc-color-danger, #b00020);
+    }
+    /* Said while typing, before a save: a warning, not a failure. */
+    .problems {
+      margin: 0 0 var(--dc-space-2, 8px);
+      padding-inline-start: 1.25em;
+      color: var(--dc-color-warning-text, #8a5a00);
+      font-size: 0.875em;
     }
     /* Each field on one row: its judgment checkbox (as wide as its label, so a click beside it does
        nothing), then a choice field's options. */
@@ -246,7 +253,9 @@ export class LlTemplates extends LitElement {
     try {
       const lowline = readFrontMatter(this.source)?.frontMatter.data.lowline as { suggest?: unknown } | undefined
       const on = new Set(Array.isArray(lowline?.suggest) ? lowline.suggest : [])
-      return parseFormdown(this.source).forms.map((f) => ({
+      // A name used twice is one field to the documents: listed once (the problem is said above the source).
+      const forms = parseFormdown(this.source).forms.filter((f, i, all) => all.findIndex((g) => g.name === f.name) === i)
+      return forms.map((f) => ({
         name: f.name,
         label: f.label ?? f.name,
         judgment: on.has(f.name),
@@ -415,6 +424,12 @@ export class LlTemplates extends LitElement {
     this.error = ''
     this.message = '' // "saved" is said again only once this save has landed
     try {
+      // Unreadable front matter would read as a missing id: say what is actually wrong.
+      const unreadable = templateProblems(this.source).find((p) => p.kind === 'front-matter')
+      if (unreadable) {
+        this.error = strings.templateProblem(unreadable)
+        return
+      }
       templateInfo(this.source) // a template must name itself
       await vault.write(this.selected, this.source)
       this.loaded = this.source
@@ -428,6 +443,20 @@ export class LlTemplates extends LitElement {
     } catch (e) {
       this.error = describeError(e)
     }
+  }
+
+  /** What stands in the way of the source working as written, as it is typed. */
+  private renderProblems() {
+    let problems: ReturnType<typeof templateProblems>
+    try {
+      problems = templateProblems(this.source)
+    } catch {
+      return nothing
+    }
+    if (problems.length === 0) return nothing
+    return html`<ul class="problems" aria-label=${strings.templateProblemsTitle}>
+      ${problems.map((p) => html`<li>${strings.templateProblem(p)}</li>`)}
+    </ul>`
   }
 
   /** The template's fields: each can be made a judgment field, and a choice field's options edited. */
@@ -499,6 +528,7 @@ export class LlTemplates extends LitElement {
                   @ll-keep-copy-cancel=${() => (this.originalUntrashable = false)}
                 ></ll-keep-copy>`,
               })}
+              ${this.renderProblems()}
               <textarea
                 spellcheck="false"
                 aria-label=${strings.templateSource}

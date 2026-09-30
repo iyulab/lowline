@@ -176,3 +176,29 @@ function rank(order: readonly string[], name: string): number {
   const i = order.indexOf(name)
   return i === -1 ? order.length : i
 }
+
+/**
+ * What stands in the way of a template working as written, in the order a person would fix it: front matter
+ * that cannot be read (the template has no identity then), a field name used twice (a document keeps one
+ * value under it, so both fields hold the same), and a `lowline.suggest` name that is not a field (nothing
+ * is suggested for it).
+ */
+export type TemplateProblem =
+  | { kind: 'front-matter'; detail: string }
+  | { kind: 'duplicate-field'; name: string }
+  | { kind: 'unknown-suggest'; name: string }
+
+export function templateProblems(source: string): TemplateProblem[] {
+  const parsed = parseFormdown(source)
+  const problems: TemplateProblem[] = (parsed.diagnostics ?? [])
+    .filter((d) => d.code.startsWith('front-matter-') && d.severity === 'error')
+    .map((d) => ({ kind: 'front-matter', detail: d.message }))
+  const names = parsed.forms.map((f) => f.name)
+  for (const name of new Set(names.filter((n, i) => names.indexOf(n) !== i))) problems.push({ kind: 'duplicate-field', name })
+  const lowline = parsed.frontMatter?.data.lowline
+  const suggest = typeof lowline === 'object' && lowline !== null ? (lowline as { suggest?: unknown }).suggest : undefined
+  for (const name of Array.isArray(suggest) ? suggest : []) {
+    if (!names.includes(String(name))) problems.push({ kind: 'unknown-suggest', name: String(name) })
+  }
+  return problems
+}

@@ -1,4 +1,5 @@
 // Every user-facing string lives here, so a change of UI language touches one file.
+import type { TemplateProblem } from './documents.js'
 import type { Abstention, FieldCurve } from './projection.js'
 export const strings = {
   appName: 'Lowline',
@@ -37,6 +38,13 @@ export const strings = {
   fieldsTitle: '칸',
   fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다.',
   fieldsNone: '이 서식에는 칸이 없습니다.',
+  templateProblemsTitle: '서식 원문의 문제',
+  templateProblem: (p: TemplateProblem) =>
+    p.kind === 'front-matter'
+      ? `서식 앞부분(front matter)을 읽을 수 없어 저장하지 않습니다 — ${p.detail}`
+      : p.kind === 'duplicate-field'
+        ? `칸 이름 "${p.name}"이(가) 두 번 이상 쓰였습니다. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.`
+        : `lowline.suggest의 "${p.name}"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.`,
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
   judgmentAbstained: (reason: Abstention | null | undefined, learned: number) =>
     reason === 'no-history' || (!reason && learned === 0)

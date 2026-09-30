@@ -1260,6 +1260,63 @@ const scenarios = {
     await rm(file)
   },
 
+  async 'says what is wrong in a template source, and does not save one whose front matter cannot be read'(app, vault) {
+    const EDGE = { name: '경계 서식', ref: 'edge@1', path: '서식/경계 서식.fd.md' }
+    const file = join(vault, EDGE.path)
+    const source = '---\nid: edge\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n# 경계\n\n@담당: [select options="장비,인사"]\n\n@담당: [text]\n'
+    await writeFile(file, source)
+    await app.tabOf(EDGE, '서식', { timeoutMs: 30_000 })
+    const problems = await app.cdp.waitFor(
+      `(() => { const l = __e2e.all('ul.problems li').map((li) => li.textContent.trim()); return l.length ? l : null })()`,
+      'what is wrong in the source',
+      { timeoutMs: 30_000 },
+    )
+    assert.deepEqual(problems, [
+      '칸 이름 "담당"이(가) 두 번 이상 쓰였습니다. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.',
+      'lowline.suggest의 "분류"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.',
+    ])
+    assert.equal(
+      await app.cdp.evaluate(`__e2e.all('dc-checkbox').filter((c) => c.getAttribute('name') === '담당').length`),
+      1,
+      'a name used twice is listed once',
+    )
+
+    // Front matter that cannot be read is said as that, not as a missing id, and the file is left as it was.
+    await app.type('textarea', source.replace('version: 1', 'version: [1'))
+    await app.click('dc-button', '저장')
+    const said = await app.cdp.waitFor(`__e2e.all('[role=alert]').map((el) => el.textContent.trim()).find(Boolean)`, 'why it was not saved')
+    assert.match(said, /^서식 앞부분\(front matter\)을 읽을 수 없어 저장하지 않습니다 — /)
+    assert.equal(await readFile(file, 'utf8'), source, 'not saved')
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await rm(file)
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '경계 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
+  async 'saves a document whose values were all cleared, named by its day alone'(app, vault) {
+    const before = new Set(await documentsIn(vault))
+    await app.newDocument(INTAKE)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.type('[data-field-name="요청"]', 'x')
+    await app.cdp.press('Backspace', { keyCode: 8 })
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'the request cleared again')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    await app.noAlert()
+
+    const created = (await documentsIn(vault)).filter((n) => !before.has(n))
+    assert.equal(created.length, 1, 'one document')
+    assert.match(created[0], /^\d{4}-\d{2}-\d{2}(-\d+)?\.md$/, 'named by the day: there is no value to name it by')
+    const { lowline, ...values } = await fileValues(join(vault, '문서', created[0]))
+    assert.ok(lowline?.id, 'it names itself')
+    assert.deepEqual(values, { template: 'intake@1' }, 'no field holds a value')
+
+    await app.learning()
+    await rm(join(vault, '문서', created[0]))
+  },
+
   async 'writes an error report with the kind of failure and nothing of what was on screen'(app) {
     const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
     const before = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).length : 0
