@@ -36,6 +36,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         id: toolchain
+        with:
+          components: rustfmt
+
+      # First, since it needs nothing built: the shell's code is formatted as `cargo fmt` leaves it.
+      - name: Shell format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
       - uses: actions/cache@v6
         with:
