@@ -11,6 +11,7 @@ import {
   newDocument,
   setDocumentId,
   setSuggest,
+  strayFields,
   templateBody,
   templateInfo,
   templateProblems,
@@ -234,5 +235,29 @@ describe('templateProblems — conditions', () => {
   it('names a condition that points at no field of the template, once per field', () => {
     const source = '---\nid: order\nversion: 1\n---\n@구분: [radio options="개인,법인"]\n\n@회사명: [text visible-if="분류=법인" required-if="분류=법인"]\n\n@메모: [text hidden-if="!구분"]\n'
     expect(templateProblems(source)).toEqual([{ kind: 'unknown-condition', field: '회사명', name: '분류' }])
+  })
+})
+
+describe('strayFields', () => {
+  const source = '---\nid: intake\nversion: 1\n---\n# 접수\n\n요청: ___@요청\n\n@배정: [select options="장비,인사"]\n'
+  const doc = (values: Record<string, unknown>, template = 'intake@1') => ({ template, values })
+
+  it("names the fields the template's documents hold values in that the source does not have, most first", () => {
+    const documents = [
+      doc({ 요청: '노트북', 담당: '장비', 비고: '급함' }),
+      doc({ 요청: '휴가', 담당: '인사' }),
+      doc({ 요청: '프린터', 담당: '' }),
+      doc({ 요청: '회의실', 태그: [] }),
+      doc({ 담당: '장비' }, 'intake@2'),
+    ]
+    expect(strayFields(source, documents)).toEqual([
+      { kind: 'stray-values', name: '담당', count: 2 },
+      { kind: 'stray-values', name: '비고', count: 1 },
+    ])
+  })
+
+  it('has none while every value has its field, or when the source cannot be read', () => {
+    expect(strayFields(source, [doc({ 요청: '노트북', 배정: '장비' })])).toEqual([])
+    expect(strayFields('# 앞부분 없음\n\n요청: ___@요청\n', [doc({ 담당: '장비' })])).toEqual([])
   })
 })

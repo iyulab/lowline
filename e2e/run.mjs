@@ -1519,6 +1519,38 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '개정 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async "says when the template's documents hold values in a field its source no longer has"(app, vault) {
+    const STRAY = { name: '배정표', ref: 'assignments@1', path: '서식/배정표.fd.md' }
+    const source = '---\nid: assignments\nversion: 1\n---\n# 배정표\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+    const files = [join(vault, STRAY.path), join(vault, '문서', '배정표-1.md'), join(vault, '문서', '배정표-2.md')]
+    await writeFile(files[0], source)
+    await writeFile(files[1], `---\ntemplate: assignments@1\n요청: 노트북\n담당: 장비\n---\n# 배정표\n`)
+    await writeFile(files[2], `---\ntemplate: assignments@1\n요청: 휴가\n담당: 인사\n---\n# 배정표\n`)
+    const problems = `__e2e.all('ul.problems li').map((li) => li.textContent.trim())`
+    try {
+      await app.tabOf(STRAY, '서식', { timeoutMs: 30_000 })
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: assignments')`, 'the template source')
+      assert.deepEqual(await app.cdp.evaluate(problems), [], 'nothing to say while every value has its field')
+
+      // Renaming the field in the source leaves the documents' values without one — said as it is typed.
+      await app.type('textarea', source.replace('@담당:', '@배정:'))
+      const said = await app.cdp.waitFor(`(() => { const p = ${problems}; return p.length ? p : null })()`, 'what the documents hold', { timeoutMs: 15_000 })
+      assert.deepEqual(said, [
+        '문서 2건에 칸 "담당"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 칸이 보이는 이름만 바꾸려면 이름은 두고 label을 바꾸세요.',
+      ])
+      // Changing only what the field shows keeps its name, and its values.
+      await app.type('textarea', source.replace('@담당: [select', '@담당: [select label="배정"'))
+      await app.cdp.waitFor(`(${problems}).length === 0`, 'nothing to say once the name is kept')
+      await app.noAlert()
+    } finally {
+      // Leave the vault as the scenarios after this one expect it.
+      await app.learning()
+      await app.answerUnsaved('편집 버리기')
+      await Promise.all(files.map((f) => rm(f, { force: true })))
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '배정표')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'saves a document whose values were all cleared, named by its day alone'(app, vault) {
     const before = new Set(await documentsIn(vault))
     await app.newDocument(INTAKE)

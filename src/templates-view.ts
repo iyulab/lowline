@@ -2,7 +2,9 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, setSuggest, templateInfo, templateProblems } from './documents.js'
+import { fileName, fileNameFor, setSuggest, strayFields, templateInfo, templateProblems } from './documents.js'
+import { readVault } from './vault-snapshot.js'
+import type { DocumentSnapshot } from './projection.js'
 import './rename-control.js'
 import './delete-control.js'
 import './keep-copy-control.js'
@@ -122,6 +124,8 @@ export class LlTemplates extends LitElement {
 
   /** The template files, conflict copies included: what tells whether this one has a copy. */
   @state() private entries: VaultEntry[] = []
+  /** The vault's documents as last read: see `strayFields`. */
+  @state() private documents: DocumentSnapshot[] = []
   @state() private selected?: string
   @state() private source = ''
   /** The open template as it was last read or saved: what the file holds unless changed outside. */
@@ -194,6 +198,8 @@ export class LlTemplates extends LitElement {
   private async refresh() {
     try {
       this.entries = await vault.listTemplates()
+      // The documents' values, for what they hold that the source no longer has.
+      this.documents = (await readVault()).documents
     } catch (e) {
       this.error = describeError(e)
     }
@@ -458,7 +464,7 @@ export class LlTemplates extends LitElement {
   private renderProblems() {
     let problems: ReturnType<typeof templateProblems>
     try {
-      problems = templateProblems(this.source)
+      problems = [...templateProblems(this.source), ...strayFields(this.source, this.documents)]
     } catch {
       return nothing
     }

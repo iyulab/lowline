@@ -189,6 +189,36 @@ export type TemplateProblem =
   | { kind: 'duplicate-field'; name: string }
   | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'unknown-suggest'; name: string }
+  | { kind: 'stray-values'; name: string; count: number }
+
+/**
+ * Fields the template's documents hold values in that its source does not have — a field renamed or
+ * removed there. The values stay in the files, but the table and suggestions no longer see them. Each
+ * with how many documents hold a value in it, most first. A source that cannot be read has none.
+ */
+export function strayFields(
+  source: string,
+  documents: readonly { template: string; values: Record<string, unknown> }[],
+): Extract<TemplateProblem, { kind: 'stray-values' }>[] {
+  let ref: string
+  try {
+    ref = templateInfo(source).ref
+  } catch {
+    return []
+  }
+  const names = new Set(parseFormdown(source).forms.map((f) => f.name))
+  const counts = new Map<string, number>()
+  for (const document of documents) {
+    if (document.template !== ref) continue
+    for (const [name, value] of Object.entries(document.values)) {
+      const held = value !== null && value !== undefined && value !== '' && !(Array.isArray(value) && value.length === 0)
+      if (held && !names.has(name)) counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+  }
+  return [...counts]
+    .sort(([a, m], [b, n]) => n - m || a.localeCompare(b))
+    .map(([name, count]) => ({ kind: 'stray-values', name, count }))
+}
 
 export function templateProblems(source: string): TemplateProblem[] {
   const parsed = parseFormdown(source)

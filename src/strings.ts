@@ -46,7 +46,9 @@ export const strings = {
         ? `칸 이름 "${p.name}"이(가) 두 번 이상 쓰였습니다. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.`
         : p.kind === 'unknown-condition'
           ? `칸 "${p.field}"의 조건이 이 서식에 없는 칸 "${p.name}"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.`
-          : `lowline.suggest의 "${p.name}"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.`,
+          : p.kind === 'stray-values'
+            ? `문서 ${p.count}건에 칸 "${p.name}"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 칸이 보이는 이름만 바꾸려면 이름은 두고 label을 바꾸세요.`
+            : `lowline.suggest의 "${p.name}"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.`,
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
   judgmentAbstained: (reason: Abstention | null | undefined, learned: number) =>
     reason === 'no-history' || (!reason && learned === 0)
