@@ -1402,7 +1402,7 @@ const scenarios = {
   async 'says what is wrong in a template source, and does not save one whose front matter cannot be read'(app, vault) {
     const EDGE = { name: '경계 서식', ref: 'edge@1', path: '서식/경계 서식.fd.md' }
     const file = join(vault, EDGE.path)
-    const source = '---\nid: edge\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n# 경계\n\n@담당: [select options="장비,인사"]\n\n@담당: [text]\n'
+    const source = '---\nid: edge\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n# 경계\n\n@담당: [select options="장비,인사"]\n\n@담당: [text]\n\n@메모: [text visible-if="분류=급함"]\n'
     await writeFile(file, source)
     await app.tabOf(EDGE, '서식', { timeoutMs: 30_000 })
     const problems = await app.cdp.waitFor(
@@ -1412,6 +1412,7 @@ const scenarios = {
     )
     assert.deepEqual(problems, [
       '칸 이름 "담당"이(가) 두 번 이상 쓰였습니다. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.',
+      '칸 "메모"의 조건이 이 서식에 없는 칸 "분류"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.',
       'lowline.suggest의 "분류"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.',
     ])
     assert.equal(

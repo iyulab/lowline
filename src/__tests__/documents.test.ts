@@ -229,3 +229,10 @@ describe('templateProblems', () => {
     expect(first.kind === 'front-matter' && first.detail).toMatch(/YAML/)
   })
 })
+
+describe('templateProblems — conditions', () => {
+  it('names a condition that points at no field of the template, once per field', () => {
+    const source = '---\nid: order\nversion: 1\n---\n@구분: [radio options="개인,법인"]\n\n@회사명: [text visible-if="분류=법인" required-if="분류=법인"]\n\n@메모: [text hidden-if="!구분"]\n'
+    expect(templateProblems(source)).toEqual([{ kind: 'unknown-condition', field: '회사명', name: '분류' }])
+  })
+})

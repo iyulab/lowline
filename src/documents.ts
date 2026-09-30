@@ -180,12 +180,14 @@ function rank(order: readonly string[], name: string): number {
 /**
  * What stands in the way of a template working as written, in the order a person would fix it: front matter
  * that cannot be read (the template has no identity then), a field name used twice (a document keeps one
- * value under it, so both fields hold the same), and a `lowline.suggest` name that is not a field (nothing
- * is suggested for it).
+ * value under it, so both fields hold the same), a condition that names no field of the template (it never
+ * sees a value, so it decides the same way for every document — a `visible-if` keeps its field hidden), and
+ * a `lowline.suggest` name that is not a field (nothing is suggested for it).
  */
 export type TemplateProblem =
   | { kind: 'front-matter'; detail: string }
   | { kind: 'duplicate-field'; name: string }
+  | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'unknown-suggest'; name: string }
 
 export function templateProblems(source: string): TemplateProblem[] {
@@ -195,6 +197,10 @@ export function templateProblems(source: string): TemplateProblem[] {
     .map((d) => ({ kind: 'front-matter', detail: d.message }))
   const names = parsed.forms.map((f) => f.name)
   for (const name of new Set(names.filter((n, i) => names.indexOf(n) !== i))) problems.push({ kind: 'duplicate-field', name })
+  for (const field of parsed.forms) {
+    const named = new Set(Object.values(field.conditions ?? {}).map((c) => c?.field).filter((n): n is string => !!n))
+    for (const name of named) if (!names.includes(name)) problems.push({ kind: 'unknown-condition', field: field.name, name })
+  }
   const lowline = parsed.frontMatter?.data.lowline
   const suggest = typeof lowline === 'object' && lowline !== null ? (lowline as { suggest?: unknown }).suggest : undefined
   for (const name of Array.isArray(suggest) ? suggest : []) {
