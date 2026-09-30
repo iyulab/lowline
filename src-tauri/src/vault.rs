@@ -354,7 +354,11 @@ mod tests {
         v.write("문서/a.md", "A").unwrap();
         v.write("문서/b.md", "B").unwrap();
         let read = v
-            .read_many(&["문서/b.md".into(), "문서/gone.md".into(), "문서/a.md".into()])
+            .read_many(&[
+                "문서/b.md".into(),
+                "문서/gone.md".into(),
+                "문서/a.md".into(),
+            ])
             .unwrap();
         assert_eq!(read, [Some("B".into()), None, Some("A".into())]);
         assert!(matches!(
@@ -523,7 +527,10 @@ mod tests {
         v.create("문서/a.md", "a").unwrap();
         v.remove("문서/a.md").unwrap();
         assert!(matches!(v.read("문서/a.md"), Err(VaultError::NotFound(_))));
-        assert!(matches!(v.remove("문서/a.md"), Err(VaultError::NotFound(_))));
+        assert!(matches!(
+            v.remove("문서/a.md"),
+            Err(VaultError::NotFound(_))
+        ));
         assert!(matches!(v.trash("문서/a.md"), Err(VaultError::NotFound(_))));
         // A folder is never deleted, and nothing outside the vault is.
         assert!(v.remove("문서").is_err());
@@ -566,9 +573,12 @@ mod tests {
         let (_dir, v) = vault();
         v.write("서식/회의.fd.md", "a").unwrap();
         // The marker goes before the last extension: the copy no longer ends in `.fd.md`.
-        v.write("서식/회의.fd (김의 충돌된 사본 2026-09-29).md", "b").unwrap();
-        v.write("서식/회의.fd.sync-conflict-20260929-143015-ABCDEFG.md", "c").unwrap();
-        v.write("서식/메모 (conflicted copy 2026-09-29 143015).md", "d").unwrap();
+        v.write("서식/회의.fd (김의 충돌된 사본 2026-09-29).md", "b")
+            .unwrap();
+        v.write("서식/회의.fd.sync-conflict-20260929-143015-ABCDEFG.md", "c")
+            .unwrap();
+        v.write("서식/메모 (conflicted copy 2026-09-29 143015).md", "d")
+            .unwrap();
         let listed: Vec<_> = v
             .list(TEMPLATES_DIR, TEMPLATE_SUFFIX)
             .unwrap()
@@ -579,9 +589,15 @@ mod tests {
         assert_eq!(
             listed,
             [
-                ("서식/회의.fd (김의 충돌된 사본 2026-09-29).md".to_string(), original.clone()),
+                (
+                    "서식/회의.fd (김의 충돌된 사본 2026-09-29).md".to_string(),
+                    original.clone()
+                ),
                 ("서식/회의.fd.md".to_string(), None),
-                ("서식/회의.fd.sync-conflict-20260929-143015-ABCDEFG.md".to_string(), original),
+                (
+                    "서식/회의.fd.sync-conflict-20260929-143015-ABCDEFG.md".to_string(),
+                    original
+                ),
             ]
         );
     }

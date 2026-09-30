@@ -36,7 +36,11 @@ impl Report {
         Report {
             layer,
             kind: plain_kind(kind),
-            frames: stack.lines().filter_map(|line| frame(layer, line)).take(MAX_FRAMES).collect(),
+            frames: stack
+                .lines()
+                .filter_map(|line| frame(layer, line))
+                .take(MAX_FRAMES)
+                .collect(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             os: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
@@ -64,7 +68,10 @@ pub const MAX_REPORTS: usize = 50;
 
 impl Reporter {
     pub fn new(file: std::path::PathBuf) -> Self {
-        Reporter { file, written: Default::default() }
+        Reporter {
+            file,
+            written: Default::default(),
+        }
     }
 
     /// Writes the report unless this failure — the same layer, kind and first frame — was written
@@ -78,7 +85,11 @@ impl Reporter {
         let report = if written.count == MAX_REPORTS {
             Report::new(report.layer, "ReportsCapped", "")
         } else {
-            let failure = (report.layer, report.kind.clone(), report.frames.first().cloned());
+            let failure = (
+                report.layer,
+                report.kind.clone(),
+                report.frames.first().cloned(),
+            );
             if !written.failures.insert(failure) {
                 return Ok(false);
             }
@@ -96,7 +107,11 @@ impl Reporter {
         }
         let mut line = serde_json::to_string(report).map_err(std::io::Error::other)?;
         line.push('\n');
-        std::fs::OpenOptions::new().create(true).append(true).open(&self.file)?.write_all(line.as_bytes())
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.file)?
+            .write_all(line.as_bytes())
     }
 }
 
@@ -168,7 +183,10 @@ impl Sink {
     /// PC is set up with — an office network that inspects TLS has its own root in that store.
     pub fn agent() -> ureq::Agent {
         use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
-        let tls = TlsConfig::builder().provider(TlsProvider::NativeTls).root_certs(RootCerts::PlatformVerifier).build();
+        let tls = TlsConfig::builder()
+            .provider(TlsProvider::NativeTls)
+            .root_certs(RootCerts::PlatformVerifier)
+            .build();
         ureq::Agent::config_builder()
             .tls_config(tls)
             .http_status_as_error(false)
@@ -182,7 +200,12 @@ impl Sink {
     /// passed over. Stops at the first request that fails for a reason that may pass — the network,
     /// or the endpoint being busy or down — and leaves the rest for the next launch. Returns how
     /// many reports were sent.
-    pub fn send_pending(&self, agent: &ureq::Agent, file: &std::path::Path, sent: &std::path::Path) -> std::io::Result<usize> {
+    pub fn send_pending(
+        &self,
+        agent: &ureq::Agent,
+        file: &std::path::Path,
+        sent: &std::path::Path,
+    ) -> std::io::Result<usize> {
         use std::io::{Read, Seek};
         let mut pending = match std::fs::File::open(file) {
             Ok(f) => f,
@@ -205,7 +228,10 @@ impl Sink {
         let lines: Vec<&[u8]> = bytes[..end].split_inclusive(|&b| b == b'\n').collect();
         let mut count = 0;
         for batch in lines.chunks(BATCH) {
-            let reports: Vec<Report> = batch.iter().filter_map(|line| serde_json::from_slice(line).ok()).collect();
+            let reports: Vec<Report> = batch
+                .iter()
+                .filter_map(|line| serde_json::from_slice(line).ok())
+                .collect();
             if !reports.is_empty() {
                 let items: Vec<_> = reports.iter().map(|report| self.envelope(report)).collect();
                 let body = serde_json::to_vec(&items).map_err(std::io::Error::other)?;
@@ -218,7 +244,9 @@ impl Sink {
                     .as_u16();
                 // Busy, throttled or down: the same reports may be taken later.
                 if matches!(status, 408 | 429) || status >= 500 {
-                    return Err(std::io::Error::other(format!("the endpoint answered {status}")));
+                    return Err(std::io::Error::other(format!(
+                        "the endpoint answered {status}"
+                    )));
                 }
                 // Anything else was taken, or will never be: either way it is not sent again.
                 if (200..300).contains(&status) {
@@ -234,7 +262,9 @@ impl Sink {
 
 /// `time` as ISO 8601 in UTC, to the second.
 fn utc(at: std::time::SystemTime) -> String {
-    let secs = at.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let secs = at
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let (days, rest) = (secs / 86_400, secs % 86_400);
     // Days since the epoch to a civil date (Howard Hinnant's algorithm).
     let z = days as i64 + 719_468;
@@ -264,20 +294,29 @@ fn plain_kind(raw: &str) -> String {
     let plain = raw.len() <= 100
         && chars.next().is_some_and(|c| c.is_ascii_alphabetic())
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-'));
-    if plain { raw.to_string() } else { "Unrecognized".to_string() }
+    if plain {
+        raw.to_string()
+    } else {
+        "Unrecognized".to_string()
+    }
 }
 
 /// A function name as a stack prints it, if it is only an identifier path.
 fn function_name(raw: &str) -> Option<&str> {
     let plain = !raw.is_empty()
         && raw.len() <= 200
-        && raw.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$' | '<' | '>' | '+' | '`'));
+        && raw.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '$' | '<' | '>' | '+' | '`')
+        });
     plain.then_some(raw)
 }
 
 /// A file's name, if it is a plain ASCII file name with one of `extensions`.
 fn source_file<'a>(raw: &'a str, extensions: &[&str]) -> Option<&'a str> {
-    let plain = !raw.is_empty() && raw.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'));
+    let plain = !raw.is_empty()
+        && raw
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-'));
     (plain && extensions.iter().any(|ext| raw.ends_with(ext))).then_some(raw)
 }
 
@@ -291,10 +330,14 @@ fn position(location: &str) -> Option<(&str, &str)> {
 
 /// The path of a script the app itself serves — from its bundle, or the dev server while developing.
 fn app_path(url: &str) -> Option<&str> {
-    let rest = url.strip_prefix("http://").or_else(|| url.strip_prefix("https://"))?;
+    let rest = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
     let (host, path) = rest.split_once('/')?;
     let own = host == "tauri.localhost"
-        || host.strip_prefix("localhost:").is_some_and(|port| !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()));
+        || host
+            .strip_prefix("localhost:")
+            .is_some_and(|port| !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()));
     own.then_some(path)
 }
 
@@ -324,14 +367,18 @@ fn frame(layer: Layer, line: &str) -> Option<String> {
         Layer::Ui => {
             let (url, at) = position(location)?;
             let file = app_path(url)?;
-            let file = file.strip_prefix("assets/").or_else(|| file.strip_prefix("src/"))?;
+            let file = file
+                .strip_prefix("assets/")
+                .or_else(|| file.strip_prefix("src/"))?;
             let file = source_file(file, &[".js", ".mjs", ".ts"])?;
             let function = function.and_then(function_name).unwrap_or("?");
             Some(format!("{function} {file}:{at}"))
         }
         Layer::Shell => {
             let (path, at) = position(location)?;
-            let file = path.strip_prefix("src/").or_else(|| path.strip_prefix("src\\"))?;
+            let file = path
+                .strip_prefix("src/")
+                .or_else(|| path.strip_prefix("src\\"))?;
             let file = source_file(file, &[".rs"])?;
             Some(format!("{file}:{at}"))
         }
@@ -345,8 +392,20 @@ mod tests {
     /// Strings no report may carry, whatever a layer hands over: vault paths (Windows, the `\\?\`
     /// form, POSIX, vault-relative), file names, template references, field values, a user name.
     const FORBIDDEN: &[&str] = &[
-        "C:\\Users", "홍길동", "\\\\?\\", "/home/", "/Users/", "문서/", "회의록", "노트", ".md", "intake@1",
-        "intake", "장비", "노트북", "secret",
+        "C:\\Users",
+        "홍길동",
+        "\\\\?\\",
+        "/home/",
+        "/Users/",
+        "문서/",
+        "회의록",
+        "노트",
+        ".md",
+        "intake@1",
+        "intake",
+        "장비",
+        "노트북",
+        "secret",
     ];
 
     fn assert_clean(report: &Report) {
@@ -354,7 +413,10 @@ mod tests {
         for bad in FORBIDDEN {
             assert!(!wire.contains(bad), "{bad:?} reached the report: {wire}");
         }
-        assert!(wire.is_ascii(), "only identifiers and file names of the app's own code: {wire}");
+        assert!(
+            wire.is_ascii(),
+            "only identifiers and file names of the app's own code: {wire}"
+        );
     }
 
     fn written(dir: &tempfile::TempDir) -> Vec<serde_json::Value> {
@@ -369,11 +431,23 @@ mod tests {
     fn writes_each_failure_once_a_launch() {
         let dir = tempfile::tempdir().unwrap();
         let reporter = Reporter::new(dir.path().join("reports.jsonl"));
-        let failure = || Report::new(Layer::Ui, "TypeError", "at save (http://tauri.localhost/assets/index-a.js:1:2)");
+        let failure = || {
+            Report::new(
+                Layer::Ui,
+                "TypeError",
+                "at save (http://tauri.localhost/assets/index-a.js:1:2)",
+            )
+        };
 
         assert!(reporter.record(failure()).unwrap());
         assert!(!reporter.record(failure()).unwrap());
-        assert!(reporter.record(Report::new(Layer::Ui, "TypeError", "at open (http://tauri.localhost/assets/index-a.js:9:9)")).unwrap());
+        assert!(reporter
+            .record(Report::new(
+                Layer::Ui,
+                "TypeError",
+                "at open (http://tauri.localhost/assets/index-a.js:9:9)"
+            ))
+            .unwrap());
 
         let lines = written(&dir);
         assert_eq!(lines.len(), 2);
@@ -387,7 +461,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let reporter = Reporter::new(dir.path().join("reports.jsonl"));
         for i in 0..MAX_REPORTS + 10 {
-            reporter.record(Report::new(Layer::Host, &format!("Failure{i}"), "")).unwrap();
+            reporter
+                .record(Report::new(Layer::Host, &format!("Failure{i}"), ""))
+                .unwrap();
         }
         let lines = written(&dir);
         assert_eq!(lines.len(), MAX_REPORTS + 1);
@@ -400,22 +476,41 @@ mod tests {
             "InstrumentationKey=00000000-1111-2222-3333-444444444444;IngestionEndpoint=https://koreacentral-0.in.applicationinsights.azure.com/;LiveEndpoint=https://live/;ApplicationId=x",
         )
         .unwrap();
-        assert_eq!(sink.instrumentation_key, "00000000-1111-2222-3333-444444444444");
-        assert_eq!(sink.track_url, "https://koreacentral-0.in.applicationinsights.azure.com/v2.1/track");
+        assert_eq!(
+            sink.instrumentation_key,
+            "00000000-1111-2222-3333-444444444444"
+        );
+        assert_eq!(
+            sink.track_url,
+            "https://koreacentral-0.in.applicationinsights.azure.com/v2.1/track"
+        );
     }
 
     #[test]
     fn a_connection_string_without_a_key_or_an_https_endpoint_names_no_sink() {
         assert_eq!(Sink::parse(""), None);
         assert_eq!(Sink::parse("IngestionEndpoint=https://x/"), None);
-        assert_eq!(Sink::parse("InstrumentationKey=k;IngestionEndpoint=http://x/"), None);
-        assert_eq!(Sink::parse("InstrumentationKey=;IngestionEndpoint=https://x/"), None);
+        assert_eq!(
+            Sink::parse("InstrumentationKey=k;IngestionEndpoint=http://x/"),
+            None
+        );
+        assert_eq!(
+            Sink::parse("InstrumentationKey=;IngestionEndpoint=https://x/"),
+            None
+        );
     }
 
     #[test]
     fn a_report_goes_out_as_one_exception_item() {
-        let sink = Sink { instrumentation_key: "k".into(), track_url: "https://x/v2.1/track".into() };
-        let mut report = Report::new(Layer::Ui, "TypeError", "at save (http://tauri.localhost/assets/index-a.js:1:2)");
+        let sink = Sink {
+            instrumentation_key: "k".into(),
+            track_url: "https://x/v2.1/track".into(),
+        };
+        let mut report = Report::new(
+            Layer::Ui,
+            "TypeError",
+            "at save (http://tauri.localhost/assets/index-a.js:1:2)",
+        );
         report.time = "2026-09-29T09:26:31Z".into();
         let item = sink.envelope(&report);
         assert_eq!(item["name"], "Microsoft.ApplicationInsights.Exception");
@@ -461,7 +556,9 @@ mod tests {
                 let mut body = vec![0; length];
                 reader.read_exact(&mut body).unwrap();
                 bodies.push(serde_json::from_slice(&body).unwrap());
-                let answer = format!("HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                let answer = format!(
+                    "HTTP/1.1 {status} X\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
                 reader.into_inner().write_all(answer.as_bytes()).unwrap();
             }
             bodies
@@ -470,40 +567,64 @@ mod tests {
     }
 
     fn loopback() -> ureq::Agent {
-        ureq::Agent::config_builder().http_status_as_error(false).proxy(None).build().into()
+        ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .proxy(None)
+            .build()
+            .into()
     }
 
     #[test]
     fn sends_what_was_written_since_the_last_send() {
         let dir = tempfile::tempdir().unwrap();
-        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
         let reporter = Reporter::new(file.clone());
-        reporter.record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
-        reporter.record(Report::new(Layer::Host, "System.IOException", "")).unwrap();
+        reporter
+            .record(Report::new(Layer::Ui, "TypeError", ""))
+            .unwrap();
+        reporter
+            .record(Report::new(Layer::Host, "System.IOException", ""))
+            .unwrap();
 
         let (sink, server) = endpoint(vec![200]);
         assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 2);
         let bodies = server.join().unwrap();
         let items = bodies[0].as_array().unwrap();
         assert_eq!(items.len(), 2);
-        assert_eq!(items[0]["data"]["baseData"]["exceptions"][0]["typeName"], "TypeError");
+        assert_eq!(
+            items[0]["data"]["baseData"]["exceptions"][0]["typeName"],
+            "TypeError"
+        );
         assert_eq!(items[1]["tags"]["ai.cloud.role"], "host");
 
         // Nothing new: no request at all.
         assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 0);
 
         // Only what came after.
-        reporter.record(Report::new(Layer::Shell, "Panic", "")).unwrap();
+        reporter
+            .record(Report::new(Layer::Shell, "Panic", ""))
+            .unwrap();
         let (sink, server) = endpoint(vec![200]);
         assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
-        assert_eq!(server.join().unwrap()[0][0]["data"]["baseData"]["exceptions"][0]["typeName"], "Panic");
+        assert_eq!(
+            server.join().unwrap()[0][0]["data"]["baseData"]["exceptions"][0]["typeName"],
+            "Panic"
+        );
     }
 
     #[test]
     fn keeps_the_reports_for_later_when_the_endpoint_is_busy() {
         let dir = tempfile::tempdir().unwrap();
-        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
-        Reporter::new(file.clone()).record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
+        Reporter::new(file.clone())
+            .record(Report::new(Layer::Ui, "TypeError", ""))
+            .unwrap();
 
         let (sink, server) = endpoint(vec![503]);
         assert!(sink.send_pending(&loopback(), &file, &sent).is_err());
@@ -517,8 +638,13 @@ mod tests {
     #[test]
     fn does_not_send_again_what_the_endpoint_will_never_take() {
         let dir = tempfile::tempdir().unwrap();
-        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
-        Reporter::new(file.clone()).record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
+        Reporter::new(file.clone())
+            .record(Report::new(Layer::Ui, "TypeError", ""))
+            .unwrap();
 
         let (sink, server) = endpoint(vec![400]);
         assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 0);
@@ -530,7 +656,10 @@ mod tests {
     #[test]
     fn passes_over_lines_that_are_not_reports_and_a_line_still_being_written() {
         let dir = tempfile::tempdir().unwrap();
-        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
         let old = r#"{"layer":"ui","kind":"TypeError","frames":[],"version":"0.1.0","os":"windows","arch":"x86_64"}"#;
         let report = serde_json::to_string(&Report::new(Layer::Ui, "RangeError", "")).unwrap();
         std::fs::write(&file, format!("{old}\n{report}\n{{\"layer\":\"ui\"")).unwrap();
@@ -539,15 +668,23 @@ mod tests {
         assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
         let bodies = server.join().unwrap();
         assert_eq!(bodies[0].as_array().unwrap().len(), 1);
-        assert_eq!(std::fs::read_to_string(&sent).unwrap(), (old.len() + 1 + report.len() + 1).to_string());
+        assert_eq!(
+            std::fs::read_to_string(&sent).unwrap(),
+            (old.len() + 1 + report.len() + 1).to_string()
+        );
     }
 
     #[test]
     fn a_new_file_shorter_than_what_was_sent_is_sent_from_its_start() {
         let dir = tempfile::tempdir().unwrap();
-        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
         std::fs::write(&sent, "999999").unwrap();
-        Reporter::new(file.clone()).record(Report::new(Layer::Ui, "TypeError", "")).unwrap();
+        Reporter::new(file.clone())
+            .record(Report::new(Layer::Ui, "TypeError", ""))
+            .unwrap();
 
         let (sink, server) = endpoint(vec![200]);
         assert_eq!(sink.send_pending(&loopback(), &file, &sent).unwrap(), 1);
@@ -560,10 +697,16 @@ mod tests {
     #[test]
     #[ignore]
     fn reaches_the_ingestion_endpoint() {
-        let sink = Sink::parse(&std::env::var("LOWLINE_APPINSIGHTS_CONNECTION_STRING").unwrap()).unwrap();
+        let sink =
+            Sink::parse(&std::env::var("LOWLINE_APPINSIGHTS_CONNECTION_STRING").unwrap()).unwrap();
         let dir = tempfile::tempdir().unwrap();
-        let (file, sent) = (dir.path().join("reports.jsonl"), dir.path().join("reports.sent"));
-        Reporter::new(file.clone()).record(Report::new(Layer::Shell, "EnvelopeProbe", "")).unwrap();
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
+        Reporter::new(file.clone())
+            .record(Report::new(Layer::Shell, "EnvelopeProbe", ""))
+            .unwrap();
         assert_eq!(sink.send_pending(&Sink::agent(), &file, &sent).unwrap(), 1);
     }
 
@@ -603,15 +746,27 @@ mod tests {
         assert_eq!(report.kind, "TypeError");
         assert_eq!(
             report.frames,
-            ["LlDocuments.save index-Bx12.js:3:1204", "open index-Bx12.js:9:55", "? vendor-9a.js:1:2"]
+            [
+                "LlDocuments.save index-Bx12.js:3:1204",
+                "open index-Bx12.js:9:55",
+                "? vendor-9a.js:1:2"
+            ]
         );
     }
 
     #[test]
     fn keeps_an_app_owned_code_and_a_dotted_type_name() {
-        assert_eq!(Report::new(Layer::Ui, "outside-vault", "").kind, "outside-vault");
         assert_eq!(
-            Report::new(Layer::Host, "Formbase.Core.Errors.ProjectionUnavailableException", "").kind,
+            Report::new(Layer::Ui, "outside-vault", "").kind,
+            "outside-vault"
+        );
+        assert_eq!(
+            Report::new(
+                Layer::Host,
+                "Formbase.Core.Errors.ProjectionUnavailableException",
+                ""
+            )
+            .kind,
             "Formbase.Core.Errors.ProjectionUnavailableException"
         );
     }
@@ -619,7 +774,11 @@ mod tests {
     #[test]
     fn a_kind_that_is_not_an_identifier_is_not_kept_in_part() {
         for raw in ["intake@1", "IOException: 문서/a.md", "", "a b"] {
-            assert_eq!(Report::new(Layer::Ui, raw, "").kind, "Unrecognized", "{raw:?}");
+            assert_eq!(
+                Report::new(Layer::Ui, raw, "").kind,
+                "Unrecognized",
+                "{raw:?}"
+            );
         }
     }
 
@@ -634,7 +793,10 @@ Lowline.Host.VaultProjection+<IngestAsync>d__12.MoveNext
         );
         assert_eq!(
             report.frames,
-            ["Lowline.Host.VaultProjection.IngestAsync", "Lowline.Host.VaultProjection+<IngestAsync>d__12.MoveNext"]
+            [
+                "Lowline.Host.VaultProjection.IngestAsync",
+                "Lowline.Host.VaultProjection+<IngestAsync>d__12.MoveNext"
+            ]
         );
     }
 

@@ -113,7 +113,11 @@ impl Host {
             }
         };
         // Loopback: never through the proxy the PC may be set up with.
-        let agent = ureq::Agent::config_builder().http_status_as_error(false).proxy(None).build().into();
+        let agent = ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .proxy(None)
+            .build()
+            .into();
         let host = Host {
             sidecar,
             client: HostClient { base, token, agent },
@@ -126,7 +130,10 @@ impl Host {
 
     /// Asks the host to stop, then stops whatever is left of it.
     pub fn stop(self) {
-        let _ = self.client.agent.post(&format!("{}/shutdown", self.client.base))
+        let _ = self
+            .client
+            .agent
+            .post(&format!("{}/shutdown", self.client.base))
             .header("Authorization", &self.client.bearer())
             .send_empty();
         let _ = self.sidecar.shutdown(STOP_GRACE);
@@ -265,7 +272,13 @@ mod tests {
 
     #[test]
     fn any_other_failure_is_only_its_status() {
-        assert!(matches!(answer(500, "".into()), Err(CallError::Status(500))));
-        assert!(matches!(answer(404, "".into()), Err(CallError::Status(404))));
+        assert!(matches!(
+            answer(500, "".into()),
+            Err(CallError::Status(500))
+        ));
+        assert!(matches!(
+            answer(404, "".into()),
+            Err(CallError::Status(404))
+        ));
     }
 }

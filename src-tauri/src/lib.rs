@@ -262,7 +262,10 @@ fn list_events(state: State<AppState>) -> CommandResult<Vec<Entry>> {
 /// Where this device keeps the suggestions it has shown, one file per vault. Outside the vault: they
 /// are counted, never learned from, and a draft let go leaves nothing of itself in a shared vault.
 fn presentations_file(app: &tauri::AppHandle, root: &Path) -> std::io::Result<PathBuf> {
-    let dir = app.path().app_local_data_dir().map_err(std::io::Error::other)?;
+    let dir = app
+        .path()
+        .app_local_data_dir()
+        .map_err(std::io::Error::other)?;
     let name = format!("{:016x}.jsonl", fnv1a(root.to_string_lossy().as_bytes()));
     Ok(dir.join("presentations").join(name))
 }
@@ -305,9 +308,17 @@ fn append_line(file: &Path, line: &str) -> std::io::Result<()> {
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(file)?;
-    f.write_all(format!("{line}
-").as_bytes())
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(file)?;
+    f.write_all(
+        format!(
+            "{line}
+"
+        )
+        .as_bytes(),
+    )
 }
 
 /// This device's record of the suggestions it has shown for the open vault; empty before the first.
@@ -384,7 +395,10 @@ async fn host_ingest(
 
 /// The ingest request for the vault at `root`: the sidecar keeps one projection cache per vault.
 fn ingest_path(root: &Path) -> String {
-    format!("/vault/ingest?vault={}", encode_segment(&root.to_string_lossy()))
+    format!(
+        "/vault/ingest?vault={}",
+        encode_segment(&root.to_string_lossy())
+    )
 }
 
 /// A template's documents as a table.
@@ -414,7 +428,11 @@ async fn blocking(
         .map_err(|e| e.to_string())?
         .map_err(|e| {
             if let host::CallError::Failed(failure) = &e {
-                report(report::Report::new(report::Layer::Host, &failure.kind, &failure.frames.join("\n")));
+                report(report::Report::new(
+                    report::Layer::Host,
+                    &failure.kind,
+                    &failure.frames.join("\n"),
+                ));
             }
             e.to_string()
         })
@@ -469,7 +487,11 @@ fn start_host(app: &tauri::AppHandle) {
         })();
         if result.is_err() {
             // Why it failed is a message, and messages do not leave the device: the kind says enough.
-            report(report::Report::new(report::Layer::Host, "HostStartFailed", ""));
+            report(report::Report::new(
+                report::Layer::Host,
+                "HostStartFailed",
+                "",
+            ));
         }
         app.state::<HostState>().set(result);
     });
@@ -490,7 +512,11 @@ fn report(report: report::Report) {
 /// Reports what the sidecar failed at away from any request.
 fn report_host_failures(failures: Vec<host::HostFailure>) {
     for failure in failures {
-        report(report::Report::new(report::Layer::Host, &failure.kind, &failure.frames.join("\n")));
+        report(report::Report::new(
+            report::Layer::Host,
+            &failure.kind,
+            &failure.frames.join("\n"),
+        ));
     }
 }
 
@@ -504,7 +530,9 @@ fn report_error(kind: String, stack: String) {
 /// Starts writing error reports, and reports a panic of the shell — to disk only, from the panic
 /// itself: a panicking process is no place to send anything.
 fn start_reports(app: &tauri::AppHandle) {
-    let Ok(dir) = app.path().app_log_dir() else { return };
+    let Ok(dir) = app.path().app_log_dir() else {
+        return;
+    };
     let file = dir.join("reports.jsonl");
     if REPORTER.set(report::Reporter::new(file.clone())).is_err() {
         return;
@@ -579,8 +607,15 @@ mod tests {
     #[test]
     fn watches_only_the_places_the_app_reads() {
         let own = Path::new(".lowline/events/this-device.jsonl");
-        for rel in ["서식/버그 리포트.fd.md", "문서/2026-09-29 제목.md", ".lowline/events/other-device.jsonl"] {
-            assert!(!ignored(Path::new(rel), Some(own)), "{rel} is read by the app");
+        for rel in [
+            "서식/버그 리포트.fd.md",
+            "문서/2026-09-29 제목.md",
+            ".lowline/events/other-device.jsonl",
+        ] {
+            assert!(
+                !ignored(Path::new(rel), Some(own)),
+                "{rel} is read by the app"
+            );
         }
         for rel in [
             ".lowline/events/this-device.jsonl",
@@ -591,7 +626,10 @@ mod tests {
             "assets/Pasted-1.png",
             "문서철/a.md",
         ] {
-            assert!(ignored(Path::new(rel), Some(own)), "{rel} is not the app's to read");
+            assert!(
+                ignored(Path::new(rel), Some(own)),
+                "{rel} is not the app's to read"
+            );
         }
     }
 
@@ -643,8 +681,11 @@ mod tests {
         let file = dir.path().join("presentations").join("v.jsonl");
         append_line(&file, r#"{"a":1}"#).unwrap();
         append_line(&file, r#"{"a":2}"#).unwrap();
-        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{\"a\":1}
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "{\"a\":1}
 {\"a\":2}
-");
+"
+        );
     }
 }
