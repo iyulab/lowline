@@ -345,7 +345,12 @@ export class LlTemplates extends LitElement {
     if (conflict !== undefined && 'copyOf' in conflict) {
       // Deleting a conflict copy keeps its original, which is still the app's template: shown again.
       await this.refresh()
-      await this.select(conflict.copyOf)
+      try {
+        await this.select(conflict.copyOf)
+      } catch (e) {
+        this.error = describeError(e)
+        return
+      }
       this.message = strings.keptOriginal(permanently)
       return
     }
@@ -388,7 +393,12 @@ export class LlTemplates extends LitElement {
       return
     }
     await this.refresh()
-    await this.select(original)
+    try {
+      await this.select(original)
+    } catch (e) {
+      this.error = describeError(e)
+      return
+    }
     this.message = strings.keptCopy(permanently)
   }
 
