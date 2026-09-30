@@ -3,7 +3,9 @@
 //   npm run build:e2e   builds the debug app with the e2e config (debugging port 9223)
 //   npm run test:e2e    copies the fixture vault to a temp folder and runs every scenario
 //                       (E2E_SCREENSHOTS=<dir> saves a picture of the window after each one;
-//                       E2E_COLOR_SCHEME=dark runs it in the dark scheme)
+//                       E2E_COLOR_SCHEME=dark runs it in the dark scheme;
+//                       E2E_VAULT_UNC=1 opens the vault through this PC's administrative share,
+//                       \\localhost\C$\..., so every file operation goes over SMB — Windows only)
 //
 // The one seam: the folder picker is a native dialog, so the vault is opened through the same
 // `open_vault` command the picker's result goes to. Everything after that is clicks and typing.
@@ -677,6 +679,7 @@ const scenarios = {
   async 'suggests a judgment value from confirmed documents, and saves it once accepted'(app, vault) {
     const before = new Set(await documentsIn(vault))
     await app.newDocument(INTAKE)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
     await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
     // The suggestion is drawn by the field it is for: its value to take, what it rests on, and a way to decline.
@@ -791,6 +794,7 @@ const scenarios = {
     }
     const suggestionNow = async () => {
       await app.newDocument(INTAKE)
+      await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
       await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
       return app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
@@ -884,6 +888,7 @@ const scenarios = {
 
     // Imported records are confirmed values: a similar new record gets the imported answer suggested.
     await app.newDocument(INTAKE)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
     await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
     await app.choose('select[name="부서"]', '영업')
     const suggestion = await app.cdp.waitFor(
@@ -993,6 +998,7 @@ const scenarios = {
 
       // The same request that was suggested 장비 from 접수-1 is now answered only from other records.
       await app.newDocument(INTAKE)
+      await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
       await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       const note = await app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
@@ -1038,7 +1044,8 @@ const scenarios = {
       await app.click('dc-button', '이 사본을 남기기')
       await asked('이 사본을 남길까요?')
       await app.click('dc-button', '사본 남기기')
-      await app.status('사본을 남겼습니다. 원본은 휴지통에 있습니다.')
+      await deleteForGoodOverSmb(app, '원본 영구히 지우기')
+      await app.status(SMB ? '사본을 남겼습니다. 원본은 지웠습니다.' : '사본을 남겼습니다. 원본은 휴지통에 있습니다.')
       await app.noAlert()
       assert.ok(!existsSync(join(vault, copyDocPath)), 'the copy took the original’s name')
       assert.match(await readFile(originalDoc, 'utf8'), /담당: 총무/, 'the original’s name holds what the copy held')
@@ -1051,6 +1058,7 @@ const scenarios = {
 
       // Settled, it is a similar record again — with the value that was kept.
       await app.newDocument(INTAKE)
+      await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
       await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       await app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').some((el) => { const n = el.closest('[data-formdown-note]').textContent; return n.includes('접수-1') && n.includes('총무') })`,
@@ -1082,7 +1090,8 @@ const scenarios = {
       await app.click('dc-button', '지우기')
       await asked('이 사본을 지울까요?')
       await app.click('dc-button', '휴지통으로 옮기기')
-      await app.status('사본을 휴지통으로 옮기고 원본을 남겼습니다.')
+      await deleteForGoodOverSmb(app, '영구히 지우기')
+      await app.status(SMB ? '사본을 지우고 원본을 남겼습니다.' : '사본을 휴지통으로 옮기고 원본을 남겼습니다.')
       assert.ok(!existsSync(join(vault, copyTemplatePath)), 'the copy gone')
       assert.equal(await app.value('textarea'), templateBefore, 'the original shown again')
       const trashedCopy = await trashedFrom('서식')
@@ -1093,7 +1102,8 @@ const scenarios = {
       await app.click('dc-button', '이 사본을 남기기')
       await asked('이 사본을 남길까요?')
       await app.click('dc-button', '사본 남기기')
-      await app.status('사본을 남겼습니다. 원본은 휴지통에 있습니다.')
+      await deleteForGoodOverSmb(app, '원본 영구히 지우기')
+      await app.status(SMB ? '사본을 남겼습니다. 원본은 지웠습니다.' : '사본을 남겼습니다. 원본은 휴지통에 있습니다.')
       assert.ok(!existsSync(join(vault, copyTemplatePath)), 'the copy took the original’s name')
       assert.match(await readFile(originalTemplate, 'utf8'), /메모: ___@메모/)
       assert.match(await app.value('textarea'), /메모: ___@메모/, 'the kept template shown')
@@ -1195,7 +1205,8 @@ const scenarios = {
       'the unsaved edits named',
     )
     await app.click('dc-button', '휴지통으로 옮기기')
-    await app.status('휴지통으로 옮겼습니다')
+    await deleteForGoodOverSmb(app, '영구히 지우기')
+    await app.status(SMB ? '지웠습니다' : '휴지통으로 옮겼습니다')
     assert.ok(!existsSync(doc), 'gone from the vault')
     const trashedDoc = await trashedFrom('문서')
     if (trashedDoc) assert.deepEqual(trashedDoc, ['지울 문의.md'], 'in the Recycle Bin, not deleted')
@@ -1215,8 +1226,9 @@ const scenarios = {
       await app.click('dc-button', '지우기')
       await asked('이 서식을 지울까요?')
       await app.click('dc-button', '휴지통으로 옮기기')
+      await deleteForGoodOverSmb(app, '영구히 지우기')
       await app.cdp.waitFor(
-        `__e2e.all('[role=status]').some((el) => el.textContent.includes('서식을 휴지통으로 옮겼습니다') && el.textContent.includes('서식 없는 문서'))`,
+        `__e2e.all('[role=status]').some((el) => el.textContent.includes(${q(SMB ? '서식을 지웠습니다' : '서식을 휴지통으로 옮겼습니다')}) && el.textContent.includes('서식 없는 문서'))`,
         'the template deleted, its documents pointed to',
       )
       assert.ok(!existsSync(template), 'the template gone from the vault')
@@ -1333,7 +1345,8 @@ const scenarios = {
       await new Promise((resolve) => setTimeout(resolve, 200))
     }
     const written = lines.map((line) => JSON.parse(line))
-    assert.deepEqual(written.slice(0, 2).map((r) => [r.layer, r.kind]), [['ui', 'RangeError'], ['ui', 'outside-vault']])
+    // The sidecar's report comes back on its own time: only the page's two are in the order they happened.
+    assert.deepEqual(written.filter((r) => r.layer === 'ui').map((r) => r.kind), ['RangeError', 'outside-vault'])
     const host = written.find((r) => r.layer === 'host')
     assert.ok(host && host.kind !== 'Unrecognized' && host.frames.length > 0, `the sidecar's failure: ${JSON.stringify(host)}`)
     assert.ok(!lines.join('\n').match(/비밀|회의록|장비|홍길동|Users/), `nothing of the page: ${lines.join(' ')}`)
@@ -1522,13 +1535,25 @@ async function webviewGone(graceMs = 10_000) {
   throw new Error(`WebView2 on the ${IDENTIFIER} profile did not exit`)
 }
 
+/** Over SMB (`E2E_VAULT_UNC`) the vault has no trash: the app asks again, and the answer is `button`. */
+const SMB = Boolean(process.env.E2E_VAULT_UNC)
+
+async function deleteForGoodOverSmb(app, button) {
+  if (!SMB) return
+  await app.cdp.waitFor(
+    `__e2e.all('dc-confirm-dialog').some((d) => d.open && d.heading === '휴지통으로 옮기지 못했습니다')`,
+    'asked to delete for good, where there is no trash',
+  )
+  await app.click('dc-button', button)
+}
+
 /**
  * What the system's trash took from `folder` (see `takeFromRecycleBin`), or `null` where it cannot be
- * looked into: off Windows, and on a CI runner, whose service session sees an empty Recycle Bin.
+ * looked into: off Windows, on a CI runner, whose service session sees an empty Recycle Bin, and over SMB, where nothing goes to one.
  * Scenarios still check that the file left the vault.
  */
 function trashed(folder) {
-  return process.platform === 'win32' && !process.env.CI ? takeFromRecycleBin(folder) : Promise.resolve(null)
+  return process.platform === 'win32' && !process.env.CI && !SMB ? takeFromRecycleBin(folder) : Promise.resolve(null)
 }
 
 /**
@@ -1567,8 +1592,10 @@ async function sidecarsRunning() {
 
 async function main() {
   if (!existsSync(exe)) throw new Error(`no e2e build at ${exe} — run \`npm run build:e2e\` first`)
-  const vault = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
-  await cp(join(here, 'fixtures', 'vault'), vault, { recursive: true })
+  const local = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
+  await cp(join(here, 'fixtures', 'vault'), local, { recursive: true })
+  // A shared folder: the same files, reached over SMB. Needs the drive's administrative share.
+  const vault = process.env.E2E_VAULT_UNC ? local.replace(/^([A-Za-z]):/, (_, drive) => '\\\\localhost\\' + drive.toUpperCase() + '$') : local
   // Each run's vault is a new folder, so an earlier run's projection cache and record of suggestions
   // shown would only pile up.
   for (const dir of ['projections', 'presentations'])
@@ -1594,7 +1621,7 @@ async function main() {
     }
   } finally {
     await app?.quit()
-    await rm(vault, { recursive: true, force: true })
+    await rm(local, { recursive: true, force: true })
   }
   // The sidecar lives in the app's job object: when the app is gone, so is the sidecar.
   if (process.platform === 'win32' && (await sidecarsRunning()) > 0) {
