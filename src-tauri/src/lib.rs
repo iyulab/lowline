@@ -20,6 +20,8 @@ use vault::{
 struct AppState {
     vault: Mutex<Option<Vault>>,
     watcher: Mutex<Option<Watcher>>,
+    /// Held while a vault is opened, so opening the last vault on launch never crosses one opened otherwise.
+    opening: Mutex<()>,
 }
 
 /// What a command failure looks like to the UI.
@@ -67,7 +69,55 @@ struct VaultInfo {
 
 #[tauri::command]
 fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> CommandResult<VaultInfo> {
-    let vault = Vault::open(&PathBuf::from(&path))?;
+    let _opening = state.opening.lock().expect("opening state poisoned");
+    open_into(&path, &app, &state)
+}
+
+/// Where the app was last used — its vault and the place showing, as the UI wrote them. Kept on this
+/// device, outside any vault: the next launch opens where the person left off.
+fn session_file(app: &AppHandle) -> std::io::Result<PathBuf> {
+    let dir = app.path().app_config_dir().map_err(std::io::Error::other)?;
+    Ok(dir.join("session.json"))
+}
+
+#[tauri::command]
+fn write_session(session: String, app: AppHandle) -> CommandResult<()> {
+    let file = session_file(&app).map_err(io_error)?;
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(io_error)?;
+    }
+    tauri_kit_fs::write_atomic(&file, session.as_bytes()).map_err(io_error)
+}
+
+#[derive(Serialize)]
+struct Resumed {
+    vault: VaultInfo,
+    /// The session as the UI wrote it.
+    session: String,
+}
+
+/// Opens the vault the app was last using, while no vault is open: nothing when there is no session,
+/// its vault cannot be opened (moved, a share out of reach), or a vault was opened first.
+#[tauri::command]
+fn resume_vault(app: AppHandle, state: State<AppState>) -> CommandResult<Option<Resumed>> {
+    let Ok(session) = std::fs::read_to_string(session_file(&app).map_err(io_error)?) else {
+        return Ok(None);
+    };
+    let path = serde_json::from_str::<serde_json::Value>(&session)
+        .ok()
+        .and_then(|v| v.get("vault")?.as_str().map(str::to_owned));
+    let Some(path) = path else { return Ok(None) };
+    let _opening = state.opening.lock().expect("opening state poisoned");
+    if state.vault.lock().expect("vault state poisoned").is_some() {
+        return Ok(None);
+    }
+    Ok(open_into(&path, &app, &state)
+        .ok()
+        .map(|vault| Resumed { vault, session }))
+}
+
+fn open_into(path: &str, app: &AppHandle, state: &State<AppState>) -> CommandResult<VaultInfo> {
+    let vault = Vault::open(&PathBuf::from(path))?;
     let root = vault.root();
     let info = VaultInfo {
         root: root.display().to_string(),
@@ -80,7 +130,7 @@ fn open_vault(path: String, app: AppHandle, state: State<AppState>) -> CommandRe
     };
     // The previous vault's watch stops before the next one starts.
     state.watcher.lock().expect("watch state poisoned").take();
-    let watcher = watch_vault(&app, &vault)
+    let watcher = watch_vault(app, &vault)
         .inspect_err(|e| {
             eprintln!("the vault is not watched, outside edits show on the next read: {e}")
         })
@@ -651,6 +701,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_vault,
+            resume_vault,
+            write_session,
             folder_is_empty,
             list_templates,
             list_documents,

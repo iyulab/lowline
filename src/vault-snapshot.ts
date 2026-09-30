@@ -39,6 +39,20 @@ export async function openVault(path: string): Promise<VaultInfo> {
   return vault.open(path)
 }
 
+/** Opens the vault the app was last using, if no vault is open yet: it, and where the app was in it. */
+export async function resumeVault(): Promise<{ vault: VaultInfo; session: unknown } | null> {
+  for (const cache of reads) cache.clear()
+  const resumed = await vault.resume()
+  if (!resumed) return null
+  let session: unknown
+  try {
+    session = JSON.parse(resumed.session)
+  } catch {
+    session = undefined
+  }
+  return { vault: resumed.vault, session }
+}
+
 export interface ReadVault {
   templates: TemplateSnapshot[]
   /** Each template's name as the vault shows it (its file name), by reference. */

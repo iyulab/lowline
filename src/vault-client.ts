@@ -55,6 +55,10 @@ const wrote = (path: string | null) => {
 
 export const vault = {
   open: (path: string) => invoke<VaultInfo>('open_vault', { path }),
+  /** The vault the app was last using, opened while no vault is open; null when there is none to open. */
+  resume: () => invoke<{ vault: VaultInfo; session: string } | null>('resume_vault'),
+  /** Where the app is now — its vault and place — for the next launch. */
+  writeSession: (session: string) => invoke<void>('write_session', { session }),
   listTemplates: () => invoke<VaultEntry[]>('list_templates'),
   listDocuments: () => invoke<VaultEntry[]>('list_documents'),
   read: (path: string) => invoke<string>('read_file', { path }),

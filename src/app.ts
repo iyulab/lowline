@@ -12,8 +12,8 @@ import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
 import { strings } from './strings.js'
 import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesAfterRead, type Place, type TemplateItem } from './template-scope.js'
-import { onVaultChanged, onWritten, type VaultInfo } from './vault-client.js'
-import { openVault, readVault } from './vault-snapshot.js'
+import { onVaultChanged, onWritten, vault, type VaultInfo } from './vault-client.js'
+import { openVault, readVault, resumeVault } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
 import './templates-view.js'
 import './documents-view.js'
@@ -99,6 +99,8 @@ export class LlApp extends LitElement {
   @state() private error = ''
   /** What the app just did that left the place it showed (a template deleted); gone once elsewhere. */
   @state() private notice = ''
+  /** Where the app was when it was last used, to be shown once the vault it reopened is read. */
+  private resumeAt?: { place: Place; tab: Tab }
   /** A document to open in the documents view, asked for from elsewhere (a table row). */
   @state() private openPath?: string
   /** The unsaved-edits question is showing; the answer settles the promise it was asked with. */
@@ -167,6 +169,7 @@ export class LlApp extends LitElement {
       e.preventDefault()
       if (await confirmDiscard()) await win.destroy()
     })
+    void this.resume()
     this.addEventListener('ll-open-document', (e) => {
       const { path, template } = (e as CustomEvent<{ path: string; template: string }>).detail
       this.openPath = path
@@ -190,6 +193,28 @@ export class LlApp extends LitElement {
     window.removeEventListener('keydown', this.onShortcut)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
+  }
+
+  /**
+   * Opens the vault the app was last using, at the place it showed — unless a vault is open by then, or
+   * that one can no longer be opened (then the first screen, as for a first launch).
+   */
+  private async resume() {
+    const resumed = await resumeVault().catch(() => null)
+    if (!resumed || this.vaultInfo) return
+    const session = resumed.session as { place?: unknown; tab?: unknown } | undefined
+    const place = typeof session?.place === 'string' ? placeOf(session.place) : undefined
+    const tab = session?.tab
+    if (place) this.resumeAt = { place, tab: tab === 'template' || tab === 'documents' ? tab : 'table' }
+    this.vaultInfo = resumed.vault
+  }
+
+  updated(changed: Map<string, unknown>) {
+    // Where the app is, for the next launch: kept on this device (the shell's app settings), not in the vault.
+    if ((changed.has('vaultInfo') || changed.has('place') || changed.has('tab')) && this.vaultInfo && this.place) {
+      const session = { vault: this.vaultInfo.root, place: placeId(this.place), tab: this.tab }
+      void vault.writeSession(JSON.stringify(session)).catch(() => {})
+    }
   }
 
   willUpdate(changed: Map<string, unknown>) {
@@ -219,7 +244,18 @@ export class LlApp extends LitElement {
         now?.kind === 'learning' ||
         (now?.kind === 'orphans' && this.hasOrphans) ||
         (now?.kind === 'template' && this.templates.some((t) => t.ref === now.ref))
-      if (!stays) this.place = this.templates[0] ? { kind: 'template', ref: this.templates[0].ref } : undefined
+      const resume = this.resumeAt
+      this.resumeAt = undefined
+      const there = (p: Place) =>
+        p.kind === 'learning' || (p.kind === 'orphans' && this.hasOrphans) || (p.kind === 'template' && this.templates.some((t) => t.ref === p.ref))
+      if (!stays && resume && there(resume.place)) {
+        this.place = resume.place
+        this.tab = resume.tab
+      } else if (!stays) {
+        // First the template with documents — where the work is — else the first one.
+        const worked = this.templates.find((t) => read.documents.some((d) => d.template === t.ref)) ?? this.templates[0]
+        this.place = worked ? { kind: 'template', ref: worked.ref } : undefined
+      }
       else if (now?.kind === 'template' && place?.kind === 'template' && now.ref !== place.ref) this.place = now
     } catch (e) {
       this.error = describeError(e)
