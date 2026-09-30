@@ -58,7 +58,7 @@ What is recorded about a document — its suggestion events, the rejections that
 - A new document is named by its day and its first value.
 - Renaming a document renames its file within its folder — never over another file — and a document known by its path is given that path as its id first. A template is renamed the same way on its page; documents name their template by its id, so they stay with it.
 - Deleting a document or a template moves its file to the system's trash, after asking. Where a location has no trash, the file stays until the person chooses to delete it for good. A deleted template's documents are kept, and listed apart as documents whose template the vault does not have.
-- Documents and templates are listed by their file names.
+- Documents and templates are listed by their file names. A template's documents are listed the last name first — a new document's name starts with its day, so the latest are on top — and a sync conflict copy follows its original.
 - A file copied outside the app keeps its original's id; the copy that is then saved with a change gets a new one and becomes a document of its own.
 
 ## Tables, finding and importing

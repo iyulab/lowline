@@ -84,3 +84,18 @@ export function documentsOf(
   }
   return entries.filter((e) => belongs(e.conflictOf ?? e.path))
 }
+
+/**
+ * Documents as a list shows them: by file name, the last first — a new document's name starts with its day,
+ * so the latest are on top, and the order does not move when one is edited. Numbers in names count as
+ * numbers. A sync conflict copy follows its original.
+ */
+export function newestFirst(entries: readonly VaultEntry[]): VaultEntry[] {
+  const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1)
+  return [...entries].sort(
+    (a, b) =>
+      nameOf(b.conflictOf ?? b.path).localeCompare(nameOf(a.conflictOf ?? a.path), undefined, { numeric: true }) ||
+      Number(a.conflictOf !== undefined) - Number(b.conflictOf !== undefined) ||
+      a.path.localeCompare(b.path),
+  )
+}

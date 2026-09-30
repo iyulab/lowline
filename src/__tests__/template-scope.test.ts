@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesAfterRead, type TemplateItem } from '../template-scope.js'
+import { NEW_TEMPLATE, documentsOf, newestFirst, placeId, placeOf, sidebarEntries, templatesAfterRead, type TemplateItem } from '../template-scope.js'
 import type { VaultEntry } from '../vault-client.js'
 
 const intake: TemplateItem = { ref: 'intake@1', name: '접수', path: '서식/접수.fd.md' }
@@ -77,5 +77,26 @@ describe('templatesAfterRead', () => {
   it('finds a renamed template by its reference, not its old file', () => {
     const renamed = { ...intake, name: '받기', path: '서식/받기.fd.md' }
     expect(templatesAfterRead([bug, renamed], intake)).toEqual({ templates: [bug, renamed], shown: renamed })
+  })
+})
+
+describe('newestFirst', () => {
+  const entry = (path: string, conflictOf?: string) => ({ path, name: path.slice(path.lastIndexOf('/') + 1), modifiedMs: 0, ...(conflictOf ? { conflictOf } : {}) })
+
+  it('lists the last name first — the latest day on top — numbers as numbers, a copy after its original', () => {
+    const listed = newestFirst([
+      entry('문서/2026-09-30-휴가.md'),
+      entry('문서/2026-10-01-노트북.md'),
+      entry('문서/접수-2.md'),
+      entry('문서/접수-10.md'),
+      entry('문서/2026-10-01-노트북 (충돌 사본).md', '문서/2026-10-01-노트북.md'),
+    ]).map((e) => e.path)
+    expect(listed).toEqual([
+      '문서/접수-10.md',
+      '문서/접수-2.md',
+      '문서/2026-10-01-노트북.md',
+      '문서/2026-10-01-노트북 (충돌 사본).md',
+      '문서/2026-09-30-휴가.md',
+    ])
   })
 })

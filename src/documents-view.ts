@@ -27,7 +27,7 @@ import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { readVault, syncVault } from './vault-snapshot.js'
-import { documentsOf, type TemplateItem } from './template-scope.js'
+import { documentsOf, newestFirst, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
 import { conflictLabel, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
 import { found, matchingLine, shownName, type Found } from './cases.js'
@@ -298,7 +298,7 @@ export class LlDocuments extends LitElement {
     try {
       const read = await readVault()
       const templateOf = new Map(read.documents.map((d) => [d.path, d.template]))
-      this.documents = documentsOf(read.documentEntries, templateOf, this.scope?.ref ?? null, new Set(read.names.keys()))
+      this.documents = newestFirst(documentsOf(read.documentEntries, templateOf, this.scope?.ref ?? null, new Set(read.names.keys())))
       this.templateNames = read.names
       this.currentRefs = currentRefs(read.templates)
       this.sharedIds = sharedIds(read.documents)
