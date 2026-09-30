@@ -80,6 +80,12 @@ public sealed record ColumnFilter(string Column, string Op, string Value)
     }, Value);
 }
 
+/// <summary>What the UI asks the text of the vault: documents holding these words, within one template if named.</summary>
+public sealed record CaseQuery(string Query, string? Template = null, int? Max = null);
+
+/// <summary>What the UI asks for the documents most like the one at <see cref="Path"/>.</summary>
+public sealed record SimilarQuery(string Path, int? Max = null);
+
 /// <summary>What the UI asks of a template's table: the rows that match every filter.</summary>
 public sealed record ProjectionQuery(string Template, IReadOnlyList<ColumnFilter>? Filters = null);
 
@@ -99,7 +105,15 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     /// <summary>The column that carries a document's vault path. `$` cannot start a Formdown field name.</summary>
     public const string PathColumn = "$path";
 
+    private const int DefaultMax = 20;
+
     private readonly SemaphoreSlim _gate = new(1, 1);
+    /// <summary>Held while the text index changes; a search waits for the sync in progress.</summary>
+    private readonly SemaphoreSlim _casesGate = new(1, 1);
+    private CaseIndex? _cases;
+    /// <summary>The documents of the latest snapshot by what they are known as, and by path.</summary>
+    private Dictionary<string, DocumentSnapshot> _byIdentity = new(StringComparer.Ordinal);
+    private Dictionary<string, DocumentSnapshot> _byPath = new(StringComparer.Ordinal);
     private readonly bool _ownsDirectory = string.IsNullOrEmpty(cacheDirectory);
     private ProjectionCache? _cache;
     private string? _vault;
@@ -131,6 +145,15 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     /// </summary>
     public Task ThresholdsSelected { get; private set; } = Task.CompletedTask;
 
+    /// <summary>
+    /// The text-index sync the latest ingest started: completes, with how many documents it indexed, when the index
+    /// holds that snapshot.
+    /// </summary>
+    public Task<int> CasesIndexed { get; private set; } = Task.FromResult(0);
+
+    /// <summary>The text index file of the vault at <paramref name="vault"/>, beside its projection cache.</summary>
+    public string CasesFileOf(string vault) => Path.ChangeExtension(CacheFileOf(vault), ".cases.db");
+
     /// <summary>Brings the projection, suggestions and curves up to this snapshot of an unnamed vault.</summary>
     public Task<IngestResult> IngestAsync(VaultSnapshot vault, CancellationToken cancellationToken) =>
         IngestAsync(vault, "", cancellationToken);
@@ -150,15 +173,20 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             {
                 await _cache.DisposeAsync();
                 _cache = null;
+                await CloseCasesAsync();
             }
             if (_cache is null)
             {
                 Directory.CreateDirectory(CacheDirectory);
                 _cache = await ProjectionCache.OpenAsync(CacheFileOf(root), cancellationToken);
+                _cases = CaseIndex.Open(CasesFileOf(root));
                 _vault = root;
             }
             var result = await _cache.IngestAsync(vault, cancellationToken);
             _templates = vault.Templates.ToDictionary(t => t.Ref, StringComparer.Ordinal);
+            _byIdentity = vault.Documents.GroupBy(d => d.Identity, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            _byPath = vault.Documents.ToDictionary(d => d.Path, StringComparer.Ordinal);
+            CasesIndexed = SyncCasesAsync(_cases!, vault);
             _suggestions = suggestions;
             _curves = curves;
             _selecting?.Cancel();
@@ -205,6 +233,91 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             failures?.Record(e);
         }
     }
+
+    /// <summary>
+    /// Indexes the vault's text away from the request that ingested it — the first index of a large vault takes
+    /// seconds — one sync at a time, in the order the ingests came.
+    /// </summary>
+    private async Task<int> SyncCasesAsync(CaseIndex cases, VaultSnapshot vault)
+    {
+        await _casesGate.WaitAsync();
+        try
+        {
+            // An index closed meanwhile belongs to a vault no longer open.
+            return ReferenceEquals(cases, _cases) ? await Task.Run(() => cases.SyncAsync(vault, CancellationToken.None)) : 0;
+        }
+        catch (Exception e)
+        {
+            // No request is waiting on this: the shell takes the failure the next time it asks.
+            failures?.Record(e);
+            return 0;
+        }
+        finally
+        {
+            _casesGate.Release();
+        }
+    }
+
+    private async Task CloseCasesAsync()
+    {
+        await _casesGate.WaitAsync();
+        try
+        {
+            if (_cases is not null) await _cases.DisposeAsync();
+            _cases = null;
+        }
+        finally
+        {
+            _casesGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The documents whose values hold the words asked for, best first, one per document — within one template if
+    /// one is named. Waits for the text index to hold the latest ingest.
+    /// </summary>
+    public async Task<IReadOnlyList<CaseHit>> SearchAsync(CaseQuery query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query.Query)) return [];
+        await CasesIndexed.WaitAsync(cancellationToken);
+        await _casesGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_cases is null) return [];
+            var found = await _cases.SearchAsync(query.Query, query.Template, query.Max ?? DefaultMax, cancellationToken);
+            return Hits(found);
+        }
+        finally
+        {
+            _casesGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// The documents of the same template most like the one at a path, best first — itself and conflicted documents
+    /// left out — or none when the vault has no document there.
+    /// </summary>
+    public async Task<IReadOnlyList<CaseHit>> SimilarAsync(SimilarQuery query, CancellationToken cancellationToken)
+    {
+        await CasesIndexed.WaitAsync(cancellationToken);
+        await _casesGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_cases is null || !_byPath.TryGetValue(query.Path, out var document)) return [];
+            var found = await _cases.SimilarAsync(document.Identity, document.Template, query.Max ?? DefaultMax, cancellationToken);
+            return Hits(found);
+        }
+        finally
+        {
+            _casesGate.Release();
+        }
+    }
+
+    /// <summary>What the index found, as documents of the latest snapshot; one gone since is left out.</summary>
+    private List<CaseHit> Hits(IEnumerable<(string Identity, string Text, double Score)> found) =>
+        [.. found.SelectMany(f => _byIdentity.TryGetValue(f.Identity, out var d)
+            ? [new CaseHit(d.Path, d.Template, f.Text, d.Conflicted, f.Score)]
+            : Array.Empty<CaseHit>())];
 
     /// <summary>The table for one template, or null when the vault has no such template.</summary>
     public Task<ProjectionTable?> TableAsync(string template, CancellationToken cancellationToken) =>
@@ -275,6 +388,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     {
         _selecting?.Cancel();
         if (_cache is not null) await _cache.DisposeAsync();
+        await CloseCasesAsync();
         if (_ownsDirectory && Directory.Exists(CacheDirectory)) Directory.Delete(CacheDirectory, recursive: true);
     }
 }

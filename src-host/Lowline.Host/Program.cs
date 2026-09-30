@@ -47,6 +47,10 @@ app.MapGet("/curves", (VaultProjection vault, CancellationToken ct) => vault.Cur
 app.MapPost("/suggest", async (SuggestRequest request, VaultProjection vault, CancellationToken ct) =>
     await vault.SuggestAsync(request, ct) is { } suggestion ? Results.Ok(suggestion) : Results.NotFound());
 
+// The vault's text: documents holding some words, and the documents most like one of them.
+app.MapPost("/search", (CaseQuery query, VaultProjection vault, CancellationToken ct) => vault.SearchAsync(query, ct));
+app.MapPost("/similar", (SimilarQuery query, VaultProjection vault, CancellationToken ct) => vault.SimilarAsync(query, ct));
+
 // Failures of work no request waited on, since the last time the shell asked.
 app.MapPost("/failures/take", (HostFailures failures) => failures.Take());
 

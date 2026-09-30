@@ -66,6 +66,27 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
     }
 
     [Fact]
+    public async Task Searches_the_vault_text_and_finds_similar_documents_over_http()
+    {
+        await using var factory = new Factory();
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+        var ct = TestContext.Current.CancellationToken;
+        (await client.PostAsync("/vault/ingest", new StringContent("""
+            {"templates": [{"ref": "intake@1", "fields": [{"name": "요청", "type": "text"}]}],
+             "documents": [{"path": "문서/a.md", "template": "intake@1", "values": {"요청": "노트북 배터리가 금방 닳아요"}},
+                           {"path": "문서/b.md", "template": "intake@1", "values": {"요청": "노트북 배터리가 부풀었어요"}},
+                           {"path": "문서/c.md", "template": "intake@1", "values": {"요청": "휴가를 쓰고 싶어요"}}]}
+            """, System.Text.Encoding.UTF8, "application/json"), ct)).EnsureSuccessStatusCode();
+
+        var found = await (await client.PostAsJsonAsync("/search", new { query = "휴가" }, ct)).Content.ReadFromJsonAsync<CaseHit[]>(ct);
+        Assert.Equal(["문서/c.md"], found!.Select(h => h.Path));
+        var similar = await (await client.PostAsJsonAsync("/similar", new { path = "문서/a.md" }, ct)).Content.ReadFromJsonAsync<CaseHit[]>(ct);
+        Assert.Equal("문서/b.md", similar![0].Path);
+        Assert.DoesNotContain(similar, h => h.Path == "문서/a.md");
+    }
+
+    [Fact]
     public async Task Hands_over_failures_away_from_requests_once_asked()
     {
         await using var factory = new Factory();
