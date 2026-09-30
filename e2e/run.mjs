@@ -1234,6 +1234,32 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'keeps values the form cannot show as written, when another field is edited and saved'(app, vault) {
+    // Written outside the app: an owner the choice field does not offer, and a long request over several lines.
+    const request = `첫 줄\n${'길게 이어지는 내용 '.repeat(200).trim()}\n마지막 줄`
+    const file = join(vault, '문서', '경계 값.md')
+    const body = '# 접수\n\n요청: ___@요청\n\n@부서: [select options="영업,개발,인사"]\n\n@담당: [select options="장비,인사,총무"]\n'
+    await writeFile(file, `---\ntemplate: intake@1\n요청: ${JSON.stringify(request)}\n부서: 영업\n담당: 외부 업체\n---\n${body}`)
+    await app.documentsOf(INTAKE)
+    await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.includes('경계 값'))`, 'the document in the list', { timeoutMs: 30_000 })
+    await app.pickDocument('경계 값')
+    await app.cdp.waitFor(`__e2e.one('select[name="부서"]')?.value === '영업'`, 'the document open')
+    assert.equal(await app.value('select[name="담당"]'), '외부 업체', 'a value the field does not offer is shown, not a blank or its first option')
+
+    await app.choose('select[name="부서"]', '개발')
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    await app.noAlert()
+    const saved = await fileValues(file)
+    assert.equal(saved.부서, '개발')
+    assert.equal(saved.담당, '외부 업체', 'the value the field does not offer is kept')
+    assert.equal(saved.요청, request, 'the long request keeps every line')
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await rm(file)
+  },
+
   async 'writes an error report with the kind of failure and nothing of what was on screen'(app) {
     const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
     const before = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).length : 0
