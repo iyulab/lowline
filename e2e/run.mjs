@@ -1315,7 +1315,15 @@ async function failureEvidence(app, name) {
         ...__e2e.all('[role=alert], [role=status]').map((el) => el.getAttribute('role') + ': ' + el.textContent.trim()),
       ].filter((t) => !t.endsWith(': '))`,
     )
-    console.log(`    page: ${JSON.stringify(said)}\n    evidence: ${dir}`)
+    // What the sidecar says: a failure there is kept off the screen (suggestions are optional).
+    const sidecar = await app.cdp.evaluate(
+      `(async () => { const T = window.__TAURI_INTERNALS__; const out = {}
+        for (const cmd of ['host_status', 'host_curves']) {
+          try { out[cmd] = JSON.stringify(await T.invoke(cmd)).slice(0, 300) } catch (e) { out[cmd] = 'error: ' + JSON.stringify(e) }
+        }
+        return out })()`,
+    )
+    console.log(`    page: ${JSON.stringify(said)}\n    sidecar: ${JSON.stringify(sidecar)}\n    evidence: ${dir}`)
   } catch (e) {
     console.log(`    (no evidence: ${e.message})`)
   }
