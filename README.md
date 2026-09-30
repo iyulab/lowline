@@ -24,7 +24,7 @@ cargo test --manifest-path src-tauri/Cargo.toml   # shell tests
 npm run build:e2e && npm run test:e2e              # end-to-end scenarios in the real window
 ```
 
-CI runs the web UI, shell and sidecar tests on Linux for each push; the end-to-end scenarios drive the Windows window and run locally.
+CI runs the web UI, shell and sidecar tests on Linux for each push, and the end-to-end scenarios in the Windows window on a Windows runner. On a CI runner the scenarios do not look into the Recycle Bin, which its session sees empty; they still check that a deleted file left the vault.
 
 With `LOWLINE_PERF=1`, the web UI tests, the sidecar tests and the end-to-end run also measure what reading and ingesting a vault of 1,000 and 10,000 documents costs — filling an empty cache, one outside edit, a restart; they are skipped otherwise.
 
