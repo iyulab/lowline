@@ -15,7 +15,8 @@ export class LlRename extends LitElement {
       display: contents;
     }
     dc-input {
-      width: 16rem;
+      /* A place with little room (a row of the template's field list) sets it narrower. */
+      width: var(--ll-rename-width, 16rem);
     }
   `
 

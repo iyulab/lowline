@@ -95,7 +95,7 @@ export class LlTemplates extends LitElement {
        nothing), then a choice field's options. */
     .fields {
       display: grid;
-      grid-template-columns: max-content 1fr;
+      grid-template-columns: max-content max-content minmax(8rem, 1fr);
       align-items: center;
       justify-items: start;
       gap: var(--dc-space-1, 4px) var(--dc-space-3, 12px);
@@ -103,6 +103,12 @@ export class LlTemplates extends LitElement {
     .fields h3,
     .fields p {
       grid-column: 1 / -1;
+    }
+    .fields .label-edit {
+      --ll-rename-width: 7rem;
+      display: flex;
+      align-items: center;
+      gap: var(--dc-space-1, 4px);
     }
     .fields p {
       margin: 0;
@@ -281,6 +287,25 @@ export class LlTemplates extends LitElement {
   private toggleJudgment(field: string, on: boolean) {
     try {
       this.source = setSuggest(this.source, field, on)
+      this.dirty = true
+      this.message = ''
+      this.error = ''
+    } catch (e) {
+      this.error = describeError(e)
+    }
+  }
+
+  /**
+   * Gives a field the name it shows — its label — leaving its name, which documents, the table and what was
+   * learned know it by (D-85), as it is: an edit of the source like any other, kept by saving. A name left
+   * empty, or the field's own name, takes the label away.
+   */
+  private setLabel(field: string, typed: string) {
+    const label = typed.trim()
+    const current = this.fields().find((f) => f.name === field)?.label
+    if (label === current) return
+    try {
+      this.source = setFieldAttribute(this.source, field, 'label', label && label !== field ? label : undefined)
       this.dirty = true
       this.message = ''
       this.error = ''
@@ -502,6 +527,9 @@ export class LlTemplates extends LitElement {
                 @change=${(e: Event) => this.toggleJudgment(f.name, (e.target as HTMLInputElement).checked)}
                 >${f.label}</dc-checkbox
               >
+              <span class="label-edit"
+                ><ll-rename .name=${f.label} @ll-rename=${(e: CustomEvent<{ name: string }>) => this.setLabel(f.name, e.detail.name)}></ll-rename
+              ></span>
               ${f.options
                 ? html`<dc-input
                     aria-label=${strings.optionsOf(f.label)}

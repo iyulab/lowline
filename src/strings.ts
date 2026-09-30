@@ -36,7 +36,7 @@ export const strings = {
   preview: '미리보기',
   optionsOf: (label: string) => `${label} 선택지`,
   fieldsTitle: '칸',
-  fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다.',
+  fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다. "이름 바꾸기"는 칸이 보이는 이름(label)만 바꿉니다 — 문서의 값과 배운 것은 칸 이름에 붙어 있어 그대로 이어집니다.',
   fieldsNone: '이 서식에는 칸이 없습니다.',
   templateProblemsTitle: '서식 원문의 문제',
   templateProblem: (p: TemplateProblem) =>
@@ -49,7 +49,7 @@ export const strings = {
           : p.kind === 'shared-id'
             ? `다른 서식 파일(${p.names.join(', ')})도 id "${p.id}"를 씁니다. 판이 달라도 같은 서식이라 볼트는 판이 높은 파일을 서식으로 읽고, 다른 파일은 서식으로 쓰지 않습니다 — 판은 파일 하나 안에서 올리세요.`
           : p.kind === 'stray-values'
-            ? `문서 ${p.count}건에 칸 "${p.name}"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 칸이 보이는 이름만 바꾸려면 이름은 두고 label을 바꾸세요.`
+            ? `문서 ${p.count}건에 칸 "${p.name}"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 보이는 이름만 바꾸려면 칸 이름은 두고 칸 목록의 "이름 바꾸기"를 쓰세요.`
             : `lowline.suggest의 "${p.name}"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.`,
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
   judgmentAbstained: (reason: Abstention | null | undefined, learned: number) =>

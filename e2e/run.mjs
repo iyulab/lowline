@@ -1392,16 +1392,35 @@ const scenarios = {
       await app.type('textarea', source.replace('@담당:', '@배정:'))
       const said = await app.cdp.waitFor(`(() => { const p = ${problems}; return p.length ? p : null })()`, 'what the documents hold', { timeoutMs: 15_000 })
       assert.deepEqual(said, [
-        '문서 2건에 칸 "담당"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 칸이 보이는 이름만 바꾸려면 이름은 두고 label을 바꾸세요.',
+        '문서 2건에 칸 "담당"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 보이는 이름만 바꾸려면 칸 이름은 두고 칸 목록의 "이름 바꾸기"를 쓰세요.',
       ])
       // Changing only what the field shows keeps its name, and its values.
       await app.type('textarea', source.replace('@담당: [select', '@담당: [select label="배정"'))
       await app.cdp.waitFor(`(${problems}).length === 0`, 'nothing to say once the name is kept')
+
+      // The field list's rename does that: the label changes, the name and the documents' values stay.
+      await app.type('textarea', source)
+      const renameOf = (n) => `(() => { const row = __e2e.all('.label-edit')[${n}]; const b = row && row.querySelector('ll-rename').shadowRoot.querySelector('dc-button'); return b && __e2e.box(b) })()`
+      await app.cdp.clickAt(await app.cdp.waitFor(renameOf(1), "the 담당 field's rename"))
+      // The rename field opens holding the name shown: replace it.
+      await app.cdp.waitFor(`(() => { const i = __e2e.one('dc-input[aria-label="새 이름"]'); if (!i) return false; i.focus(); const inner = i.shadowRoot.querySelector('input'); inner.select(); return document.activeElement !== document.body })()`, 'the rename field')
+      await app.cdp.insertText('배정')
+      await app.cdp.press('Enter', { code: 'Enter', keyCode: 13 })
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@담당: [select options="장비,인사" label="배정"]')`, 'the label in the source')
+      assert.deepEqual(await app.cdp.evaluate(problems), [], 'the values still have their field')
+      await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
+      await app.status('저장했습니다')
+      await app.showTable(STRAY)
+      await app.cdp.waitFor(`__e2e.all('thead th').map((th) => th.textContent.trim()).includes('배정')`, 'the column shown by its label')
+      const cells = await app.cdp.waitFor(`(() => { const c = __e2e.all('tbody td').map((td) => td.textContent.trim()); return c.includes('장비') && c.includes('인사') && c })()`, 'the values kept')
+      assert.ok(cells)
       await app.noAlert()
     } finally {
       // Leave the vault as the scenarios after this one expect it.
       await app.learning()
-      await app.answerUnsaved('편집 버리기')
+      // Edits are left unsaved only when the scenario stopped short of saving.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      if (await app.cdp.evaluate(`__e2e.all('dc-confirm-dialog').some((d) => d.open)`)) await app.answerUnsaved('편집 버리기')
       await Promise.all(files.map((f) => rm(f, { force: true })))
     }
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '배정표')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
