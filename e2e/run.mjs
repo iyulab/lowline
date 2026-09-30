@@ -478,6 +478,10 @@ const scenarios = {
 
   async 'creates a document, edits it, and saves again in place'(app, vault) {
     await app.newDocument(BUG)
+    // Looking at an empty field is not an edit: focus in and out leaves nothing to save.
+    await app.cdp.waitFor(`(() => { const t = __e2e.one(${q(TITLE)}); if (!t) return false; t.focus(); t.blur(); return true })()`, 'the empty title')
+    await app.cdp.evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`)
+    assert.equal(await app.cdp.evaluate(`__e2e.one('dc-button', '저장').disabled`), true, 'a focus and blur alone leave Save off')
     await app.type(TITLE, '저장 후 멈춤')
     await app.choose('select[name="심각도"]', '높음')
     await app.type('textarea[name="재현_절차"]', '1. 문서를 연다\n2. 저장한다')
