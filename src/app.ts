@@ -100,7 +100,8 @@ export class LlApp extends LitElement {
 
   /**
    * Ctrl+S (⌘S) saves whatever is being edited — a template or a document — the same way from any
-   * field in it. The web view's own "save page" never runs.
+   * field in it, or with focus on the page itself (after a button that went away). It is heard on the
+   * window, so the web view's own "save page" never runs.
    */
   private readonly onSaveShortcut = (e: KeyboardEvent) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's') return
@@ -113,7 +114,7 @@ export class LlApp extends LitElement {
     super.connectedCallback()
     // Typing holds the caret solid; a pause lets it blink again.
     this.addEventListener('keydown', () => this.marks.forEach((m) => m.hold()))
-    this.addEventListener('keydown', this.onSaveShortcut)
+    window.addEventListener('keydown', this.onSaveShortcut)
     this.addEventListener('pointerdown', () => this.marks.forEach((m) => m.wake()))
     // A save is a confirmation: the mark shows "not yet" becoming "confirmed".
     this.addEventListener('ll-confirmed', () => this.marks.forEach((m) => m.confirm()))
@@ -151,6 +152,7 @@ export class LlApp extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
+    window.removeEventListener('keydown', this.onSaveShortcut)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
   }

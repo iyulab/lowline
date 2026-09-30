@@ -678,7 +678,8 @@ const scenarios = {
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in before it is accepted')
     await app.click('.formdown-suggestion', '장비')
     await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '장비'`, 'the accepted value in the form')
-    await app.click('dc-button', '저장')
+    // Straight after the click: the offered value is gone, and Ctrl+S still saves.
+    await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
     await app.status('저장했습니다')
     await app.noAlert()
 
