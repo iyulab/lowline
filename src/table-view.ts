@@ -61,7 +61,10 @@ export class LlTable extends LitElement {
   /** What the last export wrote, said in place of the row count until the table changes. */
   @state() private exported = ''
   @state() private names = new Map<string, string>()
-  /** The table's filters by column — a name or a field's text it contains, or a choice field's value. */
+  /**
+   * The table's filters, one per column and kind (`op:column`) — a name or a field's text it contains, a
+   * choice field's value, a number field's lower and upper bound.
+   */
   @state() private filters = new Map<string, ColumnFilter>()
   /** The text field whose text the text filter looks in. */
   @state() private textField = ''
@@ -143,8 +146,8 @@ export class LlTable extends LitElement {
    */
   private filter(column: string, op: ColumnFilter['op'], value: string) {
     const next = new Map(this.filters)
-    if (value.trim()) next.set(column, { column, op, value: value.trim() })
-    else next.delete(column)
+    if (value.trim()) next.set(`${op}:${column}`, { column, op, value: value.trim() })
+    else next.delete(`${op}:${column}`)
     this.filters = next
     clearTimeout(this.filterTimer)
     this.filterTimer = setTimeout(() => void this.show(this.template), FILTER_DELAY_MS)
@@ -152,20 +155,24 @@ export class LlTable extends LitElement {
 
   /** Moves the text filter to another field, keeping what was typed. */
   private pickTextField(field: string) {
-    const typed = this.filters.get(this.textField)?.value ?? ''
+    const typed = this.filters.get(`contains:${this.textField}`)?.value ?? ''
     if (this.textField) this.filter(this.textField, 'contains', '')
     this.textField = field
     if (typed) this.filter(field, 'contains', typed)
   }
 
-  /** Filters the template's fields allow: its name, each choice field's value, and text within one text field. */
+  /**
+   * Filters the template's fields allow: its name, each choice field's value, text within one text field,
+   * and each number field's bounds.
+   */
   private renderFilters(template: TemplateSnapshot | undefined) {
     if (!template) return nothing
     const choices = template.fields.filter((f) => (f.type === 'select' || f.type === 'radio') && f.options.length > 0)
     // Every other field but checkboxes and numbers is text to the projection.
     const texts = template.fields.filter((f) => !choices.includes(f) && !['checkbox', 'number', 'range'].includes(f.type))
+    const numbers = template.fields.filter((f) => f.type === 'number' || f.type === 'range')
     const textField = this.textField || texts[0]?.name || ''
-    const value = (column: string) => this.filters.get(column)?.value ?? ''
+    const value = (column: string, op: ColumnFilter['op']) => this.filters.get(`${op}:${column}`)?.value ?? ''
     const input = (e: Event) => (e.target as HTMLInputElement).value
     return html`<div class="filters" role="search" aria-label=${strings.tableFilters}>
       <dc-input
@@ -173,14 +180,14 @@ export class LlTable extends LitElement {
         type="search"
         aria-label=${strings.tableFilterName}
         placeholder=${strings.tableFilterName}
-        .value=${value(PATH_COLUMN)}
+        .value=${value(PATH_COLUMN, 'contains')}
         @input=${(e: Event) => this.filter(PATH_COLUMN, 'contains', input(e))}
       ></dc-input>
       ${choices.map(
         (f: TemplateField) => html`<dc-select
           size="sm"
           aria-label=${f.label}
-          .value=${value(f.name)}
+          .value=${value(f.name, 'equal')}
           .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...f.options.map((o) => ({ value: o, label: o }))]}
           @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
         ></dc-select>`,
@@ -198,13 +205,31 @@ export class LlTable extends LitElement {
               type="search"
               aria-label=${strings.tableFilterText}
               placeholder=${strings.tableFilterText}
-              .value=${value(textField)}
+              .value=${value(textField, 'contains')}
               @input=${(e: Event) => {
                 this.textField = textField
                 this.filter(textField, 'contains', input(e))
               }}
             ></dc-input>`
         : nothing}
+      ${numbers.map(
+        (f: TemplateField) => html`<dc-input
+            size="sm"
+            type="number"
+            aria-label=${strings.tableFilterAtLeast(f.label)}
+            placeholder=${strings.tableFilterAtLeast(f.label)}
+            .value=${value(f.name, 'atLeast')}
+            @input=${(e: Event) => this.filter(f.name, 'atLeast', input(e))}
+          ></dc-input>
+          <dc-input
+            size="sm"
+            type="number"
+            aria-label=${strings.tableFilterAtMost(f.label)}
+            placeholder=${strings.tableFilterAtMost(f.label)}
+            .value=${value(f.name, 'atMost')}
+            @input=${(e: Event) => this.filter(f.name, 'atMost', input(e))}
+          ></dc-input>`,
+      )}
     </div>`
   }
 

@@ -65,7 +65,7 @@ public sealed record ProjectionRow(string Path, IReadOnlyDictionary<string, obje
 /// <summary>
 /// One condition on a template's table. <see cref="Column"/> is a field's name, or
 /// <see cref="VaultProjection.PathColumn"/> for the document's vault path; <see cref="Op"/> is <c>contains</c>
-/// (text, ignoring case) or <c>equal</c>.
+/// (text, ignoring case), <c>equal</c>, or <c>atLeast</c> / <c>atMost</c> (a number field's bounds, both included).
 /// </summary>
 public sealed record ColumnFilter(string Column, string Op, string Value)
 {
@@ -74,6 +74,8 @@ public sealed record ColumnFilter(string Column, string Op, string Value)
     {
         "contains" => FilterOperator.Contains,
         "equal" => FilterOperator.Equal,
+        "atLeast" => FilterOperator.GreaterThanOrEqual,
+        "atMost" => FilterOperator.LessThanOrEqual,
         _ => throw new ArgumentException("unknown filter operator", nameof(Op)),
     }, Value);
 }

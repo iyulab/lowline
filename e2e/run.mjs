@@ -1009,6 +1009,46 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async "filters a table by a number field's bounds"(app, vault) {
+    const SCORES = { name: '점수표', ref: 'scores@1', path: '서식/점수표.fd.md' }
+    const body = '# 점수표\n\n제목: ___@제목\n\n@점수: [number]\n'
+    const files = [join(vault, SCORES.path)]
+    await writeFile(files[0], `---\nid: scores\nversion: 1\n---\n${body}`)
+    for (const [i, score] of ['1', '2.5', '3', ''].entries()) {
+      const file = join(vault, '문서', `점수-${i + 1}.md`)
+      files.push(file)
+      await writeFile(file, `---\ntemplate: scores@1\n제목: 기록 ${i + 1}\n${score ? `점수: ${score}\n` : ''}---\n${body}`)
+    }
+    const shows = (n, what) =>
+      app.cdp.waitFor(
+        `__e2e.all('[role=status]').some((el) => el.textContent.trim() === ${q(what)}) && __e2e.all('tbody tr').length === ${n}`,
+        what,
+        { timeoutMs: 15_000 },
+      )
+    const typeIn = (label, text) =>
+      app.cdp.evaluate(`(() => { const i = __e2e.all('dc-input').find((el) => el.getAttribute('aria-label') === ${q(label)})
+        const inner = i.shadowRoot.querySelector('input'); inner.value = ${q(text)}
+        inner.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+    try {
+      await app.showTable(SCORES, { timeoutMs: 30_000 })
+      await shows(4, '문서 4건')
+      await typeIn('점수 이상', '2')
+      await shows(2, '조건에 맞는 문서 2건')
+      // Both bounds hold, and each is included.
+      await typeIn('점수 이하', '2.5')
+      await shows(1, '조건에 맞는 문서 1건')
+      assert.ok(await app.cdp.evaluate(`__e2e.all('tbody tr')[0].textContent.includes('기록 2')`))
+      await typeIn('점수 이상', '')
+      await typeIn('점수 이하', '')
+      await shows(4, '문서 4건')
+      await app.noAlert()
+    } finally {
+      await app.learning()
+      await Promise.all(files.map((f) => rm(f, { force: true })))
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '점수표')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'says why a field is not suggested for when replaying its history never reaches the target'(app, vault) {
     // Alike requests whose owners alternate: whichever earlier record is nearest, it is right half the time.
     const ASSIGN = { name: '배정', ref: 'assign@1', path: '서식/배정.fd.md' }

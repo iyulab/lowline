@@ -134,6 +134,8 @@ export const strings = {
   tableFilterAny: (label: string) => `${label}: 모두`,
   tableFilterField: '글자를 찾을 칸',
   tableFilterText: '칸에 든 글자',
+  tableFilterAtLeast: (label: string) => `${label} 이상`,
+  tableFilterAtMost: (label: string) => `${label} 이하`,
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,
   hostStarting: '표를 준비하고 있습니다…',
   learningEmpty: '제안을 받는 판단 칸이 아직 없습니다. 서식에서 판단 칸을 정하면 여기서 곡선이 자랍니다.',

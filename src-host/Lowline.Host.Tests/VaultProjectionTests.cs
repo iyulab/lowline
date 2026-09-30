@@ -67,6 +67,17 @@ public sealed class VaultProjectionTests
         // A document's name is its path.
         Assert.Equal(["문서/2026-02-01 저장 느림.md"], await Paths(new ColumnFilter(VaultProjection.PathColumn, "contains", "2026-02")));
         Assert.Empty(await Paths(new ColumnFilter("제목", "contains", "없는 말")));
+        await vault.IngestAsync(new VaultSnapshot([BugReport],
+        [
+            Document("문서/1.md", """{"제목": "하나", "점수": 1}"""),
+            Document("문서/2.md", """{"제목": "둘", "점수": 2.5}"""),
+            Document("문서/3.md", """{"제목": "셋", "점수": 3}"""),
+            Document("문서/4.md", """{"제목": "없음"}"""),
+        ]), Ct);
+        // A number field's bounds, both included; a document without a value is outside any.
+        Assert.Equal(["문서/2.md", "문서/3.md"], await Paths(new ColumnFilter("점수", "atLeast", "2")));
+        Assert.Equal(["문서/1.md", "문서/2.md"],
+            await Paths(new ColumnFilter("점수", "atLeast", "1"), new ColumnFilter("점수", "atMost", "2.5")));
         await Assert.ThrowsAsync<ArgumentException>(() => Paths(new ColumnFilter("제목", "near", "저장")));
     }
 

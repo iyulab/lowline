@@ -108,11 +108,12 @@ export function cellText(value: unknown): string {
 
 /**
  * One condition on a template's table, answered by the sidecar from the projection: `column` is a field's
- * name, or `$path` for the document's vault path (its name); `contains` matches text ignoring case.
+ * name, or `$path` for the document's vault path (its name); `contains` matches text ignoring case, and
+ * `atLeast`/`atMost` bound a number field, both included.
  */
 export interface ColumnFilter {
   column: string
-  op: 'contains' | 'equal'
+  op: 'contains' | 'equal' | 'atLeast' | 'atMost'
   value: string
 }
 
