@@ -137,6 +137,8 @@ export class LlDocuments extends LitElement {
    * otherwise each re-render (and each save) would hand the form its opening values again.
    */
   @state() private initialValues: FieldValues = {}
+  /** Text the listed documents' names are narrowed to, ignoring case; the table filters by values. */
+  @state() private nameFilter = ''
   /** Counts drafts opened; changes only when another draft is opened. */
   @state() private opened = 0
   /** The form's current values, as it reports them. */
@@ -660,6 +662,12 @@ export class LlDocuments extends LitElement {
       : strings.suggestionSource((this.pathsById.get(s.source) ?? s.source).replace(/^.*\//, '').replace(/\.md$/, ''))
   }
 
+  /** The documents whose names hold the filter text, in the list's order. */
+  private listed() {
+    const text = this.nameFilter.trim().toLocaleLowerCase()
+    return text ? this.documents.filter((d) => d.name.replace(/\.md$/, '').toLocaleLowerCase().includes(text)) : this.documents
+  }
+
   render() {
     const draft = this.draft
     const opened = this.opened
@@ -673,9 +681,21 @@ export class LlDocuments extends LitElement {
               <dc-button size="sm" variant="ghost" @click=${() => this.leaveFor(() => this.startImport())}>${strings.import}</dc-button>
             </div>`
           : nothing}
+        ${this.documents.length > 0
+          ? html`<dc-input
+              size="sm"
+              type="search"
+              aria-label=${strings.documentsFilter}
+              placeholder=${strings.documentsFilter}
+              .value=${this.nameFilter}
+              @input=${(e: Event) => (this.nameFilter = (e.target as HTMLInputElement).value)}
+            ></dc-input>`
+          : nothing}
         ${this.documents.length === 0
           ? html`<p class="message">${strings.noDocuments}</p>`
-          : this.documents.map(
+          : this.listed().length === 0
+            ? html`<p class="message">${strings.documentsNoMatch}</p>`
+            : this.listed().map(
               (d) => html`<button
                 aria-current=${draft?.kind === 'existing' && draft.path === d.path}
                 @click=${() => this.leaveFor(() => this.open(d.path))}

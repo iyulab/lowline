@@ -58,6 +58,8 @@ export const strings = {
   suggestionsUnavailable: '제안을 준비하지 못했습니다. 입력과 저장은 그대로 됩니다 — 앱을 다시 열면 다시 시도합니다.',
   newDocument: '새 문서',
   noDocuments: '문서가 없습니다.',
+  documentsFilter: '이름으로 찾기',
+  documentsNoMatch: '이름이 맞는 문서가 없습니다.',
   conflictCopyOf: (original: string) => `충돌 사본 — 원본: ${original}`,
   hasConflictCopy: '충돌 사본 있음',
   conflictedOriginal: '다른 기기에서 고친 사본이 있습니다. 하나로 정할 때까지 제안이 이 문서에서 배우지 않습니다. 사본을 열어 남길 쪽을 고르세요.',
