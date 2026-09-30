@@ -12,7 +12,7 @@ Lowline is a desktop app for structured notes. You write documents from forms; f
 
 ## Development
 
-Requires Node.js 22+, Rust (stable), the .NET 10 SDK and, on Windows, the WebView2 runtime.
+Requires Node.js 22.18+, Rust (stable), the .NET 10 SDK and, on Windows, the WebView2 runtime.
 
 ```bash
 npm install
