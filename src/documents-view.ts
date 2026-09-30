@@ -18,6 +18,7 @@ import {
   type FieldValues,
 } from './documents.js'
 import { documentId, newDocumentId, sharedIds } from './identity.js'
+import { currentRefs, revisedRef } from './template-revision.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import type { Abstention, CaseHit, Suggestion, TemplateSnapshot } from './projection.js'
@@ -207,6 +208,8 @@ export class LlDocuments extends LitElement {
   private rejected = new Set<string>()
   /** Template names (their file names) by `id@version`. */
   @state() private templateNames = new Map<string, string>()
+  /** Each template id's reference now: a document of an earlier revision is read as its template now. */
+  private currentRefs = new Map<string, string>()
   /** Counts accepted suggestions, so the form is handed its values again. */
   @state() private applied = 0
   private suggestTimer?: ReturnType<typeof setTimeout>
@@ -294,6 +297,7 @@ export class LlDocuments extends LitElement {
       const templateOf = new Map(read.documents.map((d) => [d.path, d.template]))
       this.documents = documentsOf(read.documentEntries, templateOf, this.scope?.ref ?? null, new Set(read.names.keys()))
       this.templateNames = read.names
+      this.currentRefs = currentRefs(read.templates)
       this.sharedIds = sharedIds(read.documents)
     } catch (e) {
       this.error = describeError(e)
@@ -519,7 +523,9 @@ export class LlDocuments extends LitElement {
       const { template, id, values } = documentFrontMatter(source)
       this.setValues(fieldValues(values))
       this.initialValues = this.values
-      this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef: template }
+      // Written with an earlier revision, it is a document of its template as the template is now.
+      const templateRef = template === undefined ? template : revisedRef(template, this.currentRefs)
+      this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef }
       this.opened++
       void this.prepareSuggestions(this.draft.templateRef)
     } catch (e) {

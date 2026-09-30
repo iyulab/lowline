@@ -11,6 +11,7 @@ import {
   newDocument,
   setDocumentId,
   setSuggest,
+  sharedId,
   strayFields,
   templateBody,
   templateInfo,
@@ -248,10 +249,12 @@ describe('strayFields', () => {
       doc({ 요청: '휴가', 담당: '인사' }),
       doc({ 요청: '프린터', 담당: '' }),
       doc({ 요청: '회의실', 태그: [] }),
+      // Another revision is the same template; another id is not.
       doc({ 담당: '장비' }, 'intake@2'),
+      doc({ 담당: '장비', 비고: '다른 서식' }, 'order@1'),
     ]
     expect(strayFields(source, documents)).toEqual([
-      { kind: 'stray-values', name: '담당', count: 2 },
+      { kind: 'stray-values', name: '담당', count: 3 },
       { kind: 'stray-values', name: '비고', count: 1 },
     ])
   })
@@ -259,5 +262,23 @@ describe('strayFields', () => {
   it('has none while every value has its field, or when the source cannot be read', () => {
     expect(strayFields(source, [doc({ 요청: '노트북', 배정: '장비' })])).toEqual([])
     expect(strayFields('# 앞부분 없음\n\n요청: ___@요청\n', [doc({ 담당: '장비' })])).toEqual([])
+  })
+})
+
+describe('sharedId', () => {
+  const source = '---\nid: intake\nversion: 2\n---\n# 접수\n'
+  const templates = [
+    { ref: 'intake@2', path: '서식/접수.fd.md', name: '접수' },
+    { ref: 'intake@1', path: '서식/접수 (옛).fd.md', name: '접수 (옛)' },
+    { ref: 'bug-report@1', path: '서식/버그 리포트.fd.md', name: '버그 리포트' },
+  ]
+
+  it('names the other template files with this template id, whatever their revision', () => {
+    expect(sharedId(source, '서식/접수.fd.md', templates)).toEqual([{ kind: 'shared-id', id: 'intake', names: ['접수 (옛)'] }])
+  })
+
+  it('has none for a template alone with its id, or one whose front matter cannot be read', () => {
+    expect(sharedId(source, '서식/접수.fd.md', templates.slice(0, 1))).toEqual([])
+    expect(sharedId('# 앞부분 없음\n', '서식/접수.fd.md', templates)).toEqual([])
   })
 })

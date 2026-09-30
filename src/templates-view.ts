@@ -2,9 +2,10 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, setSuggest, strayFields, templateInfo, templateProblems } from './documents.js'
+import { fileName, fileNameFor, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
 import { readVault } from './vault-snapshot.js'
 import type { DocumentSnapshot } from './projection.js'
+import type { TemplateItem } from './template-scope.js'
 import './rename-control.js'
 import './delete-control.js'
 import './keep-copy-control.js'
@@ -126,6 +127,8 @@ export class LlTemplates extends LitElement {
   @state() private entries: VaultEntry[] = []
   /** The vault's documents as last read: see `strayFields`. */
   @state() private documents: DocumentSnapshot[] = []
+  /** The vault's templates as last read: see `sharedId`. */
+  @state() private templateItems: TemplateItem[] = []
   @state() private selected?: string
   @state() private source = ''
   /** The open template as it was last read or saved: what the file holds unless changed outside. */
@@ -199,7 +202,9 @@ export class LlTemplates extends LitElement {
     try {
       this.entries = await vault.listTemplates()
       // The documents' values, for what they hold that the source no longer has.
-      this.documents = (await readVault()).documents
+      const read = await readVault()
+      this.documents = read.documents
+      this.templateItems = read.templateItems
     } catch (e) {
       this.error = describeError(e)
     }
@@ -464,7 +469,11 @@ export class LlTemplates extends LitElement {
   private renderProblems() {
     let problems: ReturnType<typeof templateProblems>
     try {
-      problems = [...templateProblems(this.source), ...strayFields(this.source, this.documents)]
+      problems = [
+        ...templateProblems(this.source),
+        ...sharedId(this.source, this.path, this.templateItems),
+        ...strayFields(this.source, this.documents),
+      ]
     } catch {
       return nothing
     }

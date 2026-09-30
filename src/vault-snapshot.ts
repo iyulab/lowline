@@ -2,6 +2,7 @@
 
 import { TemplateError } from './documents.js'
 import { parseEvents, type SuggestionEvent } from './events.js'
+import { currentRefs, revisedRef } from './template-revision.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type TemplateSnapshot } from './projection.js'
 import { ReadCache } from './read-cache.js'
 import type { TemplateItem } from './template-scope.js'
@@ -83,12 +84,17 @@ export async function readVault(): Promise<ReadVault> {
     names.set(template.ref, name)
     templateItems.push({ ref: template.ref, name, path: entry.path })
   })
+  // A document or event of an earlier revision belongs to its template as it is now: its files say the
+  // revision they were written with, and are left as they are.
+  const current = currentRefs(templates)
   const documents: DocumentSnapshot[] = []
   documentEntries.forEach((entry, i) => {
-    const document = documentValues[i]
-    if (document) documents.push(conflicted.has(entry.path) ? { ...document, conflicted: true } : document)
+    const read = documentValues[i]
+    if (!read) return
+    const document = { ...read, template: revisedRef(read.template, current) }
+    documents.push(conflicted.has(entry.path) ? { ...document, conflicted: true } : document)
   })
-  const events = eventValues.flatMap((parsed) => parsed ?? [])
+  const events = eventValues.flatMap((parsed) => parsed ?? []).map((e) => (e.template ? { ...e, template: revisedRef(e.template, current) } : e))
   return { templates, names, templateItems, documents, documentEntries: listed[1], events }
 }
 

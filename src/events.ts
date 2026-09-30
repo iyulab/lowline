@@ -14,7 +14,8 @@ export interface SuggestionEvent {
   doc: string
   /**
    * The document's template as `id@version`, so the event still says where it belongs if the document
-   * is renamed, and a field of one version is not read as the same-named field of another.
+   * is renamed, and which revision it was made under. Read against the vault it counts for the template of
+   * that id as it is now (`template-revision.ts`): a field is the same field across revisions by its name.
    */
   template?: string
   field: string

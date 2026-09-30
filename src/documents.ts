@@ -4,6 +4,7 @@
 // `identity.ts`) and the value of each field. `template` and `lowline` are not field values.
 
 import { parseFormdown, readFrontMatter, updateFrontMatter } from '@formdown/core'
+import { templateId } from './template-revision.js'
 
 /** A field's value: text, a list of texts (checkbox group), or a boolean (single checkbox). */
 export type FieldValue = string | string[] | boolean
@@ -190,6 +191,7 @@ export type TemplateProblem =
   | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
+  | { kind: 'shared-id'; id: string; names: string[] }
 
 /**
  * Fields the template's documents hold values in that its source does not have — a field renamed or
@@ -209,7 +211,8 @@ export function strayFields(
   const names = new Set(parseFormdown(source).forms.map((f) => f.name))
   const counts = new Map<string, number>()
   for (const document of documents) {
-    if (document.template !== ref) continue
+    // A document of any revision is the template's (template-revision.ts).
+    if (templateId(document.template) !== templateId(ref)) continue
     for (const [name, value] of Object.entries(document.values)) {
       const held = value !== null && value !== undefined && value !== '' && !(Array.isArray(value) && value.length === 0)
       if (held && !names.has(name)) counts.set(name, (counts.get(name) ?? 0) + 1)
@@ -218,6 +221,21 @@ export function strayFields(
   return [...counts]
     .sort(([a, m], [b, n]) => n - m || a.localeCompare(b))
     .map(([name, count]) => ({ kind: 'stray-values', name, count }))
+}
+
+/**
+ * Other template files with this template's id: a template's revisions are one template, so two files with
+ * one id make the vault read one of them as the template (the later revision) and the other as nothing.
+ */
+export function sharedId(source: string, path: string, templates: readonly { ref: string; path: string; name: string }[]): TemplateProblem[] {
+  let id: string
+  try {
+    id = templateInfo(source).id
+  } catch {
+    return []
+  }
+  const names = templates.filter((t) => t.path !== path && templateId(t.ref) === id).map((t) => t.name)
+  return names.length ? [{ kind: 'shared-id', id, names }] : []
 }
 
 export function templateProblems(source: string): TemplateProblem[] {

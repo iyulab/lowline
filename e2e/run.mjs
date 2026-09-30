@@ -1311,6 +1311,70 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '개정 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async "keeps a template's documents, table and what it learned when its version is raised"(app, vault) {
+    const DESK = { name: '안내 데스크', ref: 'desk@1', path: '서식/안내 데스크.fd.md' }
+    const body = '# 안내\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+    const source = `---\nid: desk\nversion: 1\nlowline:\n  suggest: [담당]\n---\n${body}`
+    const confirmed = [['노트북 배터리가 금방 닳아요', '장비'], ['노트북 화면이 깨졌어요', '장비'], ['휴가 일수를 알고 싶어요', '인사'], ['휴가 신청을 취소할게요', '인사']]
+    const files = [join(vault, DESK.path), ...confirmed.map((_, i) => join(vault, '문서', `안내-${i + 1}.md`))]
+    await writeFile(files[0], source)
+    for (const [i, [request, owner]] of confirmed.entries())
+      await writeFile(files[i + 1], `---\ntemplate: desk@1\n요청: ${request}\n담당: ${owner}\n---\n${body}`)
+    const made = new Set(await documentsIn(vault))
+    try {
+      await app.tabOf(DESK, '서식', { timeoutMs: 30_000 })
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: desk')`, 'the template source')
+      await app.type('textarea', source.replace('version: 1', 'version: 2'))
+      await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
+      await app.status('저장했습니다')
+
+      // Its documents are still its documents: none of them is set apart as naming no template.
+      await app.documentsOf(DESK)
+      await app.cdp.waitFor(`${JSON.stringify(confirmed.map((_, i) => `안내-${i + 1}`))}.every((n) => __e2e.all('ll-documents').some((d) => [...d.shadowRoot.querySelectorAll('nav button')].some((b) => b.textContent.trim() === n)))`, 'the documents under the template', { timeoutMs: 30_000 })
+      assert.ok(!(await app.cdp.evaluate(`!!__e2e.one('button.item:not(.group-toggle)', '서식 없는 문서')`)), 'no documents set apart')
+      await app.showTable(DESK)
+      await app.cdp.waitFor(`__e2e.all('ll-table').some((t) => /문서 4건/.test(t.shadowRoot.textContent))`, 'the four documents in the table', { timeoutMs: 30_000 })
+
+      // What the revision before it confirmed still suggests.
+      await app.newDocument(DESK)
+      await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+      await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      const note = await app.cdp.waitFor(
+        `__e2e.all('[data-formdown-note="담당"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+        'a suggestion from the earlier revision',
+        { timeoutMs: 20_000 },
+      )
+      assert.match(note, /^제안 · 비슷한 기록/)
+      assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-suggestion')?.textContent`), '장비')
+      // A document saved now is written with the revision it was made under; the earlier ones are left as they were.
+      await app.click('.formdown-suggestion', '장비')
+      await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
+      await app.status('저장했습니다')
+      const [saved] = (await documentsIn(vault)).filter((n) => !made.has(n))
+      files.push(join(vault, '문서', saved))
+      assert.match(await readFile(files.at(-1), 'utf8'), /template: desk@2/)
+      assert.match(await readFile(files[1], 'utf8'), /template: desk@1/)
+
+      // A second file with the same id is one template twice: its page says so.
+      const copy = join(vault, '서식', '안내 데스크 (옛).fd.md')
+      files.push(copy)
+      await writeFile(copy, source)
+      await app.templateOf(DESK)
+      const said = await app.cdp.waitFor(
+        `__e2e.all('ul.problems li').map((li) => li.textContent.trim()).find((t) => t.includes('id "desk"'))`,
+        'the other file named',
+        { timeoutMs: 30_000 },
+      )
+      assert.match(said, /^다른 서식 파일\(안내 데스크 \(옛\)\)도 id "desk"를 씁니다/)
+      await app.noAlert()
+    } finally {
+      // Leave the vault as the scenarios after this one expect it.
+      await app.learning()
+      for (const file of files) await rm(file, { force: true })
+      await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '안내 데스크')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+    }
+  },
+
   async "says when the template's documents hold values in a field its source no longer has"(app, vault) {
     const STRAY = { name: '배정표', ref: 'assignments@1', path: '서식/배정표.fd.md' }
     const source = '---\nid: assignments\nversion: 1\n---\n# 배정표\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'

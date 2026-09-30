@@ -5,6 +5,7 @@ import { describeError } from './errors.js'
 import type { FieldCurve, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { parsePresentations } from './events.js'
+import { currentRefs, revisedRef } from './template-revision.js'
 import { host, onVaultChanged, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
 import { numberedForms, weeklyCounts, type WeeklyCounts } from './weekly-counts.js'
@@ -156,7 +157,9 @@ export class LlLearning extends LitElement {
       this.templates = synced.templates
       this.names = synced.names
       // What this device showed is an aid to the counts: without it they are decisions alone.
-      const shown = parsePresentations(await vault.readPresentations().catch(() => ''))
+      // Shown under an earlier revision, a suggestion counts for its template as it is now, as its events do.
+      const current = currentRefs(synced.templates)
+      const shown = parsePresentations(await vault.readPresentations().catch(() => '')).map((p) => ({ ...p, template: revisedRef(p.template, current) }))
       this.counts = weeklyCounts(synced.templates, synced.documents, synced.events, shown)
       this.copied = 'no'
       this.curves = await host.curves()
