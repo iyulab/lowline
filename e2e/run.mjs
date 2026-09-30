@@ -953,6 +953,62 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'filters a table by name, by a choice field, and by text in a field'(app, vault) {
+    const intake = []
+    for (const name of (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md'))) {
+      const values = await fileValues(join(vault, '문서', name))
+      if (values.template === 'intake@1') intake.push({ name: name.replace(/\.md$/, ''), ...values })
+    }
+    const shows = (n, what) =>
+      app.cdp.waitFor(
+        `__e2e.all('[role=status]').some((el) => el.textContent.trim() === ${q(what)}) && (${n} === 0 || __e2e.all('tbody tr').length === ${n})`,
+        what,
+        { timeoutMs: 15_000 },
+      )
+    const pick = (label, value) =>
+      app.cdp.evaluate(`(() => { const s = __e2e.all('dc-select').find((el) => el.getAttribute('aria-label') === ${q(label)})
+        const inner = s.shadowRoot.querySelector('select'); inner.value = ${q(value)}; inner.dispatchEvent(new Event('change')); return true })()`)
+    const typeIn = (label, text) =>
+      app.cdp.evaluate(`(() => { const i = __e2e.all('dc-input').find((el) => el.getAttribute('aria-label') === ${q(label)})
+        const inner = i.shadowRoot.querySelector('input'); inner.value = ${q(text)}
+        inner.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+
+    await app.showTable(INTAKE)
+    await shows(intake.length, `문서 ${intake.length}건`)
+
+    // A choice field's value: the rows whose 부서 is 영업.
+    const sales = intake.filter((d) => d.부서 === '영업')
+    assert.ok(sales.length > 1, 'more than one document of 영업 to filter')
+    await pick('부서', '영업')
+    await shows(sales.length, `조건에 맞는 문서 ${sales.length}건`)
+    const column = await app.cdp.evaluate(`__e2e.all('thead th').map((th) => th.textContent).indexOf('부서')`)
+    const shown = await app.cdp.evaluate(`__e2e.all('tbody tr').map((tr) => tr.children[${column}].textContent.trim())`)
+    assert.deepEqual([...new Set(shown)], ['영업'])
+
+    // And a name: every filter holds.
+    const named = sales.filter((d) => d.name.includes('A-1'))
+    assert.equal(named.length, 1)
+    await typeIn('이름에 든 글자', 'A-1')
+    await shows(1, '조건에 맞는 문서 1건')
+
+    // Text within a field, alone.
+    await pick('부서', '')
+    await typeIn('이름에 든 글자', '')
+    await pick('글자를 찾을 칸', '요청')
+    await typeIn('칸에 든 글자', '토너')
+    const toner = intake.filter((d) => String(d.요청 ?? '').includes('토너'))
+    assert.ok(toner.length > 0)
+    await shows(toner.length, `조건에 맞는 문서 ${toner.length}건`)
+
+    // Nothing matching says so; cleared, every document is back.
+    await typeIn('칸에 든 글자', '어디에도 없는 말')
+    await shows(0, '조건에 맞는 문서 0건')
+    assert.ok(await app.cdp.evaluate(`__e2e.all('dc-data-table').some((t) => t.shadowRoot.textContent.includes('조건에 맞는 문서가 없습니다'))`))
+    await typeIn('칸에 든 글자', '')
+    await shows(intake.length, `문서 ${intake.length}건`)
+    await app.noAlert()
+  },
+
   async 'says why a field is not suggested for when replaying its history never reaches the target'(app, vault) {
     // Alike requests whose owners alternate: whichever earlier record is nearest, it is right half the time.
     const ASSIGN = { name: '배정', ref: 'assign@1', path: '서식/배정.fd.md' }

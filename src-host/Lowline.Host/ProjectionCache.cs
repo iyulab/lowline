@@ -132,11 +132,12 @@ internal sealed class ProjectionCache : IAsyncDisposable
         return new IngestResult(appended, retired, projections, skipped);
     }
 
-    public async Task<ProjectionTable> TableAsync(TemplateSnapshot template, CancellationToken cancellationToken)
+    public async Task<ProjectionTable> TableAsync(
+        TemplateSnapshot template, IReadOnlyList<FieldFilter> filters, CancellationToken cancellationToken)
     {
         var result = await _engine.QueryAsync(
             FormTypeRef.Create(template.Ref),
-            new QuerySpec(OrderBy: [new OrderKey(VaultProjection.PathColumn, Descending: false)]),
+            new QuerySpec(Filters: filters, OrderBy: [new OrderKey(VaultProjection.PathColumn, Descending: false)]),
             cancellationToken);
         var columns = template.Fields.Select(f => new ProjectionColumn(f.Name, f.Type)).ToList();
         var rows = result.Rows

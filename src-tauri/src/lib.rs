@@ -464,11 +464,12 @@ fn ingest_path(root: &Path) -> String {
 #[tauri::command]
 async fn host_projection(
     template: String,
+    filters: Option<serde_json::Value>,
     state: State<'_, HostState>,
 ) -> Result<serde_json::Value, String> {
     let client = state.client()?;
-    let path = format!("/projection/{}", encode_segment(&template));
-    host_json(blocking(move || client.get(&path)).await?)
+    let body = serde_json::json!({ "template": template, "filters": filters }).to_string();
+    host_json(blocking(move || client.post_json("/projection", &body)).await?)
 }
 
 /// How the suggestions of each judgment field have fared, from the vault's event files.

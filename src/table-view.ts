@@ -2,12 +2,15 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { fileName } from './documents.js'
 import { describeError } from './errors.js'
-import { cellText, type IngestResult, type ProjectionTable, type TemplateSnapshot } from './projection.js'
+import { PATH_COLUMN, cellText, type ColumnFilter, type IngestResult, type ProjectionTable, type TemplateField, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { tableCsv } from './export.js'
 import { host, onVaultChanged, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
 import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
+
+/** How long typing into a filter pauses before the table is asked for again. */
+const FILTER_DELAY_MS = 250
 
 /** A template's documents as a table, projected by the sidecar from what is in the vault now. */
 @customElement('ll-table')
@@ -19,10 +22,19 @@ export class LlTable extends LitElement {
       gap: var(--dc-space-3, 12px);
       min-height: 0;
     }
-    .bar {
+    .bar,
+    .filters {
       display: flex;
       align-items: center;
       gap: var(--dc-space-2, 8px);
+    }
+    /* One row of compact controls above the table, wrapping only when the window is narrow. */
+    .filters {
+      flex-wrap: wrap;
+    }
+    .filters > * {
+      flex: 0 1 11rem;
+      min-width: 8rem;
     }
     dc-data-table {
       font-size: 13px;
@@ -49,6 +61,11 @@ export class LlTable extends LitElement {
   /** What the last export wrote, said in place of the row count until the table changes. */
   @state() private exported = ''
   @state() private names = new Map<string, string>()
+  /** The table's filters by column — a name or a field's text it contains, or a choice field's value. */
+  @state() private filters = new Map<string, ColumnFilter>()
+  /** The text field whose text the text filter looks in. */
+  @state() private textField = ''
+  private filterTimer?: ReturnType<typeof setTimeout>
 
   private unlisten?: Promise<UnlistenFn>
 
@@ -68,6 +85,8 @@ export class LlTable extends LitElement {
     // Another template picked while this one shows: its table, from the vault as last handed over.
     if (changed.has('template') && !this.waiting && this.template !== this.selected) {
       this.table = undefined
+      this.filters = new Map()
+      this.textField = ''
       void this.show(this.template)
     }
   }
@@ -92,7 +111,7 @@ export class LlTable extends LitElement {
     this.selected = template
     this.exported = ''
     try {
-      const table = await host.projection(template)
+      const table = await host.projection(template, [...this.filters.values()])
       // Another template may have been picked while this one loaded: its table wins.
       if (this.selected === template) this.table = table
     } catch (e) {
@@ -118,6 +137,77 @@ export class LlTable extends LitElement {
     }
   }
 
+  /**
+   * Sets one column's filter (none for an empty value) and asks for the table again once typing pauses —
+   * the sidecar answers it from the projection.
+   */
+  private filter(column: string, op: ColumnFilter['op'], value: string) {
+    const next = new Map(this.filters)
+    if (value.trim()) next.set(column, { column, op, value: value.trim() })
+    else next.delete(column)
+    this.filters = next
+    clearTimeout(this.filterTimer)
+    this.filterTimer = setTimeout(() => void this.show(this.template), FILTER_DELAY_MS)
+  }
+
+  /** Moves the text filter to another field, keeping what was typed. */
+  private pickTextField(field: string) {
+    const typed = this.filters.get(this.textField)?.value ?? ''
+    if (this.textField) this.filter(this.textField, 'contains', '')
+    this.textField = field
+    if (typed) this.filter(field, 'contains', typed)
+  }
+
+  /** Filters the template's fields allow: its name, each choice field's value, and text within one text field. */
+  private renderFilters(template: TemplateSnapshot | undefined) {
+    if (!template) return nothing
+    const choices = template.fields.filter((f) => (f.type === 'select' || f.type === 'radio') && f.options.length > 0)
+    // Every other field but checkboxes and numbers is text to the projection.
+    const texts = template.fields.filter((f) => !choices.includes(f) && !['checkbox', 'number', 'range'].includes(f.type))
+    const textField = this.textField || texts[0]?.name || ''
+    const value = (column: string) => this.filters.get(column)?.value ?? ''
+    const input = (e: Event) => (e.target as HTMLInputElement).value
+    return html`<div class="filters" role="search" aria-label=${strings.tableFilters}>
+      <dc-input
+        size="sm"
+        type="search"
+        aria-label=${strings.tableFilterName}
+        placeholder=${strings.tableFilterName}
+        .value=${value(PATH_COLUMN)}
+        @input=${(e: Event) => this.filter(PATH_COLUMN, 'contains', input(e))}
+      ></dc-input>
+      ${choices.map(
+        (f: TemplateField) => html`<dc-select
+          size="sm"
+          aria-label=${f.label}
+          .value=${value(f.name)}
+          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...f.options.map((o) => ({ value: o, label: o }))]}
+          @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
+        ></dc-select>`,
+      )}
+      ${texts.length > 0
+        ? html`<dc-select
+              size="sm"
+              aria-label=${strings.tableFilterField}
+              .value=${textField}
+              .options=${texts.map((f) => ({ value: f.name, label: f.label }))}
+              @change=${(e: Event) => this.pickTextField(input(e))}
+            ></dc-select>
+            <dc-input
+              size="sm"
+              type="search"
+              aria-label=${strings.tableFilterText}
+              placeholder=${strings.tableFilterText}
+              .value=${value(textField)}
+              @input=${(e: Event) => {
+                this.textField = textField
+                this.filter(textField, 'contains', input(e))
+              }}
+            ></dc-input>`
+        : nothing}
+    </div>`
+  }
+
   /** Asks for a row's document to be opened. */
   private openRow(path: string) {
     this.dispatchEvent(new CustomEvent('ll-open-document', { detail: { path, template: this.selected }, bubbles: true, composed: true }))
@@ -133,9 +223,15 @@ export class LlTable extends LitElement {
     if (this.waiting) return html`<p class="message" role="status">${strings.hostStarting}</p>`
     const table = this.table
     const skipped = this.ingest?.skipped.length ?? 0
+    const filtered = this.filters.size > 0
     return html`
+      ${this.renderFilters(this.templates.find((t) => t.ref === this.template))}
       <div class="bar">
-        ${table ? html`<span class="message" role="status">${this.exported || strings.tableCount(table.rows.length)}</span>` : nothing}
+        ${table
+          ? html`<span class="message" role="status"
+              >${this.exported || (filtered ? strings.tableMatching(table.rows.length) : strings.tableCount(table.rows.length))}</span
+            >`
+          : nothing}
         ${table && table.rows.length
           ? html`<dc-button size="sm" variant="secondary" @click=${() => void this.exportTable()}>${strings.tableExport}</dc-button>`
           : nothing}
@@ -150,7 +246,7 @@ export class LlTable extends LitElement {
                 table.columns.map((c, i) => [c.name, cellText(row.values[c.name]) || (i === 0 ? fileName(row.path, '.md') : '')]),
               ),
             }))}
-            empty-label=${strings.tableEmpty}
+            empty-label=${filtered ? strings.tableNoMatch : strings.tableEmpty}
             @activate=${(e: CustomEvent<{ id: string }>) => this.openRow(e.detail.id)}
           ></dc-data-table>`
         : nothing}

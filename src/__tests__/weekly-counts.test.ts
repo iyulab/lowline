@@ -5,7 +5,7 @@ import { weekOf, weeklyCounts } from '../weekly-counts.js'
 
 const template = (ref: string, suggest: string[]): TemplateSnapshot => ({
   ref,
-  fields: [{ name: '요청', type: 'textarea', label: '요청', multiple: false }, ...suggest.map((name) => ({ name, type: 'select', label: name, multiple: false }))],
+  fields: [{ name: '요청', type: 'textarea', label: '요청', multiple: false, options: [] }, ...suggest.map((name) => ({ name, type: 'select', label: name, multiple: false, options: [] }))],
   suggest,
 })
 

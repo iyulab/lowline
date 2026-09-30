@@ -53,14 +53,16 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         Assert.Equal("""{"appended":1,"retired":0,"projections":["bug-report@1"],"skipped":[]}""",
             await ingest.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
-        var table = await client.GetStringAsync("/projection/bug-report@1", TestContext.Current.CancellationToken);
+        var response = await client.PostAsJsonAsync("/projection", new { template = "bug-report@1" }, TestContext.Current.CancellationToken);
+        var table = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Equal(
             """{"template":"bug-report@1","columns":[{"name":"제목","type":"text"},{"name":"재현됨","type":"checkbox"}],"rows":[{"path":"문서/a.md","values":{"제목":"멈춤","재현됨":true}}]}""",
             System.Text.RegularExpressions.Regex.Unescape(table));
 
         var health = await client.GetFromJsonAsync<Health>("/health", TestContext.Current.CancellationToken);
         Assert.True(health!.VaultIndexed);
-        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/projection/none@1", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.PostAsJsonAsync("/projection", new { template = "none@1" }, TestContext.Current.CancellationToken)).StatusCode);
     }
 
     [Fact]

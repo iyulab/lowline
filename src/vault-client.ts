@@ -1,7 +1,7 @@
 // The UI's only way to the vault: commands handled by the shell, which owns every file.
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { FieldCurve, IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
+import type { ColumnFilter, FieldCurve, IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
 
 export interface VaultInfo {
   root: string
@@ -147,7 +147,8 @@ export type HostStatus = { state: 'starting' } | { state: 'ready' } | { state: '
 export const host = {
   status: () => invoke<HostStatus>('host_status'),
   ingest: (snapshot: VaultSnapshot) => invoke<IngestResult>('host_ingest', { snapshot }),
-  projection: (template: string) => invoke<ProjectionTable>('host_projection', { template }),
+  /** A template's table: the rows that match every filter, all of them without. */
+  projection: (template: string, filters: ColumnFilter[] = []) => invoke<ProjectionTable>('host_projection', { template, filters }),
   curves: () => invoke<FieldCurve[]>('host_curves'),
   /** `document` is the draft's vault path once it has been saved; a rejection there is not offered again. */
   suggest: (template: string, field: string, values: Record<string, unknown>, document?: string) =>

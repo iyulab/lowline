@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Formbase.Core.Query;
 using Formbase.Core.Schema;
 
 namespace Lowline.Host;
@@ -60,6 +61,25 @@ public sealed record ProjectionColumn(string Name, string Type);
 public sealed record ProjectionTable(string Template, IReadOnlyList<ProjectionColumn> Columns, IReadOnlyList<ProjectionRow> Rows);
 
 public sealed record ProjectionRow(string Path, IReadOnlyDictionary<string, object?> Values);
+
+/// <summary>
+/// One condition on a template's table. <see cref="Column"/> is a field's name, or
+/// <see cref="VaultProjection.PathColumn"/> for the document's vault path; <see cref="Op"/> is <c>contains</c>
+/// (text, ignoring case) or <c>equal</c>.
+/// </summary>
+public sealed record ColumnFilter(string Column, string Op, string Value)
+{
+    /// <summary>The condition as Formbase asks it. An operator other than the two is a request no screen makes.</summary>
+    public FieldFilter ToFieldFilter() => new(Column, Op switch
+    {
+        "contains" => FilterOperator.Contains,
+        "equal" => FilterOperator.Equal,
+        _ => throw new ArgumentException("unknown filter operator", nameof(Op)),
+    }, Value);
+}
+
+/// <summary>What the UI asks of a template's table: the rows that match every filter.</summary>
+public sealed record ProjectionQuery(string Template, IReadOnlyList<ColumnFilter>? Filters = null);
 
 /// <summary>
 /// The vault projected through Formbase — tables in a cache outside the vault — and the suggestions and
@@ -185,13 +205,20 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     }
 
     /// <summary>The table for one template, or null when the vault has no such template.</summary>
-    public async Task<ProjectionTable?> TableAsync(string template, CancellationToken cancellationToken)
+    public Task<ProjectionTable?> TableAsync(string template, CancellationToken cancellationToken) =>
+        TableAsync(template, [], cancellationToken);
+
+    /// <summary>
+    /// The rows of one template's table that match every filter — Formbase answers them from the projection —
+    /// or null when the vault has no such template.
+    /// </summary>
+    public async Task<ProjectionTable?> TableAsync(string template, IReadOnlyList<ColumnFilter> filters, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
             return _cache is not null && _templates?.TryGetValue(template, out var snapshot) == true
-                ? await _cache.TableAsync(snapshot, cancellationToken)
+                ? await _cache.TableAsync(snapshot, [.. filters.Select(f => f.ToFieldFilter())], cancellationToken)
                 : null;
         }
         finally

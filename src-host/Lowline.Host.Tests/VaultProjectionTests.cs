@@ -47,6 +47,30 @@ public sealed class VaultProjectionTests
     }
 
     [Fact]
+    public async Task Answers_the_rows_that_match_every_filter()
+    {
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([BugReport],
+        [
+            Document("문서/2026-01-15 저장 멈춤.md", """{"제목": "저장 후 멈춤", "심각도": "높음"}"""),
+            Document("문서/2026-01-16 열기 실패.md", """{"제목": "열기 실패", "심각도": "높음"}"""),
+            Document("문서/2026-02-01 저장 느림.md", """{"제목": "저장이 느림", "심각도": "낮음"}"""),
+        ]), Ct);
+
+        async Task<string[]> Paths(params ColumnFilter[] filters) =>
+            [.. (await vault.TableAsync("bug-report@1", filters, Ct))!.Rows.Select(r => r.Path)];
+
+        Assert.Equal(["문서/2026-01-15 저장 멈춤.md", "문서/2026-02-01 저장 느림.md"], await Paths(new ColumnFilter("제목", "contains", "저장")));
+        Assert.Equal(["문서/2026-01-15 저장 멈춤.md", "문서/2026-01-16 열기 실패.md"], await Paths(new ColumnFilter("심각도", "equal", "높음")));
+        Assert.Equal(["문서/2026-01-15 저장 멈춤.md"],
+            await Paths(new ColumnFilter("제목", "contains", "저장"), new ColumnFilter("심각도", "equal", "높음")));
+        // A document's name is its path.
+        Assert.Equal(["문서/2026-02-01 저장 느림.md"], await Paths(new ColumnFilter(VaultProjection.PathColumn, "contains", "2026-02")));
+        Assert.Empty(await Paths(new ColumnFilter("제목", "contains", "없는 말")));
+        await Assert.ThrowsAsync<ArgumentException>(() => Paths(new ColumnFilter("제목", "near", "저장")));
+    }
+
+    [Fact]
     public async Task A_new_snapshot_replaces_the_old_one()
     {
         await using var vault = new VaultProjection();

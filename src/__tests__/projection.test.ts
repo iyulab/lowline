@@ -26,11 +26,11 @@ describe('templateSnapshot', () => {
     expect(templateSnapshot(template)).toEqual({
       ref: 'bug-report@2',
       fields: [
-        { name: '제목', label: '제목', type: 'text', multiple: false },
-        { name: '심각도', label: '심각도', type: 'select', multiple: false },
-        { name: '재현됨', label: '재현됨', type: 'checkbox', multiple: false },
-        { name: '재현_절차', label: '재현 절차', type: 'textarea', multiple: false },
-        { name: '태그', label: '태그', type: 'checkbox', multiple: true },
+        { name: '제목', label: '제목', type: 'text', multiple: false, options: [] },
+        { name: '심각도', label: '심각도', type: 'select', multiple: false, options: ['낮음', '높음'] },
+        { name: '재현됨', label: '재현됨', type: 'checkbox', multiple: false, options: [] },
+        { name: '재현_절차', label: '재현 절차', type: 'textarea', multiple: false, options: [] },
+        { name: '태그', label: '태그', type: 'checkbox', multiple: true, options: ['UI', '저장'] },
       ],
       suggest: ['심각도'],
     })

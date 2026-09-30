@@ -14,6 +14,8 @@ export interface TemplateField {
   type: string
   /** A checkbox with options: its value is a list. */
   multiple: boolean
+  /** A choice field's options (select, radio, checkbox group); empty for any other field. */
+  options: string[]
 }
 
 export interface TemplateSnapshot {
@@ -54,6 +56,7 @@ export function templateSnapshot(source: string): TemplateSnapshot {
     label: f.label ?? f.name,
     type: f.type,
     multiple: f.type === 'checkbox' && Array.isArray(f.options) && f.options.length > 0,
+    options: ['select', 'radio', 'checkbox'].includes(f.type) && Array.isArray(f.options) ? f.options.map(String) : [],
   }))
   return { ref, fields, suggest: suggestFields(parsed.frontMatter?.data, fields) }
 }
@@ -102,6 +105,19 @@ export function cellText(value: unknown): string {
   if (Array.isArray(value)) return value.join(', ')
   return String(value)
 }
+
+/**
+ * One condition on a template's table, answered by the sidecar from the projection: `column` is a field's
+ * name, or `$path` for the document's vault path (its name); `contains` matches text ignoring case.
+ */
+export interface ColumnFilter {
+  column: string
+  op: 'contains' | 'equal'
+  value: string
+}
+
+/** The column that carries a document's vault path. */
+export const PATH_COLUMN = '$path'
 
 /** How a judgment field's suggestions have fared, decision by decision. */
 export interface FieldCurve {

@@ -39,8 +39,8 @@ app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: 
 app.MapPost("/vault/ingest", (VaultSnapshot snapshot, string? vault, VaultProjection projection, CancellationToken ct) =>
     projection.IngestAsync(snapshot, vault ?? "", ct));
 
-app.MapGet("/projection/{**template}", async (string template, VaultProjection vault, CancellationToken ct) =>
-    await vault.TableAsync(template, ct) is { } table ? Results.Ok(table) : Results.NotFound());
+app.MapPost("/projection", async (ProjectionQuery query, VaultProjection vault, CancellationToken ct) =>
+    await vault.TableAsync(query.Template, query.Filters ?? [], ct) is { } table ? Results.Ok(table) : Results.NotFound());
 
 app.MapGet("/curves", (VaultProjection vault, CancellationToken ct) => vault.CurvesAsync(ct));
 
