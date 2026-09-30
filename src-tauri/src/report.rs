@@ -115,6 +115,43 @@ impl Reporter {
     }
 }
 
+/// The most `reports.jsonl` holds before a launch trims it: several hundred reports, which only a
+/// device failing on every launch for a long time would write.
+pub const MAX_FILE_BYTES: usize = 1 << 20;
+
+/// Keeps the report file from growing without end: once it holds more than `max_bytes`, the oldest
+/// whole reports go until it holds half of that, and `sent` moves back by what went. `sent` is
+/// written first — a launch that stops between the two sends a few reports again rather than skip
+/// any. Returns how many bytes were dropped.
+pub fn trim(
+    file: &std::path::Path,
+    sent: &std::path::Path,
+    max_bytes: usize,
+) -> std::io::Result<usize> {
+    let bytes = match std::fs::read(file) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(e),
+    };
+    if bytes.len() <= max_bytes {
+        return Ok(0);
+    }
+    // Keep from the first report that starts at or after the cut, so it starts with a whole one.
+    let cut = bytes.len() - max_bytes / 2;
+    let dropped = match bytes[cut - 1..].iter().position(|&b| b == b'\n') {
+        Some(i) => cut + i,
+        None => bytes.len(),
+    };
+    if let Some(offset) = std::fs::read_to_string(sent)
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+    {
+        std::fs::write(sent, offset.saturating_sub(dropped).to_string())?;
+    }
+    tauri_kit_fs::write_atomic(file, &bytes[dropped..])?;
+    Ok(dropped)
+}
+
 /// Where reports go: an Application Insights resource, named by its connection string.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sink {
@@ -613,6 +650,54 @@ mod tests {
             server.join().unwrap()[0][0]["data"]["baseData"]["exceptions"][0]["typeName"],
             "Panic"
         );
+    }
+
+    #[test]
+    fn trims_the_oldest_reports_once_the_file_passes_its_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
+        let lines: Vec<String> = (0..10).map(|n| format!("{{\"n\":{n:03}}}\n")).collect();
+        let text = lines.concat();
+        std::fs::write(&file, &text).unwrap();
+        // Seven reports were sent before this launch.
+        let sent_at = lines[..7].concat().len();
+        std::fs::write(&sent, sent_at.to_string()).unwrap();
+
+        // At or under the limit, nothing changes.
+        assert_eq!(trim(&file, &sent, text.len()).unwrap(), 0);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), text);
+
+        // Over it, whole reports go from the front until half the limit is left.
+        let line = lines[0].len();
+        let dropped = trim(&file, &sent, 8 * line).unwrap();
+        assert_eq!(dropped, 6 * line);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), lines[6..].concat());
+        // What was sent moved back with them: the next send starts at the same report.
+        let at: usize = std::fs::read_to_string(&sent).unwrap().parse().unwrap();
+        assert_eq!(at, sent_at - dropped);
+        assert_eq!(
+            &std::fs::read_to_string(&file).unwrap()[at..],
+            lines[7..].concat()
+        );
+    }
+
+    #[test]
+    fn trimming_past_what_was_sent_starts_the_next_send_at_the_first_kept_report() {
+        let dir = tempfile::tempdir().unwrap();
+        let (file, sent) = (
+            dir.path().join("reports.jsonl"),
+            dir.path().join("reports.sent"),
+        );
+        std::fs::write(&file, "{\"n\":1}\n{\"n\":2}\n{\"n\":3}\n").unwrap();
+        std::fs::write(&sent, "0").unwrap();
+        trim(&file, &sent, 16).unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "{\"n\":3}\n");
+        assert_eq!(std::fs::read_to_string(&sent).unwrap(), "0");
+        // No file yet: nothing to do.
+        assert_eq!(trim(&dir.path().join("none"), &sent, 16).unwrap(), 0);
     }
 
     #[test]

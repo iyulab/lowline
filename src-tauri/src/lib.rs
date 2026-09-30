@@ -534,13 +534,16 @@ fn start_reports(app: &tauri::AppHandle) {
         return;
     };
     let file = dir.join("reports.jsonl");
+    let sent = dir.join("reports.sent");
+    // Before this launch writes or sends anything: the file is evidence, not an archive.
+    let _ = report::trim(&file, &sent, report::MAX_FILE_BYTES);
     if REPORTER.set(report::Reporter::new(file.clone())).is_err() {
         return;
     }
     // What earlier launches wrote goes out now, away from startup; what fails stays for the next.
     if let Some(sink) = report::Sink::of_build() {
         std::thread::spawn(move || {
-            let _ = sink.send_pending(&report::Sink::agent(), &file, &dir.join("reports.sent"));
+            let _ = sink.send_pending(&report::Sink::agent(), &file, &sent);
         });
     }
     let previous = std::panic::take_hook();
