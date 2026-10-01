@@ -35,11 +35,23 @@ pub struct HostClient {
     client: Client,
 }
 
-/// A request the host failed: what the host said about it, when it said something.
+// TODO(upstream: tauri-kit-sidecar `Response::fault` / `Fault`, pushed after 0.9.1 and not yet
+// published) — once a release carries them, `HostFailure` is `tauri_kit_sidecar::loopback::Fault`,
+// `answer` takes the `Response` and reads `response.fault()`, and `FaultAnswer` goes.
+/// A request the host failed: what the host said about it, when it said something — the
+/// exception's type and the methods it passed through (TauriKit.Sidecar.Loopback's `FaultView`).
 #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
 pub struct HostFailure {
+    #[serde(rename = "type")]
     pub kind: String,
+    #[serde(default)]
     pub frames: Vec<String>,
+}
+
+/// The body of a request the host failed: `{"fault":{…}}`.
+#[derive(serde::Deserialize)]
+struct FaultAnswer {
+    fault: HostFailure,
 }
 
 /// Why a request to the host did not come back with an answer.
@@ -73,7 +85,8 @@ impl From<TransportError> for CallError {
 pub fn answer(status: u16, body: String) -> Result<String, CallError> {
     match status {
         200..=299 => Ok(body),
-        500 => Err(serde_json::from_str(&body).map_or(CallError::Status(500), CallError::Failed)),
+        500 => Err(serde_json::from_str::<FaultAnswer>(&body)
+            .map_or(CallError::Status(500), |a| CallError::Failed(a.fault))),
         _ => Err(CallError::Status(status)),
     }
 }
@@ -204,7 +217,7 @@ mod tests {
 
     #[test]
     fn a_failed_request_says_what_failed_when_the_host_said() {
-        let failed = answer(500, r#"{"kind":"System.ArgumentException","frames":["Lowline.Host.VaultProjection.IngestAsync"]}"#.into());
+        let failed = answer(500, r#"{"fault":{"type":"System.ArgumentException","at":"Lowline.Host.VaultProjection.IngestAsync","frames":["Lowline.Host.VaultProjection.IngestAsync"]}}"#.into());
         match failed {
             Err(CallError::Failed(f)) => {
                 assert_eq!(f.kind, "System.ArgumentException");

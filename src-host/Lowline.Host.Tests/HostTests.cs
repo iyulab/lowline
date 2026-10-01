@@ -98,7 +98,7 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         var first = await client.PostAsync("/failures/take", null, ct);
         var again = await client.PostAsync("/failures/take", null, ct);
 
-        Assert.Equal("[{\"kind\":\"System.TimeoutException\",\"frames\":[]}]", await first.Content.ReadAsStringAsync(ct));
+        Assert.Equal("[{\"type\":\"System.TimeoutException\",\"at\":null,\"frames\":[]}]", await first.Content.ReadAsStringAsync(ct));
         Assert.Equal("[]", await again.Content.ReadAsStringAsync(ct));
     }
 
@@ -117,9 +117,9 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
 
         Assert.Equal(HttpStatusCode.InternalServerError, ingest.StatusCode);
         var body = await ingest.Content.ReadAsStringAsync(ct);
-        var failure = System.Text.Json.JsonSerializer.Deserialize<HostFailure>(body, System.Text.Json.JsonSerializerOptions.Web)!;
-        Assert.False(string.IsNullOrEmpty(failure.Kind));
-        Assert.NotEmpty(failure.Frames);
+        var failure = System.Text.Json.JsonSerializer.Deserialize<TauriKit.Sidecar.Loopback.FaultResponse>(body, System.Text.Json.JsonSerializerOptions.Web)!.Fault;
+        Assert.False(string.IsNullOrEmpty(failure.Type));
+        Assert.Contains(failure.Frames, f => f.StartsWith("Lowline.Host.", StringComparison.Ordinal));
         Assert.DoesNotContain("회의록", body);
         Assert.DoesNotContain("노트북", body);
     }

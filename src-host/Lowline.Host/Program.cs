@@ -26,8 +26,8 @@ if (string.IsNullOrEmpty(token))
     return 2;
 }
 
-// A failed request says what failed, never with what: see HostErrors.
-app.UseExceptionHandler(HostErrors.Answer);
+// A failed request says what failed, never with what: its type and the frames it passed through.
+app.UseFaults(new FaultOptions { OwnNamespaces = HostFailures.OwnNamespaces });
 app.UseBearerToken(token);
 
 app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: vault.MemoryReady));
