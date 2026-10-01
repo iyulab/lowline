@@ -31,20 +31,21 @@ export const q = (s) => JSON.stringify(s)
 /** The window is ready once the app element is there. */
 const READY = `customElements.get('ll-app') && !!document.querySelector('ll-app')`
 
-// TODO(upstream: @iyulab/tauri-kit-dev — launch as a subclass, fill editable elements, webviewProfile) — once
-// @iyulab/tauri-kit-dev ships `new this()` in launch, `fill` for editable elements and `webviewProfile`, this
-// class extends its App instead of holding one, `type` becomes its `fill`, and `webviewGone` goes.
-export class App {
-  /** Starts the app and waits for its window. */
-  static async launch() {
-    const app = new App()
-    app.window = await Window.launch({
-      exe,
-      port: PORT,
-      ready: READY,
-      env: { LOWLINE_EXPORT_TO: EXPORTS },
-      debugPortFromEnv: false,
-    })
+/** How the e2e build is started: its own debugging port, its own profile, exports to a folder. */
+const LAUNCH = {
+  exe,
+  port: PORT,
+  ready: READY,
+  env: { LOWLINE_EXPORT_TO: EXPORTS },
+  debugPortFromEnv: false,
+  // A launch that joins a WebView2 browser still shutting down on this profile never opens the port.
+  webviewProfile: IDENTIFIER,
+}
+
+export class App extends Window {
+  /** Starts the app and waits for its window — `restart` comes back through here too. */
+  static async launch(options = LAUNCH) {
+    const app = await super.launch(options)
     await app.ready()
     return app
   }
@@ -57,35 +58,15 @@ export class App {
     if (scheme) await this.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
   }
 
-  get cdp() {
-    return this.window?.cdp
-  }
-
-  /** Ends the app the hard way — nothing it holds in memory survives. */
-  async quit() {
-    await this.window?.quit()
-    this.window = undefined
-    // WebView2's browser process outlives the app by seconds, and closes its debugging port before
-    // it exits. The next launch must start a browser of its own: one that joins a browser still
-    // shutting down never opens the debugging port. So wait for the processes, not just the port.
-    await webviewGone()
-  }
-
-  /** Ends the app and starts it again, in this same App, without opening anything for it. */
-  async relaunch() {
-    await this.quit()
-    this.window = (await App.launch()).window
-  }
-
   /**
    * Ends the app and starts it again on the same vault, in the same App — with the device's projection
    * caches dropped in between when `dropCaches`, so only the vault is left to rebuild from.
    */
-  async restart(vault, { dropCaches = false } = {}) {
+  async reopen(vault, { dropCaches = false } = {}) {
     await this.quit()
     assert.equal(await sidecarsRunning(), 0, 'the sidecar went with the app')
     if (dropCaches) await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'projections'), { recursive: true, force: true })
-    this.window = (await App.launch()).window
+    await this.restart()
     await this.openVault(vault)
   }
 
@@ -96,23 +77,6 @@ export class App {
       return app.vaultInfo.name
     })()`)
     assert.ok(name, 'vault opened')
-  }
-
-  /** Clicks the element matching `selector` (and `text`, if given) with the mouse, once a click there lands on it. */
-  async click(selector, text) {
-    await this.window.click(selector, text)
-  }
-
-  /** Focuses a field — a form control or an inline (contenteditable) field — and replaces its value by typing. */
-  async type(selector, text) {
-    await this.cdp.waitFor(
-      `(() => { const el = __e2e.one(${q(selector)}); if (!el) return false; el.focus()
-        if (el.isContentEditable) { const r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r) }
-        else el.select?.()
-        return true })()`,
-      selector,
-    )
-    await this.cdp.insertText(text)
   }
 
   /** Picks an option the way a dropdown does: set the value, report the change. */
@@ -219,31 +183,6 @@ export class App {
     const alert = await this.cdp.evaluate(`__e2e.all('[role=alert]').map((el) => el.textContent.trim()).filter(Boolean).join(' / ')`)
     assert.equal(alert, '', 'no error shown')
   }
-}
-
-/**
- * Waits until no WebView2 process runs on the e2e app's profile. The app was killed, so its
- * browser only notices after a while — sometimes longer than a scenario should wait. After a
- * grace period the leftovers, which belong to the e2e profile alone, are ended too.
- */
-async function webviewGone(graceMs = 10_000) {
-  if (process.platform !== 'win32') return // WebView2 is Windows' webview
-  const { execFileSync } = await import('node:child_process')
-  // The process table can still list a process that has exited while something holds a handle to
-  // it; only ones Get-Process can open are running.
-  const on = `Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" | Where-Object { $_.CommandLine -like '*${IDENTIFIER}*' -and (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue) }`
-  const left = () => Number(execFileSync('powershell', ['-NoProfile', '-Command', `@(${on}).Count`], { encoding: 'utf8' }).trim())
-  const deadline = Date.now() + graceMs
-  while (Date.now() < deadline) {
-    if (left() === 0) return
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  execFileSync('powershell', ['-NoProfile', '-Command', `${on} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`])
-  for (let i = 0; i < 20; i++) {
-    if (left() === 0) return
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error(`WebView2 on the ${IDENTIFIER} profile did not exit`)
 }
 
 export async function sidecarsRunning() {

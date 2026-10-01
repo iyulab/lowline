@@ -141,7 +141,7 @@ const scenarios = {
     const enter = () => app.cdp.press('Enter', { code: 'Enter', keyCode: 13 })
     assert.equal(await app.value('input[aria-label="심각도 선택지"]'), '낮음, 보통, 높음')
 
-    await app.type('input[aria-label="심각도 선택지"]', '낮음, 보통, 높음, 긴급')
+    await app.fill('input[aria-label="심각도 선택지"]', '낮음, 보통, 높음, 긴급')
     await enter()
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('options="낮음,보통,높음,긴급"')`, 'the options written into the field')
     assert.equal(
@@ -152,7 +152,7 @@ const scenarios = {
     await app.cdp.waitFor(`__e2e.all('select[name="심각도"] option').some((o) => o.value === '긴급')`, 'the new option in the preview')
 
     // A field keeps at least one option: clearing them writes nothing and shows the source's again.
-    await app.type('input[aria-label="환경 선택지"]', ' , ')
+    await app.fill('input[aria-label="환경 선택지"]', ' , ')
     await enter()
     await app.cdp.waitFor(`__e2e.one('input[aria-label="환경 선택지"]')?.value === '윈도우, 맥'`, 'the options as the source holds them')
     assert.ok((await app.value('textarea')).includes('@환경: [radio options="윈도우,맥"]'))
@@ -162,7 +162,7 @@ const scenarios = {
     assert.equal(await readFile(path, 'utf8'), await app.value('textarea'), 'file = editor text')
 
     // As it was, for the scenarios after this one.
-    await app.type('input[aria-label="심각도 선택지"]', '낮음, 보통, 높음')
+    await app.fill('input[aria-label="심각도 선택지"]', '낮음, 보통, 높음')
     await enter()
     await app.click('dc-button', '저장')
     await app.status('저장했습니다')
@@ -223,10 +223,10 @@ const scenarios = {
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the template source')
     await app.click('dc-button', '이름 바꾸기')
     // A name another template has is refused.
-    await app.type('input[aria-label="새 이름"]', '접수')
+    await app.fill('input[aria-label="새 이름"]', '접수')
     await enter()
     await app.cdp.waitFor(`__e2e.all('[role=alert]').some((el) => el.textContent.includes('같은 이름의 서식이 이미 있습니다'))`, 'the name refused')
-    await app.type('input[aria-label="새 이름"]', renamed.name)
+    await app.fill('input[aria-label="새 이름"]', renamed.name)
     await enter()
     await app.status('이름을 바꿨습니다')
 
@@ -241,7 +241,7 @@ const scenarios = {
     // As it was, for the scenarios after this one.
     await app.templateOf(renamed)
     await app.click('dc-button', '이름 바꾸기')
-    await app.type('input[aria-label="새 이름"]', BUG.name)
+    await app.fill('input[aria-label="새 이름"]', BUG.name)
     await enter()
     await app.status('이름을 바꿨습니다')
     assert.equal(await readFile(join(vault, TEMPLATE), 'utf8'), before)
@@ -270,9 +270,9 @@ const scenarios = {
     await app.cdp.waitFor(`(() => { const t = __e2e.one(${q(TITLE)}); if (!t) return false; t.focus(); t.blur(); return true })()`, 'the empty title')
     await app.cdp.evaluate(`new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))`)
     assert.equal(await app.cdp.evaluate(`__e2e.one('dc-button', '저장').disabled`), true, 'a focus and blur alone leave Save off')
-    await app.type(TITLE, '저장 후 멈춤')
+    await app.fill(TITLE, '저장 후 멈춤')
     await app.choose('select[name="심각도"]', '높음')
-    await app.type('textarea[name="재현_절차"]', '1. 문서를 연다\n2. 저장한다')
+    await app.fill('textarea[name="재현_절차"]', '1. 문서를 연다\n2. 저장한다')
     await app.click('input[name="재현됨"]')
     await app.click('input[name="환경"][value="맥"]')
     await app.click('dc-button', '저장')
@@ -292,7 +292,7 @@ const scenarios = {
     const bodyBefore = await fileBody(path)
     assert.match(bodyBefore, /# 버그 리포트/)
 
-    await app.type(TITLE, '저장 후 화면이 멈춤')
+    await app.fill(TITLE, '저장 후 화면이 멈춤')
     // Saved again with Ctrl+S, from inside the field being typed in — as a template is.
     await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
     await app.status('저장했습니다')
@@ -481,7 +481,7 @@ const scenarios = {
     const before = new Set(await documentsIn(vault))
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+    await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
     await app.choose('select[name="부서"]', '영업')
     // The suggestion is drawn by the field it is for: its value to take, what it rests on, and a way to decline.
     const note = await app.cdp.waitFor(
@@ -533,7 +533,7 @@ const scenarios = {
       `__e2e.one('select[name="부서"]')?.value === '' && __e2e.one('[data-field-name="요청"]')?.textContent === ''`,
       'an empty form',
     )
-    await app.type('[data-field-name="요청"]', '급여 명세서를 다시 받고 싶어요')
+    await app.fill('[data-field-name="요청"]', '급여 명세서를 다시 받고 싶어요')
     await app.choose('select[name="부서"]', '개발')
     await app.cdp.waitFor(`__e2e.all('.formdown-suggestion').length === 1`, 'a suggestion for 담당', { timeoutMs: 15_000 })
     await app.click('.formdown-decline', '거절')
@@ -563,7 +563,7 @@ const scenarios = {
   async 'shows nothing when no confirmed record is close enough to suggest from'(app, vault) {
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.type('[data-field-name="요청"]', '사내 동호회 가입 신청서 양식')
+    await app.fill('[data-field-name="요청"]', '사내 동호회 가입 신청서 양식')
     await app.choose('select[name="부서"]', '개발')
     // Suggestions are asked for once typing pauses; this waits well past that and the answer.
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2500))`)
@@ -596,7 +596,7 @@ const scenarios = {
     const suggestionNow = async () => {
       await app.newDocument(INTAKE)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-      await app.type('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
+      await app.fill('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
       return app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
@@ -608,11 +608,11 @@ const scenarios = {
     const suggestion = await suggestionNow()
     assert.equal(table.length, 5, 'two fixture records and the three made above')
 
-    await app.restart(vault)
+    await app.reopen(vault)
     assert.deepEqual(await tableNow(), table, 'the same table from the cache')
     assert.equal(await suggestionNow(), suggestion, 'the same suggestion')
 
-    await app.restart(vault, { dropCaches: true })
+    await app.reopen(vault, { dropCaches: true })
     assert.deepEqual(await tableNow(), table, 'the same table from the vault alone')
     assert.equal(await suggestionNow(), suggestion, 'the same suggestion from the vault alone')
     await app.noAlert()
@@ -690,7 +690,7 @@ const scenarios = {
     // Imported records are confirmed values: a similar new record gets the imported answer suggested.
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.type('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
+    await app.fill('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
     await app.choose('select[name="부서"]', '영업')
     const suggestion = await app.cdp.waitFor(
       `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
@@ -947,7 +947,7 @@ const scenarios = {
       assert.equal(await app.cdp.evaluate(`__e2e.one('select[name="고객"]').selectedIndex`), -1)
       const before = new Set(await readdir(join(vault, '문서')))
       await app.choose('select[name="고객"]', 'c-hanbit')
-      await app.type('[data-field-name="내용"]', '견적 요청')
+      await app.fill('[data-field-name="내용"]', '견적 요청')
       await app.click('dc-button', '저장')
       await app.status('저장했습니다')
       const saved = (await readdir(join(vault, '문서'))).find((f) => !before.has(f))
@@ -1046,7 +1046,7 @@ const scenarios = {
       // In its document the date field cannot hold it either: the value shows beside the field, and a save keeps it.
       await app.openDocument(VISITS, '방문-4')
       await app.cdp.waitFor(`__e2e.all('.formdown-unread').some((el) => el.textContent === '다음 주쯤')`, 'the unreadable date beside its field')
-      await app.type('[data-field-name="제목"]', '방문 4 다시')
+      await app.fill('[data-field-name="제목"]', '방문 4 다시')
       await app.click('dc-button', '저장')
       await app.status('저장했습니다')
       const saved = await readFile(files[4], 'utf8')
@@ -1085,7 +1085,7 @@ const scenarios = {
     // A new record like all of them gets no suggestion, and the reason says it is the field, not the record.
     await app.newDocument(ASSIGN)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.type('[data-field-name="요청"]', '노트북 배터리 문제 16')
+    await app.fill('[data-field-name="요청"]', '노트북 배터리 문제 16')
     const why = await app.cdp.waitFor(
       `__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim()).find((t) => t.includes('목표만큼'))`,
       'why 담당 has no suggestion',
@@ -1124,7 +1124,7 @@ const scenarios = {
       // The same request that was suggested 장비 from 접수-1 is now answered only from other records.
       await app.newDocument(INTAKE)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-      await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       const note = await app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
@@ -1184,7 +1184,7 @@ const scenarios = {
       // Settled, it is a similar record again — with the value that was kept.
       await app.newDocument(INTAKE)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-      await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       await app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').some((el) => { const n = el.closest('[data-formdown-note]').textContent; return n.includes('접수-1') && n.includes('총무') })`,
         '총무 suggested from 접수-1',
@@ -1262,15 +1262,15 @@ const scenarios = {
     await app.click('dc-button', '이름 바꾸기')
 
     // A name another document has is refused, and so is one no file can have; nothing moves.
-    await app.type('input[aria-label="새 이름"]', '접수-1')
+    await app.fill('input[aria-label="새 이름"]', '접수-1')
     await enter()
     await refused('같은 이름의 문서가 이미 있습니다')
-    await app.type('input[aria-label="새 이름"]', '프린터/토너')
+    await app.fill('input[aria-label="새 이름"]', '프린터/토너')
     await enter()
     await refused('파일 이름에 쓸 수 없는 글자')
     assert.equal(await readFile(original, 'utf8'), before)
 
-    await app.type('input[aria-label="새 이름"]', '프린터 토너 문의')
+    await app.fill('input[aria-label="새 이름"]', '프린터 토너 문의')
     await enter()
     await app.status('이름을 바꿨습니다')
     const names = await documentsIn(vault)
@@ -1322,7 +1322,7 @@ const scenarios = {
     assert.ok(existsSync(doc), 'kept when cancelled')
 
     // Unsaved edits: the question says they go too.
-    await app.type('[data-field-name="요청"]', '고치던 중')
+    await app.fill('[data-field-name="요청"]', '고치던 중')
     await app.click('dc-button', '지우기')
     await asked('이 문서를 지울까요?')
     await app.cdp.waitFor(
@@ -1430,7 +1430,7 @@ const scenarios = {
     await app.templateOf(EDGE)
 
     // Front matter that cannot be read is said as that, not as a missing id, and the file is left as it was.
-    await app.type('textarea', source.replace('version: 1', 'version: [1'))
+    await app.fill('textarea', source.replace('version: 1', 'version: [1'))
     await app.click('dc-button', '저장')
     const said = await app.cdp.waitFor(`__e2e.all('[role=alert]').map((el) => el.textContent.trim()).find(Boolean)`, 'why it was not saved')
     assert.match(said, /^서식 앞부분\(front matter\)을 읽을 수 없어 저장하지 않습니다 — /)
@@ -1451,7 +1451,7 @@ const scenarios = {
     await app.tabOf(REVISED, '서식', { timeoutMs: 30_000 })
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: revised')`, 'the template source')
 
-    await app.type('textarea', source.replace('version: 1', 'version: 2'))
+    await app.fill('textarea', source.replace('version: 1', 'version: 2'))
     await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
     await app.status('저장했습니다')
     assert.match(await readFile(file, 'utf8'), /version: 2/)
@@ -1482,7 +1482,7 @@ const scenarios = {
     try {
       await app.tabOf(DESK, '서식', { timeoutMs: 30_000 })
       await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: desk')`, 'the template source')
-      await app.type('textarea', source.replace('version: 1', 'version: 2'))
+      await app.fill('textarea', source.replace('version: 1', 'version: 2'))
       await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
       await app.status('저장했습니다')
 
@@ -1496,7 +1496,7 @@ const scenarios = {
       // What the revision before it confirmed still suggests.
       await app.newDocument(DESK)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-      await app.type('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       const note = await app.cdp.waitFor(
         `__e2e.all('[data-formdown-note="담당"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion from the earlier revision',
@@ -1559,17 +1559,17 @@ const scenarios = {
       assert.deepEqual(await app.cdp.evaluate(problems), [], 'nothing to say while every value has its field')
 
       // Renaming the field in the source leaves the documents' values without one — said as it is typed.
-      await app.type('textarea', source.replace('@담당:', '@배정:'))
+      await app.fill('textarea', source.replace('@담당:', '@배정:'))
       const said = await app.cdp.waitFor(`(() => { const p = ${problems}; return p.length ? p : null })()`, 'what the documents hold', { timeoutMs: 15_000 })
       assert.deepEqual(said, [
         '문서 2건에 칸 "담당"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 보이는 이름만 바꾸려면 칸 이름은 두고 칸 목록의 "이름 바꾸기"를 쓰세요.',
       ])
       // Changing only what the field shows keeps its name, and its values.
-      await app.type('textarea', source.replace('@담당: [select', '@담당: [select label="배정"'))
+      await app.fill('textarea', source.replace('@담당: [select', '@담당: [select label="배정"'))
       await app.cdp.waitFor(`(${problems}).length === 0`, 'nothing to say once the name is kept')
 
       // The field list's rename does that: the label changes, the name and the documents' values stay.
-      await app.type('textarea', source)
+      await app.fill('textarea', source)
       const renameOf = (n) => `(() => { const row = __e2e.all('.label-edit')[${n}]; const b = row && row.querySelector('ll-rename').shadowRoot.querySelector('dc-button'); return b && __e2e.box(b) })()`
       await app.cdp.clickAt(await app.cdp.waitFor(renameOf(1), "the 담당 field's rename"))
       // The rename field opens holding the name shown: replace it.
@@ -1600,7 +1600,7 @@ const scenarios = {
     const before = new Set(await documentsIn(vault))
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.type('[data-field-name="요청"]', 'x')
+    await app.fill('[data-field-name="요청"]', 'x')
     await app.cdp.press('Backspace', { keyCode: 8 })
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'the request cleared again')
     await app.click('dc-button', '저장')
@@ -1634,12 +1634,12 @@ const scenarios = {
       await app.click('input[name="구분"][value="법인"]')
       await app.cdp.waitFor(shown, 'the company field shown for 법인')
       assert.equal(await app.cdp.evaluate(`__e2e.one('input[name="회사명"]').required`), true, 'and required')
-      await app.type('input[name="회사명"]', '주식회사 경계')
+      await app.fill('input[name="회사명"]', '주식회사 경계')
 
       // Hidden again, the value stays — and is saved with the document.
       await app.click('input[name="구분"][value="개인"]')
       await app.cdp.waitFor(`!${shown}`, 'the company field hidden for 개인')
-      await app.type('[data-field-name="품목"]', '의자')
+      await app.fill('[data-field-name="품목"]', '의자')
       await app.click('dc-button', '저장')
       await app.status('저장했습니다')
       await app.noAlert()
@@ -1736,7 +1736,7 @@ const scenarios = {
 
     // A shortcut does not act under the question it would answer.
     const before = await documentsIn(vault)
-    await app.type('[data-field-name="요청"]', '프린터 용지가 걸려요')
+    await app.fill('[data-field-name="요청"]', '프린터 용지가 걸려요')
     await ctrl('n')
     await app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open)`, 'the unsaved-edits question')
     await ctrl('s')
@@ -1849,7 +1849,7 @@ const scenarios = {
     await app.tabOf(INTAKE, '문서')
     await new Promise((resolve) => setTimeout(resolve, 500)) // where it is has been written down
     // Launched again, and nothing opened for it: it opens what it was showing.
-    await app.relaunch()
+    await app.restart()
     await app.cdp.waitFor(`document.querySelector('ll-app').vaultInfo?.name === ${JSON.stringify(basename(vault))}`, 'the vault it was using', { timeoutMs: 30_000 })
     await app.cdp.waitFor(`__e2e.one('button.item[aria-current="page"]')?.textContent.trim().endsWith(${JSON.stringify(INTAKE.name)})`, 'the template it was showing', { timeoutMs: 30_000 })
     assert.deepEqual(await app.where(), { place: INTAKE.name, tab: '문서' })
@@ -1996,7 +1996,7 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       }
       // A fresh start reads the full vault once, filling the cache.
       const filled = Date.now()
-      await app.restart(vault)
+      await app.reopen(vault)
       await app.showTable(INTAKE, { timeoutMs: 300_000 })
       await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(0)'))`, 'the large table', { timeoutMs: 300_000 })
       const first = Date.now() - filled
