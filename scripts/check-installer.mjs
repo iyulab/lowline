@@ -9,7 +9,7 @@
 // (a build runner), or check an installer built with the e2e config.
 
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { findInstaller, withInstalled } from '@iyulab/tauri-kit-dev/installer'
@@ -32,8 +32,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** The running processes named `name` whose executable is under `folder`. */
 function runningFrom(name, folder) {
-  const ps = `Get-CimInstance Win32_Process -Filter "Name='${name}'" | Where-Object { $_.ExecutablePath -like '${folder.replaceAll("'", "''")}\\*' } | Measure-Object | Select-Object -ExpandProperty Count`
-  return Number(execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8' }).trim())
+  // A process's path is its long form; a temporary folder can be given in its short one (RUNNER~1).
+  const dir = realpathSync.native(folder)
+  const ps = `Get-CimInstance Win32_Process -Filter "Name='${name}'" | Where-Object { $_.ExecutablePath -like '${dir.replaceAll("'", "''")}\\*' } | Measure-Object | Select-Object -ExpandProperty Count`
+  return Number(execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8', env: windowsPowerShellEnv() }).trim())
 }
 
 async function until(check, timeoutMs) {
