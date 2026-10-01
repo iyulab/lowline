@@ -1997,9 +1997,19 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       // A fresh start reads the full vault once, filling the cache.
       const filled = Date.now()
       await app.reopen(vault)
+      const opened = Date.now() - filled
       await app.showTable(INTAKE, { timeoutMs: 300_000 })
       await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(0)'))`, 'the large table', { timeoutMs: 300_000 })
       const first = Date.now() - filled
+      // Where the restart went: the window and the vault opened, then each sync step, summed over the
+      // syncs it took — so a slower restart says which step grew.
+      const restartSteps = await app.cdp.evaluate(`(() => { const sum = {}; const times = {}
+        for (const m of performance.getEntriesByType('measure')) if (m.name.startsWith('vault:')) {
+          const step = m.name.slice(6)
+          sum[step] = (sum[step] ?? 0) + m.duration
+          times[step] = (times[step] ?? 0) + 1
+        }
+        return Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, times[k] > 1 ? Math.round(v) + ' (' + times[k] + '×)' : Math.round(v)])) })()`)
 
       await app.cdp.evaluate(`performance.clearMeasures()`)
       const edited = Date.now()
@@ -2010,7 +2020,7 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
         `Object.fromEntries(performance.getEntriesByType('measure').filter((m) => m.name.startsWith('vault:')).map((m) => [m.name.slice(6), Math.round(m.duration)]))`,
       )
       console.log(
-        `    ${COUNT} documents · restart to table ${first} ms · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
+        `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${Object.entries(restartSteps).map(([k, v]) => `${k} ${v}`).join(' · ')} ms) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
       )
     },
   }),

@@ -32,7 +32,7 @@ import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, typ
 import { readVault, syncVault } from './vault-snapshot.js'
 import { documentsOf, newestFirst, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
-import { conflictLabel, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
+import { conflictLabels, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
 import { found, matchingLine, shownName, type Found } from './cases.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import './import-view.js'
@@ -984,6 +984,10 @@ export class LlDocuments extends LitElement {
   render() {
     const draft = this.draft
     const opened = this.opened
+    // Worked out once for the list, not once per row: a vault holds thousands of documents.
+    const listed = this.listed()
+    const tabStop = this.tabStop(listed.map((l) => l.entry.path))
+    const conflictLabel = conflictLabels(this.documents, '.md')
     return html`<dp-list-detail ?detail-open=${!!draft || this.importing}>
       <nav slot="list" aria-label=${strings.navDocuments}>
         ${this.scope
@@ -1019,20 +1023,20 @@ export class LlDocuments extends LitElement {
             </p>`}
         ${this.documents.length === 0
           ? html`<p class="message">${strings.noDocuments}</p>`
-          : this.listed().length === 0
+          : listed.length === 0
             ? this.valueSearch === 'searching'
               ? nothing
               : html`<p class="message">${strings.documentsNoMatch}</p>`
-            : this.listed().map(
-              ({ entry: d, line }, i, listed) => html`<button
+            : listed.map(
+              ({ entry: d, line }, i) => html`<button
                 class="document"
                 aria-current=${draft?.kind === 'existing' && draft.path === d.path}
-                tabindex=${this.tabStop(listed.map((l) => l.entry.path)) === d.path ? 0 : -1}
+                tabindex=${tabStop === d.path ? 0 : -1}
                 @click=${() => this.leaveFor(() => this.open(d.path))}
                 @keydown=${(e: KeyboardEvent) => this.moveInList(e, i)}
               >
                 ${shownName(d)}
-                ${noteFor(conflictLabel(d, this.documents, '.md'))}
+                ${noteFor(conflictLabel(d))}
                 ${line === undefined ? nothing : html`<span class="note">${line}</span>`}
               </button>`,
             )}

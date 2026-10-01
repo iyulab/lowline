@@ -27,10 +27,16 @@ export function isCopy(path: string, entries: readonly VaultEntry[]): boolean {
   return entries.some((e) => e.path === path && e.conflictOf !== undefined)
 }
 
-/** What a listed file's conflict copy state says in the list, if anything. */
-export function conflictLabel(entry: VaultEntry, entries: readonly VaultEntry[], suffix: string): string | undefined {
-  if (entry.conflictOf !== undefined) return strings.conflictCopyOf(shownName(entry.conflictOf, suffix))
-  return entries.some((e) => e.conflictOf === entry.path) ? strings.hasConflictCopy : undefined
+/**
+ * What each listed file's conflict copy state says in the list, if anything — the originals that have a
+ * copy found once for the whole listing, so a list of thousands is not searched again for every row.
+ */
+export function conflictLabels(entries: readonly VaultEntry[], suffix: string): (entry: VaultEntry) => string | undefined {
+  const copied = new Set(entries.flatMap((e) => (e.conflictOf === undefined ? [] : [e.conflictOf])))
+  return (entry) => {
+    if (entry.conflictOf !== undefined) return strings.conflictCopyOf(shownName(entry.conflictOf, suffix))
+    return copied.has(entry.path) ? strings.hasConflictCopy : undefined
+  }
 }
 
 /** What to say about an open file's conflict copy state, if anything. */

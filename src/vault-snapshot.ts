@@ -5,6 +5,7 @@ import { parseEvents, type SuggestionEvent } from './events.js'
 import { currentRefs, revisedRef } from './template-revision.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type TemplateSnapshot } from './projection.js'
 import { ReadCache } from './read-cache.js'
+import { SharedRun } from './shared-run.js'
 import type { TemplateItem } from './template-scope.js'
 import { host, onVaultChanged, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
@@ -28,20 +29,27 @@ let watching: Promise<unknown> | undefined
 /** Drops what the last reads know of files a change outside the app touched. */
 function forget(change: VaultChanged) {
   for (const cache of reads) cache.forget(change)
+  shared.invalidate()
+}
+
+/** Drops everything read: another vault, or the event files written. */
+function clear(caches: readonly ReadCache<unknown>[] = reads) {
+  for (const cache of caches) cache.clear()
+  shared.invalidate()
 }
 
 // A file time may not move between two quick saves (some file systems keep whole seconds).
-onWritten.add((path) => (path === null ? eventReads.clear() : forget({ rescan: false, written: [path], removed: [] })))
+onWritten.add((path) => (path === null ? clear([eventReads]) : forget({ rescan: false, written: [path], removed: [] })))
 
 /** Opens a vault; nothing read of the one before carries over. */
 export async function openVault(path: string): Promise<VaultInfo> {
-  for (const cache of reads) cache.clear()
+  clear()
   return vault.open(path)
 }
 
 /** Opens the vault the app was last using, if no vault is open yet: it, and where the app was in it. */
 export async function resumeVault(): Promise<{ vault: VaultInfo; session: unknown } | null> {
-  for (const cache of reads) cache.clear()
+  clear()
   const resumed = await vault.resume()
   if (!resumed) return null
   let session: unknown
@@ -69,9 +77,18 @@ export interface ReadVault {
  * Every template with an identity and every document that names a template. Sync clients' conflict
  * copies are not read: a copy is not a second document, template or event file, and the document it
  * copies is marked as not settled. Only files changed since the last read are read and parsed again.
+ *
+ * The sidebar, the list, the table and the template each ask when they appear, often at once: a
+ * read under way is shared with them, unless something changed since it began.
  */
-export async function readVault(): Promise<ReadVault> {
+export function readVault(): Promise<ReadVault> {
   watching ??= onVaultChanged(forget)
+  return shared.call()
+}
+
+const shared = new SharedRun(readNow)
+
+async function readNow(): Promise<ReadVault> {
   performance.mark('vault:list')
   const listed = await Promise.all([vault.listTemplates(), vault.listDocuments(), vault.listEvents()])
   performance.measure('vault:list', 'vault:list')

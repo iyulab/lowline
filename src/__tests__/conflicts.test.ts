@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { conflictLabel, conflictNotice, conflictOf, isCopy, shownName } from '../conflicts.js'
+import { conflictLabels, conflictNotice, conflictOf, isCopy, shownName } from '../conflicts.js'
 import { strings } from '../strings.js'
 import { withoutConflictCopies, type VaultEntry } from '../vault-client.js'
 
@@ -25,9 +25,10 @@ describe('withoutConflictCopies', () => {
 
 describe('conflict labels', () => {
   it('shows a copy with its original, and the original as having a copy', () => {
-    expect(conflictLabel(copy, listing, '.md')).toBe(strings.conflictCopyOf('보고서'))
-    expect(conflictLabel(original, listing, '.md')).toBe(strings.hasConflictCopy)
-    expect(conflictLabel(other, listing, '.md')).toBeUndefined()
+    const label = conflictLabels(listing, '.md')
+    expect(label(copy)).toBe(strings.conflictCopyOf('보고서'))
+    expect(label(original)).toBe(strings.hasConflictCopy)
+    expect(label(other)).toBeUndefined()
   })
 
   it('says what to do about an open copy or original', () => {
