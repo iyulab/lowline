@@ -146,6 +146,28 @@ public sealed class VaultProjectionTests
     }
 
     [Fact]
+    public async Task An_unreadable_number_empties_only_its_field_and_is_said_where()
+    {
+        var orders = new TemplateSnapshot("order@1", [new TemplateField("제목", "text"), new TemplateField("수량", "number")]);
+        static DocumentSnapshot Order(string path, string json) =>
+            new(path, "order@1", JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)!);
+
+        await using var vault = new VaultProjection();
+        var result = await vault.IngestAsync(new VaultSnapshot([orders],
+        [
+            Order("문서/1.md", """{"제목": "하나", "수량": 12.5}"""),
+            Order("문서/2.md", """{"제목": "둘", "수량": "1,000"}"""),
+        ]), Ct);
+
+        Assert.Empty(result.Skipped);
+        var skip = Assert.Single(result.SkippedFields);
+        Assert.Equal(("문서/2.md", "수량"), (skip.Path, skip.Field));
+        var table = await vault.TableAsync("order@1", Ct);
+        Assert.Equal(["문서/1.md", "문서/2.md"], table!.Rows.Select(r => r.Path));
+        Assert.Null(table.Rows[1].Values["수량"]);
+    }
+
+    [Fact]
     public async Task A_cache_that_held_dates_as_text_shows_them_as_dates_once_the_field_is_a_date()
     {
         // A cache filled before date fields were dates holds them as text: the same template, its field now a
