@@ -24,7 +24,7 @@ import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { currentRefs, revisedRef, templateId, templateVersion } from './template-revision.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
-import { referenceTargets, type Abstention, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
+import { cellText, referenceTargets, type Abstention, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
 import { namedEvidence, referenceChoices, referringDocuments } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -916,6 +916,17 @@ export class LlDocuments extends LitElement {
     return found(this.documents, this.nameFilter, this.valueHits)
   }
 
+  /**
+   * What a similar document confirmed in this template's judgment fields, as the vault holds it — the evidence a
+   * person reads for themselves, never a suggestion.
+   */
+  private judgedIn(path: string) {
+    const fields = this.template?.suggest ?? []
+    const values = this.vaultDocuments.find((d) => d.path === path)?.values
+    const judged = fields.flatMap((f) => (holdsValue(values?.[f]) ? [{ label: this.label(f), value: cellText(values![f]) }] : []))
+    return judged.length ? html`<span class="note judged">${strings.similarJudged(judged)}</span>` : nothing
+  }
+
   /** The documents most like the open one, folded until opened: a person asks for them, they are not offered. */
   private renderSimilar(path: string) {
     const similar = this.similar
@@ -933,6 +944,7 @@ export class LlDocuments extends LitElement {
                     <button @click=${() => this.leaveFor(() => this.open(hit.path))}>
                       ${fileName(hit.path, '.md')}
                       <span class="note">${matchingLine(hit.text, '')}</span>
+                      ${this.judgedIn(hit.path)}
                     </button>
                   </li>`,
                 )}

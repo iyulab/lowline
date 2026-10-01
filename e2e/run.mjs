@@ -825,7 +825,7 @@ const scenarios = {
     const CASES = { name: '사례', ref: 'cases@1', path: '서식/사례.fd.md' }
     const body = '# 사례\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
     const files = [join(vault, CASES.path)]
-    await writeFile(files[0], `---\nid: cases\nversion: 1\n---\n${body}`)
+    await writeFile(files[0], `---\nid: cases\nversion: 1\nlowline:\n  suggest: [담당]\n---\n${body}`)
     const cases = [
       ['프린터', '프린터 토너가 떨어졌어요', '장비'],
       ['복합기', '복합기 토너 교체 요청', '장비'],
@@ -864,7 +864,8 @@ const scenarios = {
         'the similar cases',
         { timeoutMs: 30_000 },
       )
-      assert.equal(similar[0], '복합기 복합기 토너 교체 요청')
+      // Each with what it confirmed in the judgment field: evidence to read, not a suggestion.
+      assert.equal(similar[0], '복합기 복합기 토너 교체 요청 확정: 담당 장비')
       assert.ok(!similar.some((s) => s.startsWith('프린터')), 'itself left out')
       await app.click('.similar button', similar[0])
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === '복합기 토너 교체 요청'`, 'the similar case open')

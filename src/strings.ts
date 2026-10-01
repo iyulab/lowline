@@ -90,6 +90,8 @@ export const strings = {
   similarCases: '비슷한 사례',
   similarLoading: '찾는 중…',
   similarNone: '이 서식에 비슷한 문서가 없습니다.',
+  /** Under a similar document: what it confirmed in the judgment fields — evidence to read, not a suggestion. */
+  similarJudged: (judged: { label: string; value: string }[]) => `확정: ${judged.map((j) => `${j.label} ${j.value}`).join(' · ')}`,
   similarFailed: '비슷한 문서를 찾지 못했습니다. 다시 펼치면 다시 찾습니다.',
   conflictCopyOf: (original: string) => `충돌 사본 — 원본: ${original}`,
   hasConflictCopy: '충돌 사본 있음',
@@ -208,6 +210,8 @@ export const strings = {
     `${source === 'key' ? '함께 확정된 값' : source === 'memory' ? '비슷한 기록' : source}에서 낸 제안 ${decided}건 중 ${accepted}건 수락${
       decided >= 10 ? ` (${Math.round((accepted / decided) * 100)}%)` : ''
     }`,
+  // Decisions on suggestions from similar records stay in the curve; no new ones are made.
+  learningMemoryRetired: '비슷한 기록에서는 이제 제안하지 않습니다 — 이 수는 그 전의 결정입니다.',
   // The replay also counts the fields memory left blank, which the curve does not.
   learningReplay: (answerRate: number, precision: number, lookups: number) =>
     `저장된 ${lookups}건을 순서대로 다시 물으면 ${Math.round(answerRate * 100)}%에 제안, 그중 ${Math.round(precision * 100)}% 맞음`,
