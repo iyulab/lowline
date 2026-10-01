@@ -1650,6 +1650,44 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'writes and saves a document with the keyboard alone in at most 12 keys'(app, vault) {
+    let keys = 0
+    const press = async (key, options) => {
+      keys++
+      await app.cdp.press(key, options)
+    }
+    const focusedName = `(() => { let el = document.activeElement; while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement; return el?.getAttribute('data-field-name') ?? el?.getAttribute('name') ?? null })()`
+    /** Tab until the field named has focus — each Tab counted. */
+    const tabTo = async (name) => {
+      for (let i = 0; i < 6; i++) {
+        if ((await app.cdp.evaluate(focusedName)) === name) return
+        await press('Tab', { code: 'Tab', keyCode: 9 })
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      assert.fail(`${name} not reached with Tab`)
+    }
+    const before = await documentsIn(vault)
+    await app.tabOf(INTAKE, '문서')
+    await press('n', { code: 'KeyN', modifiers: 2, keyCode: 78 })
+    await app.cdp.waitFor(`${focusedName} === '요청'`, 'the cursor in the first field')
+    keys++ // what is typed counts as one
+    await app.cdp.insertText('키보드 예산 확인')
+    await tabTo('부서')
+    await press('ArrowDown', { code: 'ArrowDown', keyCode: 40 })
+    await tabTo('담당')
+    await press('ArrowDown', { code: 'ArrowDown', keyCode: 40 })
+    await press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
+    await app.status('저장했습니다')
+    const made = (await documentsIn(vault)).filter((n) => !before.includes(n))
+    assert.equal(made.length, 1, 'one document saved')
+    const saved = await fileValues(join(vault, '문서', made[0]))
+    assert.equal(saved.요청, '키보드 예산 확인')
+    assert.ok(saved.부서 && saved.담당, `both choices made: ${saved.부서} · ${saved.담당}`)
+    assert.ok(keys <= 12, `${keys} keys for one document`)
+    await app.noAlert()
+    for (const name of made) await rm(join(vault, '문서', name))
+  },
+
   async 'opens the vault and the place it was left at, on the next launch'(app, vault) {
     await app.tabOf(INTAKE, '문서')
     await new Promise((resolve) => setTimeout(resolve, 500)) // where it is has been written down
