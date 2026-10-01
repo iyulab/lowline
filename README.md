@@ -30,15 +30,18 @@ npm test               # web UI tests
 npm run test:host                                  # sidecar tests
 cargo test --manifest-path src-tauri/Cargo.toml   # shell tests
 npm run build:e2e && npm run test:e2e              # end-to-end scenarios in the real window
+npm run check:installer                            # after `npx tauri build`: install, start, uninstall
 ```
 
 CI runs the web UI, shell and sidecar tests on Linux for each push, and the end-to-end scenarios in the Windows window on a Windows runner. On a CI runner the scenarios do not look into the Recycle Bin, which its session sees empty; they still check that a deleted file left the vault.
 
-With `LOWLINE_PERF=1`, the web UI tests, the sidecar tests and the end-to-end run also measure what reading and ingesting a vault of 1,000 and 10,000 documents costs — filling an empty cache, one outside edit, a restart; they are skipped otherwise.
+With `LOWLINE_PERF=1`, the web UI tests, the sidecar tests and the end-to-end run also measure what reading and ingesting a vault of 1,000 and 10,000 documents costs — filling an empty cache, one outside edit, a restart, what reference fields cost each time a view draws; they are skipped otherwise.
 
 Layout: `src-tauri/` is the shell — the only code that reads or writes files, all inside the open vault folder and all writes atomic. `src/` is the web UI. `src-host/` is the .NET sidecar for projections and suggestions: the shell starts it with the app and a per-launch token, it listens on a loopback port and never touches vault files.
 
-End-to-end scenarios live in `e2e/`. `npm run build:e2e` builds a debug variant (`src-tauri/tauri.e2e.conf.json`) that exposes the WebView DevTools protocol on port 9223; `npm run test:e2e` copies the fixture vault in `e2e/fixtures/vault/` to a temporary folder, drives the window with clicks and typing, and checks the saved files on disk. `E2E_ONLY=<text>` runs the scenarios whose names hold the text and `E2E_REPEAT=<n>` runs them n times, each on a fresh vault; `e2e/app.mjs` is the window itself — launch, open a vault, click, type, take a picture, quit — for a script that walks a flow of its own.
+End-to-end scenarios live in `e2e/`. `npm run build:e2e` builds a debug variant (`src-tauri/tauri.e2e.conf.json`) that exposes the WebView DevTools protocol on port 9223; `npm run test:e2e` copies the fixture vault in `e2e/fixtures/vault/` to a temporary folder, drives the window with clicks and typing through [`@iyulab/tauri-kit-dev`](https://github.com/iyulab/tauri-kit-dev), and checks the saved files on disk. `E2E_ONLY=<text>` runs the scenarios whose names hold the text and `E2E_REPEAT=<n>` runs them n times, each on a fresh vault; `e2e/app.mjs` is the window itself — launch, open a vault, click, type, take a picture, quit — for a script that walks a flow of its own.
+
+`npm run check:installer` checks an installer the way a person gets the app: installed for the current user into a temporary folder, started — with the sidecar running from the installed folder — closed, which ends the sidecar too, and uninstalled. The installed app uses its real identifier, so run it where no Lowline of your own is in use, or on an installer built with `--config src-tauri/tauri.e2e.conf.json`; the release pipeline runs it before an installer is uploaded.
 
 ## License
 
