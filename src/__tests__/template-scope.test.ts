@@ -4,7 +4,7 @@ import type { VaultEntry } from '../vault-client.js'
 
 const intake: TemplateItem = { ref: 'intake@1', name: '접수', path: '서식/접수.fd.md' }
 const bug: TemplateItem = { ref: 'bug-report@1', name: '버그 리포트', path: '서식/버그 리포트.fd.md' }
-const labels = { templates: '서식', newTemplate: '새 서식', learning: '학습', orphans: '서식 없는 문서' }
+const labels = { templates: '서식', newTemplate: '새 서식', learning: '학습', orphans: '서식 없는 문서', references: '기준' }
 
 const doc = (path: string, conflictOf?: string): VaultEntry => ({
   path,
@@ -32,6 +32,14 @@ describe('sidebarEntries', () => {
     const group = entries[0] as { items: { id: string; label: string }[] }
     expect(group.items.map((i) => i.label)).toEqual(['접수', '버그 리포트', '새 서식'])
     expect(group.items.map((i) => i.id)).toEqual([placeId({ kind: 'template', ref: 'intake@1' }), placeId({ kind: 'template', ref: 'bug-report@1' }), NEW_TEMPLATE])
+  })
+
+  it('leads with the templates other templates refer to, in a group of their own', () => {
+    const customer = { ref: 'customer@2', name: '고객', path: '서식/고객.fd.md' }
+    const entries = sidebarEntries([intake, customer, bug], false, labels, new Set(['customer']))
+    expect(entries.map((e) => e.label)).toEqual(['기준', '서식', '학습'])
+    expect((entries[0] as { items: { label: string }[] }).items.map((i) => i.label)).toEqual(['고객'])
+    expect((entries[1] as { items: { label: string }[] }).items.map((i) => i.label)).toEqual(['접수', '버그 리포트', '새 서식'])
   })
 
   it('shows documents without a template only when there are some', () => {

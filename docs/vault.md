@@ -72,7 +72,7 @@ template: inquiry@1
 ---
 ```
 
-A value naming a document the vault does not have is kept as it is, and shown as missing with the start of its id. A document that others name — a customer named by inquiries — lists them under it, by template and the latest first; one opens in its own template's place.
+A value naming a document the vault does not have is kept as it is, and shown as missing with the start of its id. A document that others name — a customer named by inquiries — lists them under it, by template and the latest first; one opens in its own template's place. The templates fields refer to lead the sidebar, in a group of their own; nothing else marks them.
 
 ## Tables, finding and importing
 

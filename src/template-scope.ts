@@ -3,6 +3,7 @@
 
 import type { SidebarEntry } from '@iyulab/desktop-patterns/sidebar'
 import type { VaultEntry } from './vault-client.js'
+import { templateId } from './template-revision.js'
 
 /** A template as the sidebar shows it: its `id@version`, its name (the file name), its file. */
 export interface TemplateItem {
@@ -51,17 +52,21 @@ export function placeOf(id: string): Place | undefined {
 export function sidebarEntries(
   templates: readonly TemplateItem[],
   hasOrphans: boolean,
-  labels: { templates: string; newTemplate: string; learning: string; orphans: string },
+  labels: { templates: string; newTemplate: string; learning: string; orphans: string; references: string },
+  references: ReadonlySet<string> = new Set(),
 ): SidebarEntry[] {
+  // Templates other templates' fields refer to — customers, items — are what records are about: they lead,
+  // in a group of their own. Nothing marks them; a field referring to one does (B-59 D1).
+  const isReference = (t: TemplateItem) => references.has(templateId(t.ref))
+  const item = (icon: string) => (t: TemplateItem) => ({ id: placeId({ kind: 'template', ref: t.ref }), icon, label: t.name })
+  const referred = templates.filter(isReference)
   return [
+    ...(referred.length ? [{ id: 'references', icon: '◇', label: labels.references, items: referred.map(item('◇')) }] : []),
     {
       id: 'templates',
       icon: '▤',
       label: labels.templates,
-      items: [
-        ...templates.map((t) => ({ id: placeId({ kind: 'template', ref: t.ref }), icon: '▤', label: t.name })),
-        { id: NEW_TEMPLATE, icon: '+', label: labels.newTemplate },
-      ],
+      items: [...templates.filter((t) => !isReference(t)).map(item('▤')), { id: NEW_TEMPLATE, icon: '+', label: labels.newTemplate }],
     },
     ...(hasOrphans ? [{ id: placeId({ kind: 'orphans' }), icon: '▦', label: labels.orphans }] : []),
     { id: placeId({ kind: 'learning' }), icon: '◔', label: labels.learning },

@@ -934,6 +934,12 @@ const scenarios = {
       app.cdp.evaluate(`[...__e2e.one('select[name="고객"]').options].map((o) => o.value + '=' + o.textContent.trim())`)
     try {
       await app.tabOf(INQUIRY, '문서', { timeoutMs: 30_000 })
+      // The template inquiries refer to leads the sidebar, in a group of its own.
+      await app.cdp.waitFor(
+        `__e2e.all('#group-references[aria-label="기준"] .label').map((l) => l.textContent.trim()).join('|') === '고객'`,
+        'the group of templates referred to',
+        { timeoutMs: 15_000 },
+      )
       await app.click('dc-button', '새 문서')
       await app.cdp.waitFor(`__e2e.one('select[name="고객"]')?.options.length === 2`, 'the customers offered', { timeoutMs: 15_000 })
       // By name, valued by id; nothing picked until the person picks.

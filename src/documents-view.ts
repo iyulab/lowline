@@ -1102,8 +1102,8 @@ export class LlDocuments extends LitElement {
                 @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.reject(e.detail.field)}
               ></formdown-ui>`,
               )}
-              ${draft.kind === 'existing' && this.scope ? keyed(opened, this.renderSimilar(draft.path)) : nothing}
               ${draft.kind === 'existing' ? this.renderReferring(draft.id) : nothing}
+              ${draft.kind === 'existing' && this.scope ? keyed(opened, this.renderSimilar(draft.path)) : nothing}
             `
           : this.error
             ? html`<p class="error" role="alert">${this.error}</p>`

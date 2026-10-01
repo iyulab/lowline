@@ -11,6 +11,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { createSampleTemplate, createTemplateFile } from './document-files.js'
 import type { LlMark } from './brand/mark.js'
 import { describeError } from './errors.js'
+import { referenceTargets } from './projection.js'
 import { strings } from './strings.js'
 import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesAfterRead, type Place, type TemplateItem } from './template-scope.js'
 import { onVaultChanged, onWritten, vault, type VaultInfo } from './vault-client.js'
@@ -92,6 +93,8 @@ export class LlApp extends LitElement {
   @state() private tab: Tab = 'documents'
   /** The vault's templates, as the sidebar lists them. */
   @state() private templates: TemplateItem[] = []
+  /** The ids of the templates other templates' fields refer to: the sidebar groups them apart. */
+  @state() private referenceIds = new Set<string>()
   /** Whether some documents name no template the vault has. */
   @state() private hasOrphans = false
   /**
@@ -254,6 +257,7 @@ export class LlApp extends LitElement {
       const shown = place?.kind === 'template' ? this.templates.find((t) => t.ref === place.ref) : undefined
       const after = templatesAfterRead(read.templateItems, shown)
       this.templates = after.templates
+      this.referenceIds = referenceTargets(read.templates)
       this.hasOrphans = documentsOf(read.documentEntries, templateOf, null, new Set(read.names.keys())).length > 0
       // The template showing may be the same file under a reference edited in it: the place follows the file.
       const now: Place | undefined = after.shown && place?.kind === 'template' ? { kind: 'template', ref: after.shown.ref } : place
@@ -446,7 +450,8 @@ export class LlApp extends LitElement {
                 newTemplate: strings.makeTemplate,
                 learning: strings.navLearning,
                 orphans: strings.orphanDocuments,
-              })
+                references: strings.navReferences,
+              }, this.referenceIds)
             : []}
           .bottomItems=${[{ id: SHORTCUTS, icon: '⌨', label: strings.shortcuts }]}
           @dp-sidebar-select=${(e: DpSidebarSelectEvent) => this.onSidebarSelect(e)}

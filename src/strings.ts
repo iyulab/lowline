@@ -168,6 +168,7 @@ export const strings = {
   tableFilterAtLeast: (label: string) => `${label} 이상`,
   tableFilterAtMost: (label: string) => `${label} 이하`,
   backToList: '목록으로',
+  navReferences: '기준',
   referringTitle: '이 문서를 가리키는 문서',
   referringNone: '아직 이 문서를 가리키는 문서가 없습니다.',
   referringGroup: (template: string, n: number) => `${template} ${n}건`,
