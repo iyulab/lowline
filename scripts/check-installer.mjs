@@ -57,7 +57,7 @@ await withInstalled(
     // A release build is signed: every program it installs carries a valid signature. Only the
     // installed copies say so — the bundler signs what goes into the installer, not the build output.
     if (process.env.LOWLINE_EXPECT_SIGNED) {
-      const ps = `Get-ChildItem -LiteralPath '${target.replaceAll("'", "''")}' -Recurse -File -Include *.exe,*.dll | ForEach-Object { '{0}|{1}' -f $_.Name, (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status }`
+      const ps = `Get-ChildItem -LiteralPath '${target.replaceAll("'", "''")}' -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { '{0}|{1}' -f $_.Name, (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status }`
       const programs = execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8', env: windowsPowerShellEnv() }).trim().split(/\r?\n/).map((l) => l.split('|'))
       const unsigned = programs.filter(([, status]) => status !== 'Valid').map(([name, status]) => `${name} (${status})`)
       if (!programs.some(([name]) => name.toLowerCase() === EXE.toLowerCase())) throw new Error(`the installer did not install ${EXE}`)
