@@ -7,11 +7,11 @@ from the package's own source at the same version, and stays that text:
   file's SHA-256 (a list where a license spans several files, such as Apache-2.0's NOTICE).
 - `texts/` holds those files as fetched.
 
-The third-party notices are generated from the packages' own texts and these pinned ones, reading
-only what is committed here. A package that moves to another version no longer matches its pin and
+These are what the third-party notices take for such a package, alongside the texts the other
+packages carry themselves — read from what is committed here, never fetched while generating. A package that moves to another version no longer matches its pin and
 has to be pinned again — its text may have changed.
 
-To pin a package, add an entry with its `source` alone and fetch:
+To pin a package, add an entry with its `source` alone and fetch (`@iyulab/tauri-kit-dev` 0.2 or later):
 
 ```
 npx tauri-kit-dev notice-pins --pins notices/pins.json --dir notices/texts
