@@ -7,6 +7,7 @@ public sealed class CurvesTests
     private static readonly TemplateSnapshot Intake = new("intake@1",
     [
         new TemplateField("요청", "textarea"),
+        new TemplateField("부서", "text"),
         new TemplateField("담당", "select"),
         new TemplateField("긴급", "select"),
     ], Suggest: ["담당", "긴급"]);
@@ -109,7 +110,7 @@ public sealed class CurvesTests
     {
         var ct = TestContext.Current.CancellationToken;
         var documents = Enumerable.Range(1, 15).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
-            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"요청": "노트북 배터리 문제 {{i}}", "담당": "장비"}""")!,
+            JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"요청": "노트북 배터리 문제 {{i}}", "부서": "영업", "담당": "장비"}""")!,
             Modified: i)).ToList();
         await using var vault = new VaultProjection();
         // Saved or imported, with no suggestion decided yet: the replay is there before the first decision.

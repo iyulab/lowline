@@ -68,12 +68,14 @@ export const strings = {
             ? `문서 ${p.count}건에 칸 "${p.name}"의 값이 있는데 이 서식에는 그 칸이 없습니다. 값은 파일에 남지만 표와 제안에서 빠집니다 — 보이는 이름만 바꾸려면 칸 이름은 두고 칸 목록의 "이름 바꾸기"를 쓰세요.`
             : `lowline.suggest의 "${p.name}"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.`,
   judgmentFields: (labels: string[]) => `제안 받는 칸: ${labels.join(', ')}`,
-  judgmentAbstained: (reason: Abstention | null | undefined, learned: number) =>
+  // `cases`: the document has "비슷한 사례" below, where the person can look at other documents' values themselves.
+  judgmentAbstained: (reason: Abstention | null | undefined, learned: number, cases = false) =>
     reason === 'no-history' || (!reason && learned === 0)
       ? `확정한 문서가 아직 없어 제안하지 않습니다. 저장할 때마다 배웁니다.`
-      : reason === 'below-target'
-        ? `확정한 ${learned}건을 순서대로 다시 물어도 목표만큼 맞히지 못해, 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.`
-        : `확정한 ${learned}건 중 비슷한 기록이 없어 제안하지 않습니다.`,
+      : (reason === 'undecided'
+          ? `지금 입력한 값들로는 함께 확정된 값이 정해지지 않아 비워 둡니다.`
+          : `확정한 ${learned}건으로는 함께 확정된 값이 목표만큼 맞는다는 것을 아직 보이지 못해 제안하지 않습니다.`) +
+        (cases ? ` 아래 '비슷한 사례'에서 다른 문서가 확정한 값을 볼 수 있습니다.` : ''),
   // Asked after each pause in typing, so the next pause asks again.
   judgmentUnavailable: '이 칸의 제안을 준비하지 못했습니다 — 입력을 이어 가면 다시 묻습니다.',
   // The sidecar did not start: filling in and saving do not need it.
@@ -189,10 +191,10 @@ export const strings = {
       ? '기록이 아직 적어 다시 물어보지 않았습니다 — 확정한 문서가 늘면 저장된 기록을 순서대로 다시 물어 제안 기준을 고릅니다.'
       : why === 'below-target' && closest
         ? closest.precision >= closest.target
-          ? `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%를 맞혀 합쳐서는 목표 ${Math.round(closest.target * 100)}%에 닿지만, 그 안의 한 구간이 목표에 못 미쳐 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.`
-          : `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%만 맞혀 목표 ${Math.round(closest.target * 100)}%에 못 미칩니다 — 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.`
+          ? `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%를 맞혀 합쳐서는 목표 ${Math.round(closest.target * 100)}%에 닿지만, 그 안의 한 구간이 목표에 못 미쳐 이 칸은 아직 제안하지 않습니다.`
+          : `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%만 맞혀 목표 ${Math.round(closest.target * 100)}%에 못 미칩니다 — 이 칸은 아직 제안하지 않습니다.`
       : why === 'below-target'
-        ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.'
+        ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 제안하지 않습니다.'
         : '저장된 기록을 순서대로 다시 물어 제안 기준을 고르는 중입니다 — 끝나면 이 화면을 다시 열어 보세요.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
@@ -226,10 +228,6 @@ export const strings = {
   writtenWith: (version: string, now: string) => `이 문서는 서식 ${version}판으로 쓰였습니다(지금 ${now}판). 값과 배운 것은 이 서식의 것으로 이어집니다 — 본문도 지금 판으로 옮길 수 있습니다.`,
   reviseDocument: '지금 판으로 옮기기',
   revised: '지금 판으로 옮겼습니다',
-  suggestionSource: (name: string) => `제안 · 비슷한 기록: ${name}`,
-  /** Each similar record with the value it confirmed: the evidence behind one suggestion, other values included. */
-  suggestionSources: (cases: { name: string; value: string }[]) =>
-    `제안 · 비슷한 기록 ${cases.length}건: ${cases.map((c) => `${c.name}(${c.value})`).join(' · ')}`,
   suggestionKey: (value: string) => `제안 · 함께 확정된 값: ${value}`,
   reject: '거절',
   hostFailed: (message: string) => `표를 만드는 도우미가 시작되지 않았습니다: ${message}`,

@@ -481,7 +481,7 @@ const scenarios = {
     const before = new Set(await documentsIn(vault))
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+    await app.fill('[data-field-name="요청"]', '노트북 화면이 어두워요')
     await app.choose('select[name="부서"]', '영업')
     // The suggestion is drawn by the field it is for: its value to take, what it rests on, and a way to decline.
     const note = await app.cdp.waitFor(
@@ -489,7 +489,7 @@ const scenarios = {
       'a suggestion for 담당',
       { timeoutMs: 15_000 },
     )
-    assert.match(note, /^제안 · 비슷한 기록: 접수-1/)
+    assert.match(note, /^제안 · 함께 확정된 값: 부서: 영업/)
     assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-suggestion')?.textContent`), '장비')
     assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-decline')?.textContent`), '거절')
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in before it is accepted')
@@ -504,7 +504,7 @@ const scenarios = {
     assert.equal(created.length, 1)
     const values = await fileValues(join(vault, '문서', created[0]))
     assert.equal(values.담당, '장비')
-    assert.equal(values.요청, '노트북 배터리가 금방 닳아요')
+    assert.equal(values.요청, '노트북 화면이 어두워요')
 
     const [accepted] = await events(vault)
     // The event names the document by its id, not by where its file is.
@@ -512,8 +512,8 @@ const scenarios = {
       { doc: accepted.doc, field: accepted.field, kind: accepted.kind, suggested: accepted.suggested, value: accepted.value },
       { doc: values.lowline.id, field: '담당', kind: 'accept', suggested: '장비', value: '장비' },
     )
-    // The fixture documents predate ids: they are known by their paths.
-    assert.equal(accepted.recall, '문서/접수-1.md')
+    // What it rested on: the value it was settled alongside.
+    assert.equal(accepted.recall, '부서: 영업')
     // When it was shown and taken, and what was filled by then — names only.
     assert.equal(accepted.template, 'intake@1')
     // The suggestion may first show after 요청 alone or after both: either way, in the order they were filled.
@@ -560,18 +560,18 @@ const scenarios = {
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2000))`)
     assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'a rejected suggestion is not offered on reopening')
   },
-  async 'shows nothing when no confirmed record is close enough to suggest from'(app, vault) {
+  async 'shows nothing when the values filled in settle nothing, not even a similar record'(app, vault) {
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.fill('[data-field-name="요청"]', '사내 동호회 가입 신청서 양식')
-    await app.choose('select[name="부서"]', '개발')
+    // Nearly a confirmed request word for word, with no 부서: a similar record is not offered as a suggestion.
+    await app.fill('[data-field-name="요청"]', '모니터가 깜빡여요!')
     // Suggestions are asked for once typing pauses; this waits well past that and the answer.
     await app.cdp.evaluate(`new Promise((resolve) => setTimeout(resolve, 2500))`)
     assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'no suggestion is made up')
     assert.equal(await app.value('select[name="담당"]'), '', 'nothing is filled in')
     // Why the field is empty is said, with how much it has to learn from.
     const why = await app.cdp.evaluate(`__e2e.all('[data-formdown-note="담당"]').map((el) => el.textContent.trim())[0]`)
-    assert.match(why ?? '', /^확정한 \d+건 중 비슷한 기록이 없어 제안하지 않습니다\.$/)
+    assert.equal(why, '지금 입력한 값들로는 함께 확정된 값이 정해지지 않아 비워 둡니다.')
 
     // Saving it records no suggestion event: nothing was offered, so nothing was decided.
     const eventsBefore = (await events(vault)).length
@@ -597,6 +597,7 @@ const scenarios = {
       await app.newDocument(INTAKE)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
       await app.fill('[data-field-name="요청"]', '노트북 배터리가 또 금방 닳아요')
+      await app.choose('select[name="부서"]', '영업')
       return app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
@@ -606,7 +607,7 @@ const scenarios = {
 
     const table = await tableNow()
     const suggestion = await suggestionNow()
-    assert.equal(table.length, 5, 'two fixture records and the three made above')
+    assert.equal(table.length, 18, 'fifteen fixture records and the three made above')
 
     await app.reopen(vault)
     assert.deepEqual(await tableNow(), table, 'the same table from the cache')
@@ -687,11 +688,10 @@ const scenarios = {
     assert.deepEqual([toner?.template, toner?.부서, toner?.담당], ['intake@1', '영업', '총무'])
     assert.equal(values.find((v) => v.요청 === '회의실 프로젝터가\n안 켜져요')?.담당, '경비', 'kept as written, line break and all')
 
-    // Imported records are confirmed values: a similar new record gets the imported answer suggested.
+    // Imported records are confirmed values: the same request again gets the imported answer suggested.
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-    await app.fill('[data-field-name="요청"]', '프린터 토너가 또 떨어졌어요')
-    await app.choose('select[name="부서"]', '영업')
+    await app.fill('[data-field-name="요청"]', '프린터 토너가 떨어졌어요')
     const suggestion = await app.cdp.waitFor(
       `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion for 담당',
@@ -1061,14 +1061,14 @@ const scenarios = {
   },
 
   async 'says why a field is not suggested for when replaying its history never reaches the target'(app, vault) {
-    // Alike requests whose owners alternate: whichever earlier record is nearest, it is right half the time.
+    // One 부서 whose owners alternate: the value last settled alongside it is never the next record's.
     const ASSIGN = { name: '배정', ref: 'assign@1', path: '서식/배정.fd.md' }
-    const body = '# 배정\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+    const body = '# 배정\n\n요청: ___@요청\n\n@부서: [select options="영업,개발"]\n\n@담당: [select options="장비,인사"]\n'
     const template = join(vault, ASSIGN.path)
     await writeFile(template, `---\nid: assign\nversion: 1\nlowline:\n  suggest: [담당]\n---\n${body}`)
     const files = Array.from({ length: 15 }, (_, i) => join(vault, '문서', `배정-${i + 1}.md`))
     for (const [i, file] of files.entries()) {
-      await writeFile(file, `---\ntemplate: assign@1\n요청: 노트북 배터리 문제 ${i + 1}\n담당: ${i % 2 ? '장비' : '인사'}\n---\n${body}`)
+      await writeFile(file, `---\ntemplate: assign@1\n요청: 노트북 배터리 문제 ${i + 1}\n부서: 영업\n담당: ${i % 2 ? '장비' : '인사'}\n---\n${body}`)
     }
 
     // The replay runs apart from reading the vault; the learning view says what it found once it is read again.
@@ -1079,7 +1079,7 @@ const scenarios = {
       await app.learning()
       said = (await app.cdp.waitFor(replay, 'the replay line of 배정 · 담당', { timeoutMs: 30_000 })) ?? ''
     }
-    // How far short it came: alternating owners, the nearest earlier request is right half the time.
+    // How far short it came: alternating owners, the value settled alongside 영업 is wrong each time.
     assert.match(said, /^저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 \d+건 중 \d+%만 맞혀 목표 80%에 못 미칩니다/)
 
     // A new record like all of them gets no suggestion, and the reason says it is the field, not the record.
@@ -1091,7 +1091,7 @@ const scenarios = {
       'why 담당 has no suggestion',
       { timeoutMs: 30_000 },
     )
-    assert.equal(why, '확정한 15건을 순서대로 다시 물어도 목표만큼 맞히지 못해, 이 칸은 아직 비슷한 기록으로 제안하지 않습니다.')
+    assert.equal(why, '확정한 15건으로는 함께 확정된 값이 목표만큼 맞는다는 것을 아직 보이지 못해 제안하지 않습니다.')
     assert.equal(await app.cdp.evaluate(`__e2e.all('.formdown-suggestion').length`), 0, 'nothing offered')
     await app.noAlert()
 
@@ -1121,17 +1121,18 @@ const scenarios = {
       await app.cdp.waitFor(`__e2e.all('nav button').some((b) => b.textContent.includes('충돌 사본 — 원본: 접수-1'))`, 'the copy, with its original', { timeoutMs: 15_000 })
       assert.ok((await listed()).includes('접수-1 충돌 사본 있음'), 'the original, marked as having a copy')
 
-      // The same request that was suggested 장비 from 접수-1 is now answered only from other records.
+      // 접수-1's own request, whose value only 접수-1 settled, is now answered only from other records.
       await app.newDocument(INTAKE)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
       await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      await app.choose('select[name="부서"]', '영업')
       const note = await app.cdp.waitFor(
         `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion for 담당',
         { timeoutMs: 15_000 },
       )
-      assert.doesNotMatch(note, /접수-1/, 'the unsettled original is not a similar record')
-      assert.doesNotMatch(note, /총무/, 'nor is its copy')
+      assert.doesNotMatch(note, /요청:/, 'the unsettled original settles nothing')
+      assert.doesNotMatch(note, /총무/, 'nor does its copy')
 
       await app.pickDocument('접수-1 충돌 사본 있음')
       await app.answerUnsaved('편집 버리기')
@@ -1181,13 +1182,13 @@ const scenarios = {
         'the original’s name open, settled',
       )
 
-      // Settled, it is a similar record again — with the value that was kept.
+      // Settled, it is learned from again — with the value that was kept.
       await app.newDocument(INTAKE)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
       await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
       await app.cdp.waitFor(
-        `__e2e.all('.formdown-suggestion').some((el) => { const n = el.closest('[data-formdown-note]').textContent; return n.includes('접수-1') && n.includes('총무') })`,
-        '총무 suggested from 접수-1',
+        `__e2e.all('.formdown-suggestion').some((el) => { const n = el.closest('[data-formdown-note]').textContent; return n.includes('요청: 노트북 배터리가 금방 닳아요') && n.includes('총무') })`,
+        '총무 suggested alongside 접수-1\'s request',
         { timeoutMs: 15_000 },
       )
       await app.templateOf(INTAKE)
@@ -1471,13 +1472,16 @@ const scenarios = {
 
   async "keeps a template's documents, table and what it learned when its version is raised"(app, vault) {
     const DESK = { name: '안내 데스크', ref: 'desk@1', path: '서식/안내 데스크.fd.md' }
-    const body = '# 안내\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+    const body = '# 안내\n\n요청: ___@요청\n\n@부서: [select options="영업,개발"]\n\n@담당: [select options="장비,인사"]\n'
     const source = `---\nid: desk\nversion: 1\nlowline:\n  suggest: [담당]\n---\n${body}`
-    const confirmed = [['노트북 배터리가 금방 닳아요', '장비'], ['노트북 화면이 깨졌어요', '장비'], ['휴가 일수를 알고 싶어요', '인사'], ['휴가 신청을 취소할게요', '인사']]
+    // Enough confirmed records for replay to show 부서 decides 담당.
+    const confirmed = [['노트북 배터리가 금방 닳아요', '영업'], ['노트북 화면이 깨졌어요', '영업'], ['휴가 일수를 알고 싶어요', '개발'], ['휴가 신청을 취소할게요', '개발'],
+      ...Array.from({ length: 10 }, (_, i) => [`안내 요청 ${i + 5}`, i % 2 ? '개발' : '영업'])]
+    const owner = { 영업: '장비', 개발: '인사' }
     const files = [join(vault, DESK.path), ...confirmed.map((_, i) => join(vault, '문서', `안내-${i + 1}.md`))]
     await writeFile(files[0], source)
-    for (const [i, [request, owner]] of confirmed.entries())
-      await writeFile(files[i + 1], `---\ntemplate: desk@1\n요청: ${request}\n담당: ${owner}\n---\n${body}`)
+    for (const [i, [request, department]] of confirmed.entries())
+      await writeFile(files[i + 1], `---\ntemplate: desk@1\n요청: ${request}\n부서: ${department}\n담당: ${owner[department]}\n---\n${body}`)
     const made = new Set(await documentsIn(vault))
     try {
       await app.tabOf(DESK, '서식', { timeoutMs: 30_000 })
@@ -1491,18 +1495,19 @@ const scenarios = {
       await app.cdp.waitFor(`${JSON.stringify(confirmed.map((_, i) => `안내-${i + 1}`))}.every((n) => __e2e.all('ll-documents').some((d) => [...d.shadowRoot.querySelectorAll('nav button')].some((b) => b.textContent.trim() === n)))`, 'the documents under the template', { timeoutMs: 30_000 })
       assert.ok(!(await app.cdp.evaluate(`!!__e2e.one('button.item:not(.group-toggle)', '서식 없는 문서')`)), 'no documents set apart')
       await app.showTable(DESK)
-      await app.cdp.waitFor(`__e2e.all('ll-table').some((t) => /문서 4건/.test(t.shadowRoot.textContent))`, 'the four documents in the table', { timeoutMs: 30_000 })
+      await app.cdp.waitFor(`__e2e.all('ll-table').some((t) => /문서 14건/.test(t.shadowRoot.textContent))`, 'the fourteen documents in the table', { timeoutMs: 30_000 })
 
       // What the revision before it confirmed still suggests.
       await app.newDocument(DESK)
       await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-      await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
+      await app.fill('[data-field-name="요청"]', '노트북 충전이 느려요')
+      await app.choose('select[name="부서"]', '영업')
       const note = await app.cdp.waitFor(
         `__e2e.all('[data-formdown-note="담당"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
         'a suggestion from the earlier revision',
-        { timeoutMs: 20_000 },
+        { timeoutMs: 30_000 },
       )
-      assert.match(note, /^제안 · 비슷한 기록/)
+      assert.match(note, /^제안 · 함께 확정된 값: 부서: 영업/)
       assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-suggestion')?.textContent`), '장비')
       // A document saved now is written with the revision it was made under; the earlier ones are left as they were.
       await app.click('.formdown-suggestion', '장비')
@@ -1937,7 +1942,8 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
     const toggle = `button[aria-label="사이드바 접기/펼치기"]`
     await app.tabOf(INTAKE, '문서')
     const widths = () => app.cdp.evaluate(`(() => {
-      const list = __e2e.all('ll-documents')[0].shadowRoot.querySelector('nav').getBoundingClientRect()
+      // The list's column, scrollbar and all: a long list scrolls inside it.
+      const list = __e2e.all('dp-list-detail')[0].shadowRoot.querySelector('.list').getBoundingClientRect()
       return { sidebar: Math.round(${sidebar}.getBoundingClientRect().width), list: Math.round(list.width) }
     })()`)
     const { sidebar: wide, list } = await widths()

@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Gil;
 using Gil.Forms;
-using Gil.Memory;
 
 namespace Lowline.Host;
 
@@ -15,16 +14,12 @@ public sealed record SuggestRequest(
 /// <summary>
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
 /// nothing is guessed to fill the gap — and <see cref="Reason"/> then says why, as one of
-/// <see cref="Abstention"/>'s. <see cref="Source"/> is the document whose confirmed value it comes from, and
-/// <see cref="Similarity"/> how close that document's other values are. A suggestion from similar documents also
-/// carries <see cref="Similar"/>: the most similar confirmed documents the lookup found, <see cref="Source"/>'s first,
-/// with the value each confirmed — the evidence as it is, other values included. The value offered is still one.
+/// <see cref="Abstention"/>'s. <see cref="Source"/> is the document whose confirmed value it comes from. Every value
+/// offered rests on values settled alongside the document's observed ones (<c>key</c>): only that layer keeps the
+/// precision its replay promises. Similar documents are never offered as a suggestion — the person looks at them
+/// when they choose to, with the values they confirmed.
 /// </summary>
-public sealed record Suggestion(
-    string? Value, string Mode, string? Source, double? Similarity, string? Reason = null, IReadOnlyList<SimilarCase>? Similar = null);
-
-/// <summary>A confirmed document like the one asked about: its id, how close it is, and the value it confirmed.</summary>
-public sealed record SimilarCase(string Source, double Similarity, string? Value);
+public sealed record Suggestion(string? Value, string Mode, string? Source, string? Reason = null);
 
 /// <summary>Why a judgment field gets no suggestion — each is said differently, so "none" is never a wrong reason.</summary>
 public static class Abstention
@@ -32,20 +27,21 @@ public static class Abstention
     /// <summary>No document holding a confirmed value for the field has been saved yet.</summary>
     public const string NoHistory = "no-history";
 
-    /// <summary>The field answers from similar documents, and none of those confirmed is close enough to this one.</summary>
-    public const string NoneClose = "none-close";
-
     /// <summary>
-    /// Replaying the field's history found no similarity at which its answers were right often enough, so similar
-    /// documents are not offered for it at all until more are confirmed.
+    /// The values settled alongside the observed values have not yet shown, on a replay of the field's history, that
+    /// they are right often enough — too few confirmed, the replay not finished, or none right often enough — so
+    /// nothing is offered for the field until they have.
     /// </summary>
     public const string BelowTarget = "below-target";
+
+    /// <summary>The field's values settled alongside have shown they decide it, and this document's observed values settle none.</summary>
+    public const string Undecided = "undecided";
 }
 
 /// <summary>Why a judgment field has no replay to show yet — one of these, or <see cref="Abstention.BelowTarget"/>.</summary>
 public static class NoReplay
 {
-    /// <summary>Its history is too short to choose a threshold from; the prior threshold serves.</summary>
+    /// <summary>Its history is too short to choose a strength from; nothing is offered until it is not.</summary>
     public const string Few = "few";
 
     /// <summary>Its history is long enough, and the replay that chooses its threshold has not finished yet.</summary>
@@ -61,12 +57,6 @@ public static class NoReplay
 /// </summary>
 public sealed class Suggestions
 {
-    /// <summary>
-    /// The similarity at which a similar document's value is offered while a field has too few confirmed
-    /// documents to choose one from its own history.
-    /// </summary>
-    public const double PriorThreshold = 0.6;
-
     /// <summary>The share of offered values that must have been right for a threshold to be chosen.</summary>
     public const double TargetPrecision = 0.8;
 
@@ -80,14 +70,13 @@ public sealed class Suggestions
     private const string Unsaved = "\u0000unsaved";
 
     /// <summary>
-    /// Every saved document goes into its memories; asking writes nothing to them. Two layers answer: values
-    /// settled alongside the document's observed values, once replay has shown they decide the field
-    /// (<see cref="FieldDefinition.KeyThreshold"/>), and similar documents at the field's similarity threshold.
+    /// Every saved document goes into its memory; asking writes nothing to it. One layer answers: values settled
+    /// alongside the document's observed values, once replay has shown they decide the field
+    /// (<see cref="FieldDefinition.KeyThreshold"/>). Similar documents are left out — on a field judged from its
+    /// observed values alone they are right well below the precision their replay promised, and no threshold fixes
+    /// that — so no document memory is kept.
     /// </summary>
-    private readonly FormResolver _resolver = new(new FieldMemory(), new LexicalMemory(), similarDocumentCount: SimilarCount);
-
-    /// <summary>How many similar confirmed documents a suggestion from similar documents shows as its evidence.</summary>
-    public const int SimilarCount = 3;
+    private readonly FormResolver _resolver = new(new FieldMemory(), documentMemory: null);
     private readonly Dictionary<string, TemplateSnapshot> _templates;
     private readonly Dictionary<string, List<SettledDocument>> _settled;
     private Dictionary<(string Template, string Field), FieldThreshold> _thresholds;
@@ -162,22 +151,20 @@ public sealed class Suggestions
         t.SelectedAt is not { } at || Math.Abs(t.Confirmed - at) * 10 >= Math.Max(at, 10));
 
     /// <summary>
-    /// Chooses each judgment field's thresholds — similar documents', and the values settled alongside its
-    /// observed values' — by replaying its confirmed documents in the order they were saved. The replay grows
-    /// with the square of the history, so it runs apart from building memory and its result is applied with
-    /// <see cref="Apply"/>.
+    /// Chooses the strength at which each judgment field's values settled alongside its observed values answer, by
+    /// replaying its confirmed documents in the order they were saved. It runs apart from building memory and its
+    /// result is applied with <see cref="Apply"/>.
     /// </summary>
-    public async Task<IReadOnlyDictionary<(string Template, string Field), FieldThreshold>> SelectThresholdsAsync(CancellationToken cancellationToken)
+    public IReadOnlyDictionary<(string Template, string Field), FieldThreshold> SelectThresholds(CancellationToken cancellationToken)
     {
         var chosen = new Dictionary<(string, string), FieldThreshold>();
         foreach (var ((template, field), current) in _thresholds)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
-            var replay = await ThresholdSelection.SelectAsync(
-                new LexicalMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered, cancellationToken);
             var key = ThresholdSelection.SelectKeyThreshold(
                 new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
-            chosen[(template, field)] = new FieldThreshold(replay.Chosen, current.Confirmed, current.Confirmed, key.Chosen, replay.MostPrecise);
+            chosen[(template, field)] = new FieldThreshold(key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise);
         }
         return chosen;
     }
@@ -198,11 +185,11 @@ public sealed class Suggestions
     /// <summary>Each judgment field's thresholds as they stand, for a later build or launch to keep.</summary>
     public IReadOnlyDictionary<(string Template, string Field), FieldThreshold> Thresholds => _thresholds;
 
-    /// <summary>How a judgment field's threshold was chosen, and how it did on the replay; null until it has been.</summary>
+    /// <summary>How a judgment field's key strength was chosen, and how it did on the replay; null until it has been.</summary>
     public ThresholdChoice? Choice(string template, string field) => _thresholds.GetValueOrDefault((template, field))?.Choice;
 
     /// <summary>
-    /// For a field whose replay chose no threshold, the closest it came: the most precise threshold that still gathered
+    /// For a field whose replay chose no strength, the closest it came: the most precise strength that still gathered
     /// enough answers. Null when one was chosen, or when the replay found too few candidates to say.
     /// </summary>
     public ThresholdChoice? Closest(string template, string field) =>
@@ -223,7 +210,6 @@ public sealed class Suggestions
         var fields = template.Fields.Select(f => judged.Contains(f.Name)
             ? new FieldDefinition(f.Name, FieldRole.Judged)
             {
-                MemoryThreshold = threshold(f.Name).Threshold,
                 KeyThreshold = threshold(f.Name).KeyThreshold,
                 DependsOn = observed,
             }
@@ -261,31 +247,23 @@ public sealed class Suggestions
         var suggestion = (await _resolver.SuggestAsync(form, request.Document ?? Unsaved, observed, cancellationToken))
             .SingleOrDefault(s => s.Field == request.Field);
 
-        // Only a layer that answered is offered: a guess leaves the field to the person.
-        if (suggestion is not { Answered: true }) return Abstain(request.Template, request.Field);
-        var answer = suggestion.Candidates[0];
-        // The documents shown as similar are the ones as close as the field's threshold asks — the bar the value
-        // offered passed — not every document the lookup ranked.
-        var threshold = _thresholds[(request.Template, request.Field)].Threshold ?? double.PositiveInfinity;
-        return answer.Source switch
-        {
-            FieldSource.SimilarDocument => new Suggestion(answer.Value, "memory", answer.Evidence, answer.Score,
-                Similar: [.. suggestion.SimilarDocuments
-                    .Where(m => m.Similarity >= threshold)
-                    .Select(m => new SimilarCase(m.Source, m.Similarity, m.Answer))]),
-            FieldSource.SettledFieldMemory => new Suggestion(answer.Value, "key", answer.Evidence, null),
-            _ => Abstain(request.Template, request.Field),
-        };
+        // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
+        if (suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SettledFieldMemory } answer, ..] })
+            return new Suggestion(answer.Value, "key", answer.Evidence);
+        return Abstain(request.Template, request.Field);
     }
 
-    /// <summary>No value, with why: nothing confirmed yet, the field held back by its replay, or nothing close enough.</summary>
+    /// <summary>
+    /// No value, with why: nothing confirmed yet, the values settled alongside not yet shown right often enough, or
+    /// none settled by this document's observed values.
+    /// </summary>
     private Suggestion Abstain(string template, string field)
     {
         var threshold = _thresholds[(template, field)];
         var reason = threshold.Confirmed == 0 ? Abstention.NoHistory
-            : threshold.Threshold is null ? Abstention.BelowTarget
-            : Abstention.NoneClose;
-        return new Suggestion(null, "abstain", null, null, reason);
+            : threshold.KeyThreshold is null ? Abstention.BelowTarget
+            : Abstention.Undecided;
+        return new Suggestion(null, "abstain", null, reason);
     }
 
     /// <summary>
@@ -295,7 +273,7 @@ public sealed class Suggestions
     public string? WhyNoReplay(string template, string field) => _thresholds.GetValueOrDefault((template, field)) switch
     {
         null or { Choice: not null } => null,
-        { Threshold: null } => Abstention.BelowTarget,
+        { SelectedAt: { } at } when at - 1 >= MinimumAnswered => Abstention.BelowTarget,
         { Confirmed: var confirmed } when confirmed - 1 < MinimumAnswered => NoReplay.Few,
         _ => NoReplay.Pending,
     };
@@ -313,26 +291,13 @@ public sealed class Suggestions
 }
 
 /// <summary>
-/// A judgment field's thresholds: <see cref="Choice"/> is the similarity threshold replaying its history chose and
-/// <see cref="KeyChoice"/> the strength at which values settled alongside its observed values answer, over the
-/// <see cref="SelectedAt"/> confirmed documents it had then (null: not yet chosen); <see cref="Confirmed"/> is how
-/// many it has now. <see cref="Closest"/> is the similarity threshold that came closest to the target, chosen or not.
+/// A judgment field's key strength: <see cref="Choice"/> is the strength at which values settled alongside its observed
+/// values answer, as replaying its history chose it over the <see cref="SelectedAt"/> confirmed documents it had then
+/// (null: not yet chosen, or none was right often enough); <see cref="Confirmed"/> is how many it has now.
+/// <see cref="Closest"/> is the strength that came closest to the target, chosen or not.
 /// </summary>
-public sealed record FieldThreshold(
-    ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? KeyChoice = null, ThresholdChoice? Closest = null)
+public sealed record FieldThreshold(ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null)
 {
-    /// <summary>
-    /// The strength at which values settled alongside the observed values answer: the one chosen from the field's
-    /// history, and none — they are guesses, after similar documents — until one has been, or when none was right
-    /// often enough.
-    /// </summary>
-    public double? KeyThreshold => KeyChoice?.Threshold;
-
-    /// <summary>
-    /// The threshold the field answers from similar documents at: the one chosen from its history; the prior
-    /// while it has not been chosen yet or the history is too short to choose from; and none — similar
-    /// documents are not offered — when the history was long enough and no threshold was right often enough.
-    /// </summary>
-    public double? Threshold => Choice?.Threshold
-        ?? (SelectedAt is not { } at || at - 1 < Suggestions.MinimumAnswered ? Suggestions.PriorThreshold : null);
+    /// <summary>The strength the field's values settled alongside answer at; none — nothing is offered — until one has been chosen.</summary>
+    public double? KeyThreshold => Choice?.Threshold;
 }

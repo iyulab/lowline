@@ -158,23 +158,24 @@ export interface FieldCurve {
   points: { n: number; at: string; rate: number }[]
   /**
    * The decisions split by where each suggestion came from (`key` · `memory`, as {@link Suggestion.mode}), in that
-   * order — each source promises the target on its own, so each is read apart. Decisions recorded without a
-   * source are only in the totals.
+   * order — each source promises the target on its own, so each is read apart. `memory` (similar records) is
+   * history only: similar records are no longer offered as suggestions, so it no longer grows. Decisions recorded
+   * without a source are only in the totals.
    */
   bySource?: { source: string; decided: number; accepted: number }[] | null
   /**
-   * The field's saved documents replayed in the order they were saved, each asked of the ones before it:
-   * the share of lookups that got a suggestion and the share of those that were right. Absent until
-   * the history is long enough to choose a threshold from.
+   * The field's saved documents replayed in the order they were saved, each asked of the ones before it for a
+   * value settled alongside its observed values: the share of lookups that got a suggestion and the share of those
+   * that were right, at the strength the replay chose. Absent until the history is long enough to choose one from.
    */
   replay?: { threshold: number; precision: number; answerRate: number; answered: number; lookups: number } | null
   /**
-   * Why there is no replay: `few` confirmed documents to choose a threshold from, the replay still `pending`, or
-   * `below-target` — no threshold was right often enough, so similar documents are not offered for the field.
+   * Why there is no replay: `few` confirmed documents to choose a strength from, the replay still `pending`, or
+   * `below-target` — no strength was right often enough, so nothing is offered for the field.
    */
   whyNoReplay?: 'few' | 'pending' | 'below-target' | null
   /**
-   * With `below-target`, how close the replay came: at the most precise threshold that still gathered enough
+   * With `below-target`, how close the replay came: at the most precise strength that still gathered enough
    * answers, the share of them that were right, against the target. It can reach the target and the field still
    * not be offered, when a band of answers within it falls short.
    */
@@ -182,10 +183,11 @@ export interface FieldCurve {
 }
 
 /**
- * Why a judgment field got no suggestion: `no-history` — nothing confirmed yet; `none-close` — nothing confirmed is
- * close enough; `below-target` — replaying its history, no similarity was right often enough to offer from.
+ * Why a judgment field got no suggestion: `no-history` — nothing confirmed yet; `below-target` — the values settled
+ * alongside the observed ones have not yet shown, replaying its history, that they are right often enough;
+ * `undecided` — they have, and this document's observed values settle none.
  */
-export type Abstention = 'no-history' | 'none-close' | 'below-target'
+export type Abstention = 'no-history' | 'below-target' | 'undecided'
 
 /** A document found by the words of its values: where it is, its template, its matching text, how well it matched. */
 export interface CaseHit {
@@ -201,23 +203,13 @@ export interface CaseHit {
 export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
   value: string | null
-  /** `memory`: from a similar document · `key`: settled alongside a value this document has · `abstain`. */
+  /**
+   * `key`: settled alongside a value this document has · `abstain` · `rejected`. Similar documents are never offered
+   * as a suggestion — they are shown, with the values they confirmed, only when the person opens "비슷한 사례".
+   */
   mode: string
-  /** What it rests on: the similar document's path, or the other field's value (`부서: 영업`). */
+  /** What it rests on: the other field's value (`부서: 영업`). */
   source: string | null
-  similarity: number | null
   /** Why there is none, when `value` is null and the field was asked (`abstain`). */
   reason?: Abstention | null
-  /**
-   * From similar documents (`memory`): the most similar confirmed documents the suggestion rests on, `source`
-   * first, each with the value it confirmed — the evidence as it is, other values included.
-   */
-  similar?: SimilarCase[] | null
-}
-
-/** A confirmed document like the one asked about: its id, how close it is, and the value it confirmed. */
-export interface SimilarCase {
-  source: string
-  similarity: number
-  value: string | null
 }

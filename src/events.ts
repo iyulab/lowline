@@ -24,8 +24,9 @@ export interface SuggestionEvent {
   /** The value saved; null when the field was left empty after a rejection. */
   value: FieldValue | null
   /**
-   * Where the suggestion came from (`memory`: a similar record · `key`: a value settled alongside one this
-   * record has), what it rests on (that record, or that value), and how close the record was.
+   * Where the suggestion came from (`key`: a value settled alongside one this record has · `memory`: a similar
+   * record, in events from before similar records stopped being suggested), what it rests on (that value, or that
+   * record), and how close the record was — empty for `key`.
    */
   source: string
   recall: string | null
@@ -96,7 +97,8 @@ export function suggestionEvents(
       value: isEmpty(value) ? null : value!,
       source: suggestion.mode,
       recall: suggestion.source,
-      similarity: suggestion.similarity,
+      // Similar records are no longer suggested; the field stays in the event format, empty.
+      similarity: null,
       filled,
       shownAt: shown.toISOString(),
       ...(decided ? { decidedAt: decided.toISOString() } : {}),

@@ -86,25 +86,18 @@ public sealed class ThresholdCalibrationTests
         var curve = (await vault.CurvesAsync(ct)).Single();
         var replay = curve.Replay;
 
-        var answered = new List<(double Similarity, bool Right)>();
+        var answered = new List<bool>();
         var abstained = 0;
         foreach (var document in all.Documents.Skip(confirmed))
         {
             var values = document.Values.Where(v => v.Key != "담당").ToDictionary(v => v.Key, v => v.Value);
             var suggestion = (await vault.SuggestAsync(new SuggestRequest("intake@1", "담당", values), ct))!;
             if (suggestion.Value is null) abstained++;
-            else answered.Add((suggestion.Similarity ?? 1, suggestion.Value == document.Values["담당"].GetString()));
+            else answered.Add(suggestion.Value == document.Values["담당"].GetString());
         }
 
-        var ordered = answered.OrderBy(a => a.Similarity).ToList();
-        var quarters = Enumerable.Range(0, 4).Select(q =>
-        {
-            var part = ordered.Skip(q * ordered.Count / 4).Take((q + 1) * ordered.Count / 4 - q * ordered.Count / 4).ToList();
-            return part.Count == 0 ? "-" : $"{part.Min(a => a.Similarity):F2}~{part.Max(a => a.Similarity):F2} {100.0 * part.Count(a => a.Right) / part.Count:F0}% ({part.Count})";
-        });
         var line = $"calibration noise {noise:P0} mixed {mixed:P0} generic {generic:P0} · {confirmed} confirmed · {asked} asked · {curve.WhyNoReplay ?? "replay"} threshold {replay?.Threshold:F4} precision {replay?.Precision:P0} answered {replay?.AnswerRate:P0}"
-            + $" · live answered {answered.Count} right {answered.Count(a => a.Right)} ({(answered.Count == 0 ? 0 : 100.0 * answered.Count(a => a.Right) / answered.Count):F0}%) abstained {abstained}"
-            + $" · by similarity, lowest quarter first: {string.Join(" | ", quarters)}";
+            + $" · live answered {answered.Count} right {answered.Count(a => a)} ({(answered.Count == 0 ? 0 : 100.0 * answered.Count(a => a) / answered.Count):F0}%) abstained {abstained}";
         TestContext.Current.TestOutputHelper?.WriteLine(line);
         if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
             await File.AppendAllTextAsync(output, line + Environment.NewLine, ct);

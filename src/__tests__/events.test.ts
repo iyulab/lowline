@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { fillOrder, parseEvents, parsePresentations, presentation, suggestionEvents, type Offer } from '../events.js'
 import type { Suggestion } from '../projection.js'
 
-const suggestion = (value: string): Suggestion => ({ value, mode: 'memory', source: '문서/접수-1.md', similarity: 0.8 })
+const suggestion = (value: string): Suggestion => ({ value, mode: 'key', source: '부서: 영업' })
 const shown = new Date('2026-09-28T11:59:00Z')
 const offer = (value: string, decided?: Date): Offer => ({ suggestion: suggestion(value), shown, filled: ['요청'], ...(decided ? { decided } : {}) })
 const at = new Date('2026-09-28T12:00:00Z')
@@ -29,9 +29,9 @@ describe('suggestionEvents', () => {
       kind: 'accept',
       suggested: '장비',
       value: '장비',
-      source: 'memory',
-      recall: '문서/접수-1.md',
-      similarity: 0.8,
+      source: 'key',
+      recall: '부서: 영업',
+      similarity: null,
       filled: ['요청'],
       shownAt: '2026-09-28T11:59:00.000Z',
       decidedAt: '2026-09-28T11:59:30.000Z',
@@ -79,7 +79,7 @@ describe('fillOrder', () => {
 describe('presentations', () => {
   it('keep where a suggestion was shown and nothing of its value', () => {
     const p = presentation('intake@1', '담당', offer('장비'))
-    expect(p).toEqual({ at: '2026-09-28T11:59:00.000Z', template: 'intake@1', field: '담당', source: 'memory' })
+    expect(p).toEqual({ at: '2026-09-28T11:59:00.000Z', template: 'intake@1', field: '담당', source: 'key' })
     const text = [JSON.stringify(p), '{"at":"x","templ', '[1]', JSON.stringify({ ...p, field: 3 }), ''].join('\n')
     expect(parsePresentations(text)).toEqual([p])
   })

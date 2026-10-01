@@ -13,7 +13,7 @@ Lowline is a desktop app for structured notes. You write documents from forms; f
 ## How it works
 
 - [Vaults, templates and documents](docs/vault.md) — the folder, templates and their versions, documents, tables, finding and importing
-- [Suggestions and learning](docs/suggestions.md) — what is suggested and from what, thresholds, the event files, the learning view
+- [Suggestions and learning](docs/suggestions.md) — what is suggested and from what, how often is often enough, the event files, the learning view
 - [Working in the app](docs/working.md) — opening where you left off, keyboard, narrow windows
 - [Edits from outside the app](docs/outside-edits.md) — other editors, sync clients and their conflict copies, shared folders
 - [What stays on this device, and what leaves it](docs/data.md) — caches, the record of suggestions shown, error reports

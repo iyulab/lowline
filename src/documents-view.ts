@@ -234,8 +234,6 @@ export class LlDocuments extends LitElement {
   @state() private unavailable = false
   /** Ids more than one document holds (a file copied outside the app); see `sharedIds`. */
   private sharedIds = new Set<string>()
-  /** Documents' paths by id: a suggestion from a similar document names the document by its id. */
-  private pathsById = new Map<string, string>()
   /** For each judgment field, how many settled documents of the template hold a value in it. */
   private learned = new Map<string, number>()
   /** Suggestions for the draft's empty judgment fields, by field name. */
@@ -447,7 +445,6 @@ export class LlDocuments extends LitElement {
       if (this.draft?.templateRef !== templateRef) return // another draft opened meanwhile
       this.template = template?.suggest.length ? template : undefined
       const settled = synced.documents.filter((d) => d.template === templateRef && !d.conflicted)
-      this.pathsById = new Map(synced.documents.map((d) => [d.id, d.path]))
       this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f])).length]))
       this.unavailable = false
       await this.suggest()
@@ -898,27 +895,20 @@ export class LlDocuments extends LitElement {
     }
     for (const [field, reason] of this.abstained) {
       states[field] = {
-        note: reason === 'unavailable' ? strings.judgmentUnavailable : strings.judgmentAbstained(reason, this.learned.get(field) ?? 0),
+        note:
+          reason === 'unavailable'
+            ? strings.judgmentUnavailable
+            : strings.judgmentAbstained(reason, this.learned.get(field) ?? 0, this.draft?.kind === 'existing' && !!this.scope),
       }
     }
     return states
   }
 
-  /** What a suggestion rests on, in words: the similar document by its name, or the value it was settled with. */
+  /** What a suggestion rests on, in words: the value it was settled with. */
   private sourceOf(s: Suggestion): string {
     if (!s.source) return strings.suggestion
-    if (s.mode === 'key') {
-      const template = this.vaultTemplates.find((t) => t.ref === this.draft?.templateRef)
-      return strings.suggestionKey(namedEvidence(s.source, template, this.vaultTemplates, this.vaultDocuments, this.templateNames))
-    }
-    const cases = s.similar ?? []
-    if (cases.length > 1) return strings.suggestionSources(cases.map((c) => ({ name: this.nameOf(c.source), value: c.value ?? '' })))
-    return strings.suggestionSource(this.nameOf(s.source))
-  }
-
-  /** A document as the list names it: its file's name, found by its id. */
-  private nameOf(id: string): string {
-    return (this.pathsById.get(id) ?? id).replace(/^.*\//, '').replace(/\.md$/, '')
+    const template = this.vaultTemplates.find((t) => t.ref === this.draft?.templateRef)
+    return strings.suggestionKey(namedEvidence(s.source, template, this.vaultTemplates, this.vaultDocuments, this.templateNames))
   }
 
   /** The documents whose names or values hold the filter text: see `found`. */

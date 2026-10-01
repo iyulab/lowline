@@ -31,7 +31,7 @@ public sealed record FieldShortfall(double Precision, double AnswerRate, int Ans
 
 /// <summary>
 /// How a field's suggestions did when its saved documents were replayed in the order they were saved, each asked
-/// of the ones before it, at the similarity threshold the replay chose: <see cref="AnswerRate"/> of the lookups
+/// of the ones before it, at the strength the replay chose for values settled alongside the observed ones: <see cref="AnswerRate"/> of the lookups
 /// got a suggestion, and <see cref="Precision"/> of those were right. Unlike the curve, which counts only
 /// suggestions that were made, this says how often none was.
 /// </summary>

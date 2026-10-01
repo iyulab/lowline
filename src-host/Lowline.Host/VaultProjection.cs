@@ -34,8 +34,8 @@ public sealed record DocumentSnapshot(
 /// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the
 /// vault's event files. <see cref="Doc"/> is the document's <see cref="DocumentSnapshot.Identity"/>, <see cref="Template"/> its
 /// template (absent in events recorded before it was written down), <see cref="Source"/> where the suggestion came
-/// from — <c>key</c> (a value settled alongside one the document has) or <c>memory</c> (a similar record) — as the
-/// event file records it.
+/// from — <c>key</c> (a value settled alongside one the document has) or <c>memory</c> (a similar record, offered
+/// before similar records stopped being suggested) — as the event file records it.
 /// </summary>
 public sealed record SuggestionEvent(
     string At, string Doc, string Field, string Kind, string Suggested, string? Template = null, string? Source = null);
@@ -228,7 +228,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     {
         try
         {
-            var chosen = await Task.Run(() => suggestions.SelectThresholdsAsync(cancellationToken), cancellationToken);
+            var chosen = await Task.Run(() => suggestions.SelectThresholds(cancellationToken), cancellationToken);
             await _gate.WaitAsync(cancellationToken);
             try
             {

@@ -6,16 +6,16 @@ namespace Lowline.Host;
 /// <summary>
 /// The thresholds each judgment field's replay chose, kept beside the vault's projection cache so a later
 /// launch starts from them instead of replaying the whole history again — seconds on a large vault, and
-/// until it is done the fields would answer at the prior threshold, not the one their history earned. It is
+/// until it is done the fields would offer nothing, though their history earned it. It is
 /// a cache like the projection: outside the vault, this device's own, and a file that cannot be read is no
 /// thresholds at all — the replay chooses them again.
 /// </summary>
 public static class ThresholdStore
 {
     /// <summary>The shape of the file; one written in another is not read.</summary>
-    private const int Format = 1;
+    private const int Format = 2;
 
-    private sealed record Entry(string Template, string Field, ThresholdChoice? Choice, int SelectedAt, ThresholdChoice? KeyChoice, ThresholdChoice? Closest);
+    private sealed record Entry(string Template, string Field, ThresholdChoice? Choice, int SelectedAt, ThresholdChoice? Closest);
 
     private sealed record Stored(int Format, IReadOnlyList<Entry> Fields);
 
@@ -34,7 +34,7 @@ public static class ThresholdStore
             if (stored?.Format != Format) return None;
             return stored.Fields.ToDictionary(
                 e => (e.Template, e.Field),
-                e => new FieldThreshold(e.Choice, e.SelectedAt, e.SelectedAt, e.KeyChoice, e.Closest));
+                e => new FieldThreshold(e.Choice, e.SelectedAt, e.SelectedAt, e.Closest));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -47,7 +47,7 @@ public static class ThresholdStore
     {
         var stored = new Stored(Format, [.. thresholds
             .Where(t => t.Value.SelectedAt is not null)
-            .Select(t => new Entry(t.Key.Template, t.Key.Field, t.Value.Choice, t.Value.SelectedAt!.Value, t.Value.KeyChoice, t.Value.Closest))]);
+            .Select(t => new Entry(t.Key.Template, t.Key.Field, t.Value.Choice, t.Value.SelectedAt!.Value, t.Value.Closest))]);
         // Written beside and moved over, so a launch never reads half a file.
         var written = path + ".new";
         File.WriteAllText(written, JsonSerializer.Serialize(stored, JsonSerializerOptions.Web));
