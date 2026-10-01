@@ -1,18 +1,15 @@
 // Lowline's sidecar: projections and suggestions over what the shell hands it. It never reads or
 // writes vault files — the shell owns every file, and hands documents over as parsed values.
 //
-// Started by the shell with a per-launch token in LOWLINE_HOST_TOKEN and the directory for projection caches
-// in LOWLINE_HOST_CACHE. It listens on a loopback port the OS picks and prints one ready line with its
-// address; every request must carry the token.
+// Started by the shell as a loopback sidecar (TauriKit.Sidecar.Loopback) with a per-launch token in
+// LOWLINE_HOST_TOKEN and the directory for projection caches in LOWLINE_HOST_CACHE. It listens on
+// 127.0.0.1, on a port the OS picks, and prints one ready line with it; every request must carry the token.
 using Lowline.Host;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using TauriKit.Sidecar.Loopback;
 
-var builder = WebApplication.CreateSlimBuilder(args);
-if (string.IsNullOrEmpty(builder.Configuration["urls"]))
-{
-    builder.WebHost.UseUrls("http://127.0.0.1:0");
-}
+var builder = LoopbackHost.CreateSlimBuilder(args);
 
 // Projection caches live where the shell says, outside any vault; without a place they last one run.
 builder.Services.AddSingleton<HostFailures>();
@@ -31,7 +28,7 @@ if (string.IsNullOrEmpty(token))
 
 // A failed request says what failed, never with what: see HostErrors.
 app.UseExceptionHandler(HostErrors.Answer);
-app.Use(HostAuth.RequireToken(token));
+app.UseBearerToken(token);
 
 app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: vault.MemoryReady));
 
@@ -67,10 +64,10 @@ app.MapPost("/shutdown", (HttpContext context, IHostApplicationLifetime lifetime
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>();
-    var address = addresses?.Addresses.FirstOrDefault();
-    if (address is not null)
+    // Under a test server there is no listening address, and nothing to announce.
+    if (addresses?.Addresses.FirstOrDefault() is { } address)
     {
-        Console.Out.WriteLine($"{ReadyLine.Prefix} {address}");
+        Console.Out.WriteLine(LoopbackHost.ReadyLine(ReadyLine.Prefix, new Uri(address).Port));
         Console.Out.Flush();
     }
 });

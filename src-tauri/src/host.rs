@@ -1,40 +1,38 @@
 //! The .NET sidecar: started with the app, stopped with it.
 //!
-//! The shell starts `host/Lowline.Host` from its resources with a fresh token in
-//! `LOWLINE_HOST_TOKEN` and the directory for its projection caches in `LOWLINE_HOST_CACHE`. The host listens on a loopback port the OS picks and prints one line with
-//! its address; every request carries the token. The sidecar never touches vault files — the
-//! shell hands it what it needs.
+//! The shell starts `host/Lowline.Host` from its resources as a loopback sidecar
+//! (`tauri_kit_sidecar::loopback`): a fresh token in `LOWLINE_HOST_TOKEN`, the directory for its
+//! projection caches in `LOWLINE_HOST_CACHE`. The host listens on a loopback port the OS picks and
+//! prints one line with it; every request carries the token. The sidecar never touches vault files —
+//! the shell hands it what it needs.
 
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri_kit_sidecar::{LineReadiness, Output, Sidecar};
+use tauri_kit_sidecar::loopback::{Client, Loopback, LoopbackOptions, TransportError};
 
+/// Must match `HostAuth.TokenVariable` in `src-host/Lowline.Host`.
 pub const TOKEN_VARIABLE: &str = "LOWLINE_HOST_TOKEN";
 /// Must match `VaultProjection.CacheVariable` in `src-host/Lowline.Host`.
 pub const CACHE_VARIABLE: &str = "LOWLINE_HOST_CACHE";
 /// Must match `ReadyLine.Prefix` in `src-host/Lowline.Host`.
-const READY_PREFIX: &str = "lowline-host listening ";
+const READY_PREFIX: &str = "lowline-host port=";
 const START_DEADLINE: Duration = Duration::from_secs(30);
 const STOP_GRACE: Duration = Duration::from_secs(3);
 
 /// A running host and how to reach it.
 pub struct Host {
-    sidecar: Sidecar,
+    sidecar: Loopback,
     client: HostClient,
 }
 
-/// How to reach the host: its address and this launch's token. Cheap to clone into a worker thread.
+/// How to reach the host: its port and this launch's token. Cheap to clone into a worker thread.
 #[derive(Clone)]
 pub struct HostClient {
-    base: String,
-    token: String,
-    /// Reads every answer, failures included: a failed request's body says what failed.
-    agent: ureq::Agent,
+    client: Client,
 }
 
 /// A request the host failed: what the host said about it, when it said something.
@@ -52,7 +50,7 @@ pub enum CallError {
     /// The host answered with this status and nothing more to go on.
     Status(u16),
     /// The request did not reach the host, or its answer could not be read.
-    Transport(ureq::Error),
+    Transport(TransportError),
 }
 
 impl std::fmt::Display for CallError {
@@ -65,8 +63,8 @@ impl std::fmt::Display for CallError {
     }
 }
 
-impl From<ureq::Error> for CallError {
-    fn from(e: ureq::Error) -> Self {
+impl From<TransportError> for CallError {
+    fn from(e: TransportError) -> Self {
         CallError::Transport(e)
     }
 }
@@ -84,44 +82,17 @@ impl Host {
     /// Starts the host at `exe`, keeping its projection caches in `cache`, and waits until it has
     /// said where it listens and answered `/health`.
     pub fn start(exe: &Path, stderr_log: PathBuf, cache: &Path) -> Result<Self, String> {
-        let token = new_token().map_err(|e| format!("cannot make a token: {e}"))?;
         let mut cmd = Command::new(exe);
-        cmd.env(TOKEN_VARIABLE, &token).env(CACHE_VARIABLE, cache);
-        let mut sidecar = Sidecar::spawn(
-            cmd,
-            Output::Lines {
-                stderr: Some(stderr_log),
-            },
-        )
-        .map_err(|e| format!("cannot start {}: {e}", exe.display()))?;
-        let base = match sidecar
-            .wait_line(START_DEADLINE, |line| line.starts_with(READY_PREFIX))
-            .map_err(|e| format!("cannot read the host's output: {e}"))?
-        {
-            LineReadiness::Line(line) => {
-                line[READY_PREFIX.len()..].trim_end_matches('/').to_string()
-            }
-            LineReadiness::Exited(status) => {
-                return Err(format!("the host exited during startup ({status})"))
-            }
-            LineReadiness::TimedOut => {
-                let _ = sidecar.shutdown(Duration::ZERO);
-                return Err(format!(
-                    "the host did not start within {}s",
-                    START_DEADLINE.as_secs()
-                ));
-            }
+        cmd.env(CACHE_VARIABLE, cache);
+        let mut options = LoopbackOptions::new(TOKEN_VARIABLE, READY_PREFIX);
+        options.ready_timeout = START_DEADLINE;
+        options.stderr = Some(stderr_log);
+        let sidecar =
+            Loopback::start(cmd, &options).map_err(|e| format!("the host did not start: {e}"))?;
+        let client = HostClient {
+            client: sidecar.client().clone(),
         };
-        // Loopback: never through the proxy the PC may be set up with.
-        let agent = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .proxy(None)
-            .build()
-            .into();
-        let host = Host {
-            sidecar,
-            client: HostClient { base, token, agent },
-        };
+        let host = Host { sidecar, client };
         host.client
             .get("/health")
             .map_err(|e| format!("the host does not answer: {e}"))?;
@@ -130,12 +101,7 @@ impl Host {
 
     /// Asks the host to stop, then stops whatever is left of it.
     pub fn stop(self) {
-        let _ = self
-            .client
-            .agent
-            .post(&format!("{}/shutdown", self.client.base))
-            .header("Authorization", &self.client.bearer())
-            .send_empty();
+        let _ = self.client.client.post_json("/shutdown", "");
         let _ = self.sidecar.shutdown(STOP_GRACE);
     }
 }
@@ -143,25 +109,14 @@ impl Host {
 impl HostClient {
     /// A GET request to the host, returning the response body.
     pub fn get(&self, path: &str) -> Result<String, CallError> {
-        let mut response = self
-            .agent
-            .get(&format!("{}{}", self.base, path))
-            .header("Authorization", &self.bearer())
-            .call()?;
-        let status = response.status().as_u16();
-        answer(status, response.body_mut().read_to_string()?)
+        let response = self.client.get(path)?;
+        answer(response.status, response.body)
     }
 
     /// A POST request with a JSON body, returning the response body.
     pub fn post_json(&self, path: &str, body: &str) -> Result<String, CallError> {
-        let mut response = self
-            .agent
-            .post(&format!("{}{}", self.base, path))
-            .header("Authorization", &self.bearer())
-            .header("Content-Type", "application/json")
-            .send(body)?;
-        let status = response.status().as_u16();
-        answer(status, response.body_mut().read_to_string()?)
+        let response = self.client.post_json(path, body)?;
+        answer(response.status, response.body)
     }
 
     /// The host's failures of work no request waited on, since the last time they were taken.
@@ -171,17 +126,6 @@ impl HostClient {
             .and_then(|body| serde_json::from_str(&body).ok())
             .unwrap_or_default()
     }
-
-    fn bearer(&self) -> String {
-        format!("Bearer {}", self.token)
-    }
-}
-
-/// 32 random bytes as hex.
-fn new_token() -> io::Result<String> {
-    let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Where the host stands, as the UI sees it.

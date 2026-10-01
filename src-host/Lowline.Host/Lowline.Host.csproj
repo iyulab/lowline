@@ -23,6 +23,7 @@
     <PackageReference Include="Gil" Version="0.7.0" />
     <PackageReference Include="FluxIndex.SDK" Version="0.67.2" />
     <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.67.2" />
+    <PackageReference Include="TauriKit.Sidecar.Loopback" Version="0.8.0" />
   </ItemGroup>
 
 </Project>

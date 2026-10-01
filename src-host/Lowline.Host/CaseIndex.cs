@@ -95,7 +95,7 @@ internal sealed class CaseIndex : IAsyncDisposable
         {
             // Written together, one transaction per store; an id already indexed is replaced, not added to.
             var result = await _context.Indexer.IndexDocumentsBatchAsync(
-                toIndex.Select(c => (c.Key, c.Value.Text, c.Value.Metadata)), new IndexingOptions(), null, cancellationToken);
+                toIndex.Select(c => (DocumentId: c.Key, Content: c.Value.Text, Metadata: (Dictionary<string, object>?)c.Value.Metadata)), new IndexingOptions(), null, cancellationToken);
             var failed = result.Results.Where(r => !r.Success).Select(r => r.DocumentId).ToHashSet(StringComparer.Ordinal);
             foreach (var (identity, (_, _, fingerprint)) in toIndex)
             {

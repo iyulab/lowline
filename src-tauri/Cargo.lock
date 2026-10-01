@@ -1848,7 +1848,6 @@ dependencies = [
  "tauri-plugin-dialog",
  "tempfile",
  "trash",
- "ureq",
 ]
 
 [[package]]
@@ -3471,7 +3470,9 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "339516065722cffd9b74390679b2871a9d3b9cd40d83514baee60df6cfb3f232"
 dependencies = [
+ "getrandom 0.3.4",
  "libc",
+ "ureq",
  "windows-sys 0.61.2",
 ]
 

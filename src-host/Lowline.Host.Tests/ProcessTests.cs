@@ -29,7 +29,7 @@ public sealed class ProcessTests
     }
 
     [Fact]
-    public async Task Prints_its_address_listens_there_and_stops_on_request()
+    public async Task Prints_its_port_listens_there_on_loopback_and_stops_on_request()
     {
         using var host = Start("t0ken");
         try
@@ -40,8 +40,8 @@ public sealed class ProcessTests
                 line = await host.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken);
             } while (line is not null && !line.StartsWith(ReadyLine.Prefix, StringComparison.Ordinal));
             Assert.NotNull(line);
-            var address = new Uri(line[(ReadyLine.Prefix.Length + 1)..]);
-            Assert.Equal("127.0.0.1", address.Host);
+            var port = int.Parse(line[ReadyLine.Prefix.Length..], System.Globalization.CultureInfo.InvariantCulture);
+            var address = new Uri($"http://127.0.0.1:{port}");
 
             using var client = new HttpClient { BaseAddress = address };
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "t0ken");
