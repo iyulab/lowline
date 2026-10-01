@@ -139,6 +139,12 @@ export interface FieldCurve {
   /** After the nth decision, the share of the latest ones (up to a window) that were right. */
   points: { n: number; at: string; rate: number }[]
   /**
+   * The decisions split by where each suggestion came from (`key` · `memory`, as {@link Suggestion.mode}), in that
+   * order — each source promises the target on its own, so each is read apart. Decisions recorded without a
+   * source are only in the totals.
+   */
+  bySource?: { source: string; decided: number; accepted: number }[] | null
+  /**
    * The field's saved documents replayed in the order they were saved, each asked of the ones before it:
    * the share of lookups that got a suggestion and the share of those that were right. Absent until
    * the history is long enough to choose a threshold from.

@@ -25,6 +25,12 @@ export interface WeekCounts {
   rejected: number
   /** Decisions by the similarity the suggestion was made at, in steps of 0.1 (`"0.6"` = 0.6 to under 0.7). */
   bySimilarity: Record<string, { decided: number; accepted: number }>
+  /**
+   * Decisions by where the suggestion came from: `key` (a value settled alongside one the document has) or
+   * `memory` (a similar record). Each promises the target on its own, so each is read apart. Added within
+   * format 1 — a reader that does not know it can pass it by.
+   */
+  bySource: Record<string, { decided: number; accepted: number }>
 }
 
 export interface FormCounts {
@@ -84,7 +90,7 @@ export function weeklyCounts(
     const key = `${week}|${form}|${field}`
     let cell = cells.get(key)
     if (!cell) {
-      cell = { week, form, field, presented: 0, accepted: 0, corrected: 0, rejected: 0, bySimilarity: {} }
+      cell = { week, form, field, presented: 0, accepted: 0, corrected: 0, rejected: 0, bySimilarity: {}, bySource: {} }
       cells.set(key, cell)
     }
     return cell
@@ -100,6 +106,11 @@ export function weeklyCounts(
     if (event.kind === 'accept') cell.accepted++
     else if (event.kind === 'correct') cell.corrected++
     else cell.rejected++
+    if (typeof event.source === 'string' && event.source) {
+      const slot = (cell.bySource[event.source] ??= { decided: 0, accepted: 0 })
+      slot.decided++
+      if (event.kind === 'accept') slot.accepted++
+    }
     if (event.similarity !== null) {
       const bucket = (Math.floor(Math.min(event.similarity, 1) * 10) / 10).toFixed(1)
       const slot = (cell.bySimilarity[bucket] ??= { decided: 0, accepted: 0 })

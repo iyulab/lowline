@@ -10,11 +10,17 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// How a judgment field's suggestions have fared: every decision people made about them, in order.
 /// A suggestion was right when it was accepted as offered; corrected or rejected, it was not.
 /// Without a <see cref="Replay"/>, <see cref="WhyNoReplay"/> says why (see <see cref="Suggestions.WhyNoReplay"/>), and
-/// when the replay fell short of the target, <see cref="Closest"/> says by how much.
+/// when the replay fell short of the target, <see cref="Closest"/> says by how much. <see cref="BySource"/> splits the
+/// decisions by where each suggestion came from: each source promises the target on its own replay, so each is
+/// read against it apart.
 /// </summary>
 public sealed record FieldCurve(
     string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
-    FieldReplay? Replay = null, string? WhyNoReplay = null, FieldShortfall? Closest = null);
+    FieldReplay? Replay = null, string? WhyNoReplay = null, FieldShortfall? Closest = null,
+    IReadOnlyList<SourceCount>? BySource = null);
+
+/// <summary>Of a field's decisions about suggestions from one source, how many there were and how many were accepted.</summary>
+public sealed record SourceCount(string Source, int Decided, int Accepted);
 
 /// <summary>
 /// How close a field's replay came when no threshold was right often enough: at the most precise threshold that still
@@ -77,6 +83,12 @@ public static class Curves
             ordered.Count(e => e.Kind == "accept"),
             ordered.Count(e => e.Kind == "correct"),
             ordered.Count(e => e.Kind == "reject"),
-            points);
+            points,
+            BySource: ordered
+                .Where(e => e.Source is not null)
+                .GroupBy(e => e.Source!, StringComparer.Ordinal)
+                .OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new SourceCount(g.Key, g.Count(), g.Count(e => e.Kind == "accept")))
+                .ToList());
     }
 }

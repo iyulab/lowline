@@ -248,6 +248,9 @@ export class LlLearning extends LitElement {
         >
         ${first ? html`<span class="secondary">${strings.learningFirst(first.rate, WINDOW)}</span>` : nothing}
         <span class="secondary">${strings.learningCounts(curve.accepted, curve.corrected, curve.rejected)}</span>
+        ${(curve.bySource ?? []).map(
+          (s) => html`<span class="secondary by-source">${strings.learningBySource(s.source, s.decided, s.accepted)}</span>`,
+        )}
       </div>
       <p class="secondary replay">
         ${curve.replay

@@ -14,8 +14,28 @@ public sealed class CurvesTests
     private static DocumentSnapshot Document(string path) =>
         new(path, "intake@1", new Dictionary<string, JsonElement>());
 
-    private static SuggestionEvent Event(int minute, string doc, string field, string kind, string? template = null) =>
-        new($"2026-09-29T10:{minute:00}:00.000Z", doc, field, kind, "장비", template);
+    private static SuggestionEvent Event(int minute, string doc, string field, string kind, string? template = null, string? source = null) =>
+        new($"2026-09-29T10:{minute:00}:00.000Z", doc, field, kind, "장비", template, source);
+
+    [Fact]
+    public void Counts_each_source_of_suggestions_apart_so_each_can_be_read_against_its_promise()
+    {
+        var events = new List<SuggestionEvent>
+        {
+            Event(0, "문서/1.md", "담당", "accept", source: "key"),
+            Event(1, "문서/1.md", "담당", "accept", source: "key"),
+            Event(2, "문서/1.md", "담당", "accept", source: "memory"),
+            Event(3, "문서/1.md", "담당", "correct", source: "memory"),
+            Event(4, "문서/1.md", "담당", "reject", source: "memory"),
+            // Recorded before the source was handed over: in the totals, under no source.
+            Event(5, "문서/1.md", "담당", "accept"),
+        };
+
+        var curve = Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], events)).Single(c => c.Field == "담당");
+
+        Assert.Equal((4, 1, 1), (curve.Accepted, curve.Corrected, curve.Rejected));
+        Assert.Equal([("key", 2, 2), ("memory", 3, 1)], curve.BySource!.Select(s => (s.Source, s.Decided, s.Accepted)));
+    }
 
     [Fact]
     public void Takes_each_rate_over_the_latest_decisions_in_order()

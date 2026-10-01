@@ -715,6 +715,13 @@ const scenarios = {
     assert.equal(decided.length, 2, 'one accepted and one rejected suggestion so far')
     assert.ok(figures.includes(`수락 ${accepted} · 교정 0 · 거절 ${rejected}`), figures)
     assert.ok(figures.includes('제안이 나온 2건 중 1건 맞음'), figures) // too few for a share
+    // Each source of suggestions read apart, as the event files record it.
+    for (const source of new Set(decided.map((e) => e.source))) {
+      const of = decided.filter((e) => e.source === source)
+      const name = source === 'key' ? '함께 확정된 값' : '비슷한 기록'
+      const line = `${name}에서 낸 제안 ${of.length}건 중 ${of.filter((e) => e.kind === 'accept').length}건 수락`
+      assert.ok(figures.includes(line), `${line} in ${figures}`)
+    }
     assert.ok(decided.every((e) => e.template === 'intake@1'), 'events name their template')
 
     // Weekly counts to hand over by hand: numbers only, the form's name shown beside them but not in them.
@@ -723,6 +730,11 @@ const scenarios = {
     )
     assert.equal(counts.format, 'lowline-weekly-counts/1')
     const intake = counts.counts.filter((c) => c.form === 1 && c.field === 1)
+    assert.equal(
+      intake.reduce((n, c) => n + Object.values(c.bySource).reduce((m, s) => m + s.decided, 0), 0),
+      decided.length,
+      'every decision counted under its source',
+    )
     assert.deepEqual(
       [intake.reduce((n, c) => n + c.accepted, 0), intake.reduce((n, c) => n + c.rejected, 0)],
       [accepted, rejected],

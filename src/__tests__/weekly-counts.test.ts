@@ -21,7 +21,8 @@ const event = (at: string, doc: string, field: string, kind: SuggestionEvent['ki
   kind,
   suggested: '장비',
   value: kind === 'reject' ? null : '장비',
-  source: 'memory',
+  // A similar record's suggestion carries its similarity; a settled value's carries none.
+  source: similarity === null ? 'key' : 'memory',
   recall: '문서/비밀-경로.md',
   similarity,
 })
@@ -69,6 +70,11 @@ describe('weeklyCounts', () => {
   it('buckets decisions by the similarity the suggestion was made at', () => {
     expect(counts.counts[0].bySimilarity).toEqual({ '0.8': { decided: 1, accepted: 1 }, '0.6': { decided: 1, accepted: 0 } })
     expect(counts.counts[2].bySimilarity).toEqual({})
+  })
+
+  it('counts decisions by the source of the suggestion, each read against its own promise', () => {
+    expect(counts.counts[0].bySource).toEqual({ memory: { decided: 2, accepted: 1 } })
+    expect(counts.counts[2].bySource).toEqual({ key: { decided: 1, accepted: 1 } })
   })
 
   it('numbers only forms with judgment fields, in the order of their references', () => {

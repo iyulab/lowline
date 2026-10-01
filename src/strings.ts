@@ -189,6 +189,11 @@ export const strings = {
   learningFew: (right: number, of: number) => `제안이 나온 ${of}건 중 ${right}건 맞음 — 아직 비율을 말하기엔 적습니다`,
   learningFirst: (rate: number, of: number) => `처음 ${of}건 ${Math.round(rate * 100)}%`,
   learningCounts: (accepted: number, corrected: number, rejected: number) => `수락 ${accepted} · 교정 ${corrected} · 거절 ${rejected}`,
+  // Each source of suggestions read apart — a share only once there are enough decisions to say one.
+  learningBySource: (source: string, decided: number, accepted: number) =>
+    `${source === 'key' ? '함께 확정된 값' : source === 'memory' ? '비슷한 기록' : source}에서 낸 제안 ${decided}건 중 ${accepted}건 수락${
+      decided >= 10 ? ` (${Math.round((accepted / decided) * 100)}%)` : ''
+    }`,
   // The replay also counts the fields memory left blank, which the curve does not.
   learningReplay: (answerRate: number, precision: number, lookups: number) =>
     `저장된 ${lookups}건을 순서대로 다시 물으면 ${Math.round(answerRate * 100)}%에 제안, 그중 ${Math.round(precision * 100)}% 맞음`,
