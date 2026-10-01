@@ -1848,11 +1848,8 @@ const scenarios = {
   async 'opens the vault and the place it was left at, on the next launch'(app, vault) {
     await app.tabOf(INTAKE, '문서')
     await new Promise((resolve) => setTimeout(resolve, 500)) // where it is has been written down
-    await app.quit()
     // Launched again, and nothing opened for it: it opens what it was showing.
-    const next = await App.launch()
-    app.child = next.child
-    app.cdp = next.cdp
+    await app.relaunch()
     await app.cdp.waitFor(`document.querySelector('ll-app').vaultInfo?.name === ${JSON.stringify(basename(vault))}`, 'the vault it was using', { timeoutMs: 30_000 })
     await app.cdp.waitFor(`__e2e.one('button.item[aria-current="page"]')?.textContent.trim().endsWith(${JSON.stringify(INTAKE.name)})`, 'the template it was showing', { timeoutMs: 30_000 })
     assert.deepEqual(await app.where(), { place: INTAKE.name, tab: '문서' })

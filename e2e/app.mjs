@@ -9,77 +9,72 @@
 //   await screenshot(app.cdp, dir, 'name')
 //   await app.quit()
 
-import { spawn } from 'node:child_process'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
-import { Cdp, findPage } from './cdp.mjs'
+import { App as Window, helpers, pictureName } from '@iyulab/tauri-kit-dev/app'
 
 const here = dirname(fileURLToPath(import.meta.url))
 /** The e2e build (`npm run build:e2e`). */
 export const exe = join(here, '..', 'src-tauri', 'target', 'debug', process.platform === 'win32' ? 'lowline.exe' : 'lowline')
+/** The e2e build's debugging port, opened by its own WebView2 arguments (src-tauri/tauri.e2e.conf.json). */
 const PORT = 9223
 /** The e2e build's identifier (src-tauri/tauri.e2e.conf.json), which names its WebView2 profile. */
 export const IDENTIFIER = 'com.iyulab.lowline.e2e'
 /** Where the debug shell saves exports instead of asking in a save dialog no script can answer. */
 export const EXPORTS = join(tmpdir(), 'lowline-e2e-exports')
 
-/** In-page helpers: queries that pierce shadow roots, and element boxes for real clicks. */
-const HELPERS = `window.__e2e = {
-  all(selector, root = document) {
-    const found = [...root.querySelectorAll(selector)]
-    for (const el of root.querySelectorAll('*')) if (el.shadowRoot) found.push(...this.all(selector, el.shadowRoot))
-    return found
-  },
-  one(selector, text) {
-    // An item's text may lead with an icon ("▦ 문서"); the label is what follows.
-    const matches = (el) => {
-      const t = el.textContent.replace(/\\s+/g, ' ').trim()
-      return t === text || t.endsWith(' ' + text)
-    }
-    return this.all(selector).find((el) => text === undefined || matches(el))
-  },
-  box(el) {
-    el.scrollIntoView({ block: 'center' })
-    const r = el.getBoundingClientRect()
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
-  },
-}; true`
-
 export const q = (s) => JSON.stringify(s)
 
+/** The window is ready once the app element is there. */
+const READY = `customElements.get('ll-app') && !!document.querySelector('ll-app')`
+
+// TODO(upstream: @iyulab/tauri-kit-dev — launch as a subclass, fill editable elements, webviewProfile) — once
+// @iyulab/tauri-kit-dev ships `new this()` in launch, `fill` for editable elements and `webviewProfile`, this
+// class extends its App instead of holding one, `type` becomes its `fill`, and `webviewGone` goes.
 export class App {
   /** Starts the app and waits for its window. */
   static async launch() {
     const app = new App()
-    app.child = spawn(exe, [], { stdio: 'ignore', env: { ...process.env, LOWLINE_EXPORT_TO: EXPORTS } })
-    try {
-      const page = await findPage(PORT)
-      app.cdp = await Cdp.connect(page.webSocketDebuggerUrl)
-      await app.ready()
-      return app
-    } catch (e) {
-      // A window that never answered must not outlive the run (nor keep this process alive).
-      await app.quit()
-      throw e
-    }
+    app.window = await Window.launch({
+      exe,
+      port: PORT,
+      ready: READY,
+      env: { LOWLINE_EXPORT_TO: EXPORTS },
+      debugPortFromEnv: false,
+    })
+    await app.ready()
+    return app
+  }
+
+  /** Waits for the app in the window and sets the window up for the scenarios — again after a page reload. */
+  async ready() {
+    await this.cdp.waitFor(READY, 'the app')
+    await this.cdp.evaluate(helpers())
+    const scheme = process.env.E2E_COLOR_SCHEME
+    if (scheme) await this.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
+  }
+
+  get cdp() {
+    return this.window?.cdp
   }
 
   /** Ends the app the hard way — nothing it holds in memory survives. */
   async quit() {
-    this.cdp?.close()
-    const child = this.child
-    if (!child) return
-    child.kill()
-    await new Promise((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', resolve)))
-    this.child = undefined
+    await this.window?.quit()
+    this.window = undefined
     // WebView2's browser process outlives the app by seconds, and closes its debugging port before
     // it exits. The next launch must start a browser of its own: one that joins a browser still
     // shutting down never opens the debugging port. So wait for the processes, not just the port.
-    await portClosed(PORT)
     await webviewGone()
+  }
+
+  /** Ends the app and starts it again, in this same App, without opening anything for it. */
+  async relaunch() {
+    await this.quit()
+    this.window = (await App.launch()).window
   }
 
   /**
@@ -90,17 +85,8 @@ export class App {
     await this.quit()
     assert.equal(await sidecarsRunning(), 0, 'the sidecar went with the app')
     if (dropCaches) await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'projections'), { recursive: true, force: true })
-    const next = await App.launch()
-    this.child = next.child
-    this.cdp = next.cdp
+    this.window = (await App.launch()).window
     await this.openVault(vault)
-  }
-
-  async ready() {
-    await this.cdp.waitFor(`customElements.get('ll-app') && !!document.querySelector('ll-app')`, 'the app')
-    await this.cdp.evaluate(HELPERS)
-    const scheme = process.env.E2E_COLOR_SCHEME
-    if (scheme) await this.cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] })
   }
 
   async openVault(path) {
@@ -112,13 +98,9 @@ export class App {
     assert.ok(name, 'vault opened')
   }
 
-  /** Clicks the element matching `selector` (and `text`, if given) with the mouse. */
+  /** Clicks the element matching `selector` (and `text`, if given) with the mouse, once a click there lands on it. */
   async click(selector, text) {
-    const box = await this.cdp.waitFor(
-      `(() => { const el = __e2e.one(${q(selector)}, ${q(text)}); return el && !el.disabled && __e2e.box(el) })()`,
-      `${selector}${text ? ` "${text}"` : ''} to be clickable`,
-    )
-    await this.cdp.clickAt(box)
+    await this.window.click(selector, text)
   }
 
   /** Focuses a field — a form control or an inline (contenteditable) field — and replaces its value by typing. */
@@ -239,20 +221,6 @@ export class App {
   }
 }
 
-/** Waits until nothing answers on the debugging port: the last window's browser has gone. */
-async function portClosed(port, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1000) })
-    } catch {
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error(`the browser on debugging port ${port} did not go away`)
-}
-
 /**
  * Waits until no WebView2 process runs on the e2e app's profile. The app was killed, so its
  * browser only notices after a while — sometimes longer than a scenario should wait. After a
@@ -291,6 +259,5 @@ export async function sidecarsRunning() {
 /** Saves a picture of the window as `<dir>/<name>.png`. */
 export async function screenshot(cdp, dir, name) {
   await mkdir(dir, { recursive: true })
-  const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' })
-  await writeFile(join(dir, `${name.replace(/[^\p{L}\p{N}]+/gu, '-')}.png`), Buffer.from(data, 'base64'))
+  await writeFile(join(dir, pictureName(name)), await cdp.screenshot())
 }
