@@ -106,6 +106,68 @@ public sealed class VaultProjectionTests
     }
 
     [Fact]
+    public async Task Date_fields_are_dates_the_same_on_every_computer_and_an_unreadable_one_empties_only_its_field()
+    {
+        var visits = new TemplateSnapshot("visit@1",
+        [
+            new TemplateField("제목", "text"),
+            new TemplateField("방문일", "date"),
+            new TemplateField("예약", "datetime-local"),
+        ]);
+        static DocumentSnapshot Visit(string path, string json) =>
+            new(path, "visit@1", JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)!);
+
+        await using var vault = new VaultProjection();
+        var result = await vault.IngestAsync(new VaultSnapshot([visits],
+        [
+            Visit("문서/1.md", """{"제목": "하나", "방문일": "2026-01-15", "예약": "2026-01-15T09:30"}"""),
+            Visit("문서/2.md", """{"제목": "둘", "방문일": "2026-01-31"}"""),
+            Visit("문서/3.md", """{"제목": "셋", "방문일": "2026-02-01"}"""),
+            Visit("문서/4.md", """{"제목": "넷", "방문일": "다음 주쯤"}"""),
+        ]), Ct);
+
+        // The document with an unreadable date is still a row; only that field is empty, and it is said where.
+        Assert.Empty(result.Skipped);
+        var skip = Assert.Single(result.SkippedFields);
+        Assert.Equal(("문서/4.md", "방문일"), (skip.Path, skip.Field));
+
+        var table = await vault.TableAsync("visit@1", Ct);
+        Assert.Equal(["문서/1.md", "문서/2.md", "문서/3.md", "문서/4.md"], table!.Rows.Select(r => r.Path));
+        // A date reads back as it was written, whatever the computer's time zone.
+        Assert.Equal("2026-01-15", table.Rows[0].Values["방문일"]);
+        Assert.Equal("2026-01-15T09:30", table.Rows[0].Values["예약"]);
+        Assert.Null(table.Rows[3].Values["방문일"]);
+
+        async Task<string[]> Paths(params ColumnFilter[] filters) =>
+            [.. (await vault.TableAsync("visit@1", filters, Ct))!.Rows.Select(r => r.Path)];
+        // A date range, both ends included, matches dates — not the order of their text.
+        Assert.Equal(["문서/2.md", "문서/3.md"], await Paths(new ColumnFilter("방문일", "atLeast", "2026-01-16")));
+        Assert.Equal(["문서/1.md", "문서/2.md"], await Paths(new ColumnFilter("방문일", "atMost", "2026-01-31")));
+    }
+
+    [Fact]
+    public async Task A_cache_that_held_dates_as_text_shows_them_as_dates_once_the_field_is_a_date()
+    {
+        // A cache filled before date fields were dates holds them as text: the same template, its field now a
+        // date, rebuilds the table rather than comparing text.
+        static TemplateSnapshot Visits(string type) => new("visit@1", [new TemplateField("방문일", type)]);
+        var documents = new[]
+        {
+            new DocumentSnapshot("문서/1.md", "visit@1", new Dictionary<string, JsonElement> { ["방문일"] = JsonSerializer.SerializeToElement("2026-1-9") }),
+            new DocumentSnapshot("문서/2.md", "visit@1", new Dictionary<string, JsonElement> { ["방문일"] = JsonSerializer.SerializeToElement("2026-01-10") }),
+        };
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([Visits("text")], documents), Ct);
+
+        var result = await vault.IngestAsync(new VaultSnapshot([Visits("date")], documents), Ct);
+        Assert.Equal(["visit@1"], result.Projections);
+        // As text, "2026-1-9" sorts after "2026-01-10"; as dates it is the day before.
+        var table = await vault.TableAsync("visit@1", [new ColumnFilter("방문일", "atLeast", "2026-01-10")], Ct);
+        Assert.Equal(["문서/2.md"], table!.Rows.Select(r => r.Path));
+        Assert.Equal("2026-01-10", table.Rows[0].Values["방문일"]);
+    }
+
+    [Fact]
     public async Task An_unknown_template_has_no_table()
     {
         await using var vault = new VaultProjection();
@@ -120,7 +182,10 @@ public sealed class VaultProjectionTests
     [InlineData("select", false, ColumnType.Text)]
     [InlineData("radio", false, ColumnType.Text)]
     [InlineData("textarea", false, ColumnType.Text)]
-    [InlineData("date", false, ColumnType.Text)]
+    [InlineData("date", false, ColumnType.Timestamp)]
+    [InlineData("datetime-local", false, ColumnType.Timestamp)]
+    [InlineData("month", false, ColumnType.Text)]
+    [InlineData("time", false, ColumnType.Text)]
     [InlineData("checkbox", false, ColumnType.Boolean)]
     [InlineData("checkbox", true, ColumnType.Jsonb)]
     [InlineData("number", false, ColumnType.Decimal)]

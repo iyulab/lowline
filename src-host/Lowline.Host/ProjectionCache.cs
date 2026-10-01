@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Formbase.Core;
@@ -76,6 +77,7 @@ internal sealed class ProjectionCache : IAsyncDisposable
     public async Task<IngestResult> IngestAsync(VaultSnapshot vault, CancellationToken cancellationToken)
     {
         var skipped = new List<SkippedDocument>();
+        var skippedFields = new List<SkippedField>();
         var documents = vault.Templates.ToDictionary(
             t => t.Ref, _ => new Dictionary<string, (string Path, JsonObject Body)>(StringComparer.Ordinal), StringComparer.Ordinal);
         foreach (var document in vault.Documents)
@@ -143,13 +145,20 @@ internal sealed class ProjectionCache : IAsyncDisposable
                 projections.Add(template.Ref);
             }
             foreach (var skip in await _engine.GetProjectionSkipsAsync(type, cancellationToken))
-            {
-                var key = (await _engine.GetDocumentAsync(skip.DocumentId, cancellationToken))?.Key?.Value;
-                var path = key is not null && present.TryGetValue(key, out var entry) ? entry.Path : key;
-                skipped.Add(new SkippedDocument(path ?? skip.DocumentId.ToString(), skip.Reason));
-            }
+                skipped.Add(new SkippedDocument(await PathOfAsync(skip.DocumentId, present, cancellationToken), skip.Reason));
+            foreach (var skip in await _engine.GetProjectionFieldSkipsAsync(type, cancellationToken))
+                skippedFields.Add(new SkippedField(template.Ref, await PathOfAsync(skip.DocumentId, present, cancellationToken), skip.Field, skip.Reason));
         }
-        return new IngestResult(appended, retired, projections, skipped);
+        return new IngestResult(appended, retired, projections, skipped, skippedFields);
+    }
+
+    /// <summary>The vault path of a projected document, or its id when the vault no longer holds it.</summary>
+    private async Task<string> PathOfAsync(
+        DocumentId id, Dictionary<string, (string Path, JsonObject Body)> present, CancellationToken cancellationToken)
+    {
+        var key = (await _engine.GetDocumentAsync(id, cancellationToken))?.Key?.Value;
+        var path = key is not null && present.TryGetValue(key, out var entry) ? entry.Path : key;
+        return path ?? id.ToString();
     }
 
     public async Task<ProjectionTable> TableAsync(
@@ -163,10 +172,22 @@ internal sealed class ProjectionCache : IAsyncDisposable
         var rows = result.Rows
             .Select(row => new ProjectionRow(
                 (string)row[VaultProjection.PathColumn]!,
-                template.Fields.ToDictionary(f => f.Name, f => row.TryGetValue(f.Name, out var v) ? v : null)))
+                template.Fields.ToDictionary(f => f.Name, f => row.TryGetValue(f.Name, out var v) ? AsWritten(f, v) : null)))
             .ToList();
         return new ProjectionTable(template.Ref, columns, rows);
     }
+
+    /// <summary>
+    /// A cell as the field writes it. A date or date-and-time comes back from the table as an instant in
+    /// UTC — which is how its zone-less text was read — so its UTC parts are exactly what was written.
+    /// </summary>
+    private static object? AsWritten(TemplateField field, object? value) => (field.Type, value) switch
+    {
+        ("date", DateTimeOffset at) => at.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        ("datetime-local", DateTimeOffset at) => at.UtcDateTime.ToString(
+            at.Second == 0 && at.Millisecond == 0 ? "yyyy-MM-dd'T'HH:mm" : "yyyy-MM-dd'T'HH:mm:ss", CultureInfo.InvariantCulture),
+        _ => value,
+    };
 
     /// <summary>
     /// The record a vault path names. Sync clients and file systems spell one path in either Unicode form,

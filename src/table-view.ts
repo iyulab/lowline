@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { fileName } from './documents.js'
 import { describeError } from './errors.js'
-import { PATH_COLUMN, cellText, type ColumnFilter, type IngestResult, type ProjectionTable, type TemplateField, type TemplateSnapshot } from './projection.js'
+import { DATE_TYPES, PATH_COLUMN, cellText, type ColumnFilter, type IngestResult, type ProjectionTable, type TemplateField, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { tableCsv } from './export.js'
@@ -44,6 +44,14 @@ export class LlTable extends LitElement {
     }
     .error {
       color: var(--dc-color-danger, #b00020);
+    }
+    .skipped summary {
+      cursor: pointer;
+    }
+    .skipped ul {
+      margin: var(--dc-space-1, 4px) 0 0;
+      padding: 0;
+      list-style: none;
     }
   `
 
@@ -168,9 +176,12 @@ export class LlTable extends LitElement {
   private renderFilters(template: TemplateSnapshot | undefined) {
     if (!template) return nothing
     const choices = template.fields.filter((f) => (f.type === 'select' || f.type === 'radio') && f.options.length > 0)
-    // Every other field but checkboxes and numbers is text to the projection.
-    const texts = template.fields.filter((f) => !choices.includes(f) && !['checkbox', 'number', 'range'].includes(f.type))
+    // Every other field but checkboxes, numbers and dates is text to the projection.
+    const texts = template.fields.filter(
+      (f) => !choices.includes(f) && !['checkbox', 'number', 'range', ...DATE_TYPES].includes(f.type),
+    )
     const numbers = template.fields.filter((f) => f.type === 'number' || f.type === 'range')
+    const dates = template.fields.filter((f) => DATE_TYPES.includes(f.type))
     const textField = this.textField || texts[0]?.name || ''
     const value = (column: string, op: ColumnFilter['op']) => this.filters.get(`${op}:${column}`)?.value ?? ''
     const input = (e: Event) => (e.target as HTMLInputElement).value
@@ -230,7 +241,46 @@ export class LlTable extends LitElement {
             @input=${(e: Event) => this.filter(f.name, 'atMost', input(e))}
           ></dc-input>`,
       )}
+      ${dates.map(
+        (f: TemplateField) => html`<dc-input
+            size="sm"
+            type=${f.type as 'date' | 'datetime-local'}
+            aria-label=${strings.tableFilterFrom(f.label)}
+            title=${strings.tableFilterFrom(f.label)}
+            .value=${value(f.name, 'atLeast')}
+            @input=${(e: Event) => this.filter(f.name, 'atLeast', input(e))}
+          ></dc-input>
+          <dc-input
+            size="sm"
+            type=${f.type as 'date' | 'datetime-local'}
+            aria-label=${strings.tableFilterUntil(f.label)}
+            title=${strings.tableFilterUntil(f.label)}
+            .value=${value(f.name, 'atMost')}
+            @input=${(e: Event) => this.filter(f.name, 'atMost', input(e))}
+          ></dc-input>`,
+      )}
     </div>`
+  }
+
+  /**
+   * The fields of this template's rows left empty because their value could not be read as the field's
+   * type — each names its document, which opens to fix it.
+   */
+  private renderSkippedFields() {
+    const fields = (this.ingest?.skippedFields ?? []).filter((s) => s.template === this.selected)
+    if (!fields.length) return nothing
+    return html`<details class="skipped">
+      <summary class="error">${strings.tableSkippedFields(fields.length)}</summary>
+      <ul>
+        ${fields.map(
+          (s) => html`<li>
+            <dc-button size="sm" variant="ghost" title=${s.reason} @click=${() => this.openRow(s.path)}
+              >${strings.tableSkippedField(fileName(s.path, '.md'), this.label(s.field))}</dc-button
+            >
+          </li>`,
+        )}
+      </ul>
+    </details>`
   }
 
   /** Asks for a row's document to be opened. */
@@ -262,6 +312,7 @@ export class LlTable extends LitElement {
           : nothing}
         ${skipped ? html`<span class="error">${strings.tableSkipped(skipped)}</span>` : nothing}
       </div>
+      ${this.renderSkippedFields()}
       ${table
         ? html`<dc-data-table
             .columns=${table.columns.map((c) => ({ key: c.name, label: this.label(c.name) }))}

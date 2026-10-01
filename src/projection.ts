@@ -97,6 +97,8 @@ export interface IngestResult {
   retired: number
   projections: string[]
   skipped: { path: string; reason: string }[]
+  /** Fields a row leaves empty because their value could not be read as the field's type. */
+  skippedFields: { template: string; path: string; field: string; reason: string }[]
 }
 
 /**
@@ -113,13 +115,16 @@ export function cellText(value: unknown): string {
 /**
  * One condition on a template's table, answered by the sidecar from the projection: `column` is a field's
  * name, or `$path` for the document's vault path (its name); `contains` matches text ignoring case, and
- * `atLeast`/`atMost` bound a number field, both included.
+ * `atLeast`/`atMost` bound a number or date field, both included.
  */
 export interface ColumnFilter {
   column: string
   op: 'contains' | 'equal' | 'atLeast' | 'atMost'
   value: string
 }
+
+/** Field types the projection keeps as dates: their filters are ranges, not text. */
+export const DATE_TYPES: readonly string[] = ['date', 'datetime-local']
 
 /** The column that carries a document's vault path. */
 export const PATH_COLUMN = '$path'

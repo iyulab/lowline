@@ -905,6 +905,52 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '점수표')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'filters a table by a date range and names the dates it could not read'(app, vault) {
+    const VISITS = { name: '방문 기록', ref: 'visits@1', path: '서식/방문 기록.fd.md' }
+    const body = '# 방문 기록\n\n제목: ___@제목\n\n@방문일: [date]\n'
+    const files = [join(vault, VISITS.path)]
+    await writeFile(files[0], `---\nid: visits\nversion: 1\n---\n${body}`)
+    for (const [i, day] of ['2026-01-15', '2026-01-31', '2026-02-01', '다음 주쯤'].entries()) {
+      const file = join(vault, '문서', `방문-${i + 1}.md`)
+      files.push(file)
+      await writeFile(file, `---\ntemplate: visits@1\n제목: 방문 ${i + 1}\n방문일: ${day}\n---\n${body}`)
+    }
+    const shows = (n, what) =>
+      app.cdp.waitFor(
+        `__e2e.all('[role=status]').some((el) => el.textContent.trim() === ${q(what)}) && __e2e.all('tbody tr').length === ${n}`,
+        what,
+        { timeoutMs: 15_000 },
+      )
+    const typeIn = (label, text) =>
+      app.cdp.evaluate(`(() => { const i = __e2e.all('dc-input').find((el) => el.getAttribute('aria-label') === ${q(label)})
+        const inner = i.shadowRoot.querySelector('input'); inner.value = ${q(text)}
+        inner.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+    try {
+      await app.showTable(VISITS, { timeoutMs: 30_000 })
+      // The unreadable date keeps its row; only its cell is empty, and the table says which.
+      await shows(4, '문서 4건')
+      assert.ok(await app.cdp.evaluate(`__e2e.all('tbody tr')[0].textContent.includes('2026-01-15')`), 'a date shows as written')
+      await app.cdp.waitFor(
+        `__e2e.all('.skipped summary').some((s) => s.textContent.trim() === '값을 읽지 못해 비운 칸 1개')`,
+        'the unreadable date named',
+      )
+      await typeIn('방문일 부터', '2026-01-16')
+      await shows(2, '조건에 맞는 문서 2건')
+      // Both ends hold, and each is included.
+      await typeIn('방문일 까지', '2026-01-31')
+      await shows(1, '조건에 맞는 문서 1건')
+      assert.ok(await app.cdp.evaluate(`__e2e.all('tbody tr')[0].textContent.includes('방문 2')`))
+      await typeIn('방문일 부터', '')
+      await typeIn('방문일 까지', '')
+      await shows(4, '문서 4건')
+      await app.noAlert()
+    } finally {
+      await app.learning()
+      await Promise.all(files.map((f) => rm(f, { force: true })))
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '방문 기록')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'says why a field is not suggested for when replaying its history never reaches the target'(app, vault) {
     // Alike requests whose owners alternate: whichever earlier record is nearest, it is right half the time.
     const ASSIGN = { name: '배정', ref: 'assign@1', path: '서식/배정.fd.md' }

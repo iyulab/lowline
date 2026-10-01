@@ -49,11 +49,17 @@ public sealed record VaultSnapshot(
 /// <summary>
 /// What an ingest changed: documents appended because they are new or changed, records retired because
 /// their document left the vault (or its template), the templates whose tables were rebuilt, and the
-/// documents no table shows.
+/// documents no table shows, and the fields left empty in a row because their value could not be read as
+/// the field's type.
 /// </summary>
-public sealed record IngestResult(int Appended, int Retired, IReadOnlyList<string> Projections, IReadOnlyList<SkippedDocument> Skipped);
+public sealed record IngestResult(
+    int Appended, int Retired, IReadOnlyList<string> Projections, IReadOnlyList<SkippedDocument> Skipped,
+    IReadOnlyList<SkippedField> SkippedFields);
 
 public sealed record SkippedDocument(string Path, string Reason);
+
+/// <summary>A document's field whose value its row in <see cref="Template"/>'s table leaves empty, and why.</summary>
+public sealed record SkippedField(string Template, string Path, string Field, string Reason);
 
 public sealed record ProjectionColumn(string Name, string Type);
 
@@ -65,7 +71,8 @@ public sealed record ProjectionRow(string Path, IReadOnlyDictionary<string, obje
 /// <summary>
 /// One condition on a template's table. <see cref="Column"/> is a field's name, or
 /// <see cref="VaultProjection.PathColumn"/> for the document's vault path; <see cref="Op"/> is <c>contains</c>
-/// (text, ignoring case), <c>equal</c>, or <c>atLeast</c> / <c>atMost</c> (a number field's bounds, both included).
+/// (text, ignoring case), <c>equal</c>, or <c>atLeast</c> / <c>atMost</c> (a number or date field's bounds, both
+/// included — a date as the field writes it, read as the same day on every computer).
 /// </summary>
 public sealed record ColumnFilter(string Column, string Op, string Value)
 {
@@ -387,6 +394,9 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         "checkbox" when field.Multiple => ColumnType.Jsonb,
         "checkbox" => ColumnType.Boolean,
         "number" or "range" => ColumnType.Decimal,
+        // A date, or a date and time, without a zone: Formbase reads both as UTC, so a day is the same
+        // day on every computer, and ranges compare dates rather than text.
+        "date" or "datetime-local" => ColumnType.Timestamp,
         _ => ColumnType.Text,
     };
 
