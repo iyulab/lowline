@@ -9,11 +9,19 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// <summary>
 /// How a judgment field's suggestions have fared: every decision people made about them, in order.
 /// A suggestion was right when it was accepted as offered; corrected or rejected, it was not.
-/// Without a <see cref="Replay"/>, <see cref="WhyNoReplay"/> says why (see <see cref="Suggestions.WhyNoReplay"/>).
+/// Without a <see cref="Replay"/>, <see cref="WhyNoReplay"/> says why (see <see cref="Suggestions.WhyNoReplay"/>), and
+/// when the replay fell short of the target, <see cref="Closest"/> says by how much.
 /// </summary>
 public sealed record FieldCurve(
     string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
-    FieldReplay? Replay = null, string? WhyNoReplay = null);
+    FieldReplay? Replay = null, string? WhyNoReplay = null, FieldShortfall? Closest = null);
+
+/// <summary>
+/// How close a field's replay came when no threshold was right often enough: at the most precise threshold that still
+/// gathered enough answers, <see cref="Precision"/> of its answers were right, against the <see cref="Target"/>. That
+/// precision can reach the target and the field still not be offered, when a band of answers within it falls short.
+/// </summary>
+public sealed record FieldShortfall(double Precision, double AnswerRate, int Answered, int Lookups, double Target);
 
 /// <summary>
 /// How a field's suggestions did when its saved documents were replayed in the order they were saved, each asked

@@ -170,11 +170,11 @@ public sealed class Suggestions
         foreach (var ((template, field), current) in _thresholds)
         {
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
-            var choice = await ThresholdSelection.SelectAsync(
+            var replay = await ThresholdSelection.SelectAsync(
                 new LexicalMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered, cancellationToken);
             var key = ThresholdSelection.SelectKeyThreshold(
                 new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
-            chosen[(template, field)] = new FieldThreshold(choice, current.Confirmed, current.Confirmed, key);
+            chosen[(template, field)] = new FieldThreshold(replay.Chosen, current.Confirmed, current.Confirmed, key.Chosen, replay.MostPrecise);
         }
         return chosen;
     }
@@ -194,6 +194,13 @@ public sealed class Suggestions
 
     /// <summary>How a judgment field's threshold was chosen, and how it did on the replay; null until it has been.</summary>
     public ThresholdChoice? Choice(string template, string field) => _thresholds.GetValueOrDefault((template, field))?.Choice;
+
+    /// <summary>
+    /// For a field whose replay chose no threshold, the closest it came: the most precise threshold that still gathered
+    /// enough answers. Null when one was chosen, or when the replay found too few candidates to say.
+    /// </summary>
+    public ThresholdChoice? Closest(string template, string field) =>
+        _thresholds.GetValueOrDefault((template, field)) is { Choice: null } threshold ? threshold.Closest : null;
 
     private Dictionary<string, FormDefinition> Forms() => _templates.Values.ToDictionary(
         t => t.Ref,
@@ -303,9 +310,10 @@ public sealed class Suggestions
 /// A judgment field's thresholds: <see cref="Choice"/> is the similarity threshold replaying its history chose and
 /// <see cref="KeyChoice"/> the strength at which values settled alongside its observed values answer, over the
 /// <see cref="SelectedAt"/> confirmed documents it had then (null: not yet chosen); <see cref="Confirmed"/> is how
-/// many it has now.
+/// many it has now. <see cref="Closest"/> is the similarity threshold that came closest to the target, chosen or not.
 /// </summary>
-public sealed record FieldThreshold(ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? KeyChoice = null)
+public sealed record FieldThreshold(
+    ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? KeyChoice = null, ThresholdChoice? Closest = null)
 {
     /// <summary>
     /// The strength at which values settled alongside the observed values answer: the one chosen from the field's

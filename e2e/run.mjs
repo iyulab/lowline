@@ -919,12 +919,13 @@ const scenarios = {
     // The replay runs apart from reading the vault; the learning view says what it found once it is read again.
     const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '배정 · 담당'); return h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim() })()`
     let said = ''
-    for (const until = Date.now() + 30_000; Date.now() < until && !said.includes('목표만큼'); ) {
+    for (const until = Date.now() + 30_000; Date.now() < until && !said.includes('목표'); ) {
       await app.sidebar(ASSIGN.name, { timeoutMs: 30_000 })
       await app.learning()
       said = (await app.cdp.waitFor(replay, 'the replay line of 배정 · 담당', { timeoutMs: 30_000 })) ?? ''
     }
-    assert.match(said, /^저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어/)
+    // How far short it came: alternating owners, the nearest earlier request is right half the time.
+    assert.match(said, /^저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 \d+건 중 \d+%만 맞혀 목표 80%에 못 미칩니다/)
 
     // A new record like all of them gets no suggestion, and the reason says it is the field, not the record.
     await app.newDocument(ASSIGN)

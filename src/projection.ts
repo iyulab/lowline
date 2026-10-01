@@ -144,6 +144,12 @@ export interface FieldCurve {
    * `below-target` — no threshold was right often enough, so similar documents are not offered for the field.
    */
   whyNoReplay?: 'few' | 'pending' | 'below-target' | null
+  /**
+   * With `below-target`, how close the replay came: at the most precise threshold that still gathered enough
+   * answers, the share of them that were right, against the target. It can reach the target and the field still
+   * not be offered, when a band of answers within it falls short.
+   */
+  closest?: { precision: number; answerRate: number; answered: number; lookups: number; target: number } | null
 }
 
 /**

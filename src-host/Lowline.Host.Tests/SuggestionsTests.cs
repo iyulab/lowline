@@ -218,6 +218,11 @@ public sealed class SuggestionsTests
         var suggestion = await suggestions.SuggestAsync(
             new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리 문제 16"}""")), Ct);
         Assert.Equal(new Suggestion(null, "abstain", null, null, Abstention.BelowTarget), suggestion);
+        // How close it came: right about half the time at best, short of the target.
+        var closest = suggestions.Closest("intake@1", "담당");
+        Assert.NotNull(closest);
+        Assert.InRange(closest.Precision, 0.3, 0.7);
+        Assert.True(closest.Precision < Suggestions.TargetPrecision);
     }
 
     [Fact]

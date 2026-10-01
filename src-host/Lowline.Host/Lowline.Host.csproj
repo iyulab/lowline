@@ -20,7 +20,7 @@
     <PackageReference Include="Formbase.Core" Version="0.15.0" />
     <PackageReference Include="Formbase.Sqlite" Version="0.15.0" />
     <PackageReference Include="Formbase.DependencyInjection" Version="0.15.0" />
-    <PackageReference Include="Gil" Version="0.6.0" />
+    <PackageReference Include="Gil" Version="0.7.0" />
     <PackageReference Include="FluxIndex.SDK" Version="0.66.0" />
     <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.66.0" />
   </ItemGroup>

@@ -353,7 +353,13 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         {
             return [.. _curves.Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
                 ? c with { Replay = new FieldReplay(choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups) }
-                : c with { WhyNoReplay = _suggestions?.WhyNoReplay(c.Template, c.Field) ?? NoReplay.Pending })];
+                : c with
+                {
+                    WhyNoReplay = _suggestions?.WhyNoReplay(c.Template, c.Field) ?? NoReplay.Pending,
+                    Closest = _suggestions?.Closest(c.Template, c.Field) is { } closest
+                        ? new FieldShortfall(closest.Precision, closest.AnswerRate, closest.Answered, closest.Lookups, Suggestions.TargetPrecision)
+                        : null,
+                })];
         }
         finally
         {
