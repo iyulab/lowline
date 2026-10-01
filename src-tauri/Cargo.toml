@@ -26,10 +26,10 @@ getrandom = "0.4"
 # tauri-kit-diagnostics sends error reports with, so the app builds one.
 ureq = { version = "3", default-features = false, features = ["native-tls", "win-system-proxy"] }
 # Error reports that carry no content, sent to Application Insights by a release build.
-tauri-kit-diagnostics = { version = "0.7.0", features = ["appinsights"] }
-tauri-kit-fs = "0.7.0"
-tauri-kit-sidecar = "0.7.0"
-tauri-kit-watch = "0.7.0"
+tauri-kit-diagnostics = { version = "0.8.0", features = ["appinsights"] }
+tauri-kit-fs = "0.8.0"
+tauri-kit-sidecar = "0.8.0"
+tauri-kit-watch = "0.8.0"
 # Deleting moves a file to the system's trash (Recycle Bin, Trash, freedesktop trash), where the
 # person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"

@@ -3443,9 +3443,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-diagnostics"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aeb7bdfe4e709b12b73f3a9fb13d0abb5efb56db5ed1d4fa26b786742d688ecd"
+checksum = "069a1155d98c253a9fe364f7c27a920167566c694f50a4d7e208776bd023f72c"
 dependencies = [
  "serde",
  "serde_json",
@@ -3455,9 +3455,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-fs"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f77c3903cf27ebbb6f5f4ded880d11069f45e78a978d2db9c148c3eef686a97"
+checksum = "6cfd6b021a195befecb9dd7cd19d9ae76a9e396cb58b90c461f4e06c414f2f36"
 dependencies = [
  "dunce",
  "libc",
@@ -3467,9 +3467,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-sidecar"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13972c97c4bf99c9fa1c109ec16062ca81d1813aea6133e5baeea8ebdcf81ff7"
+checksum = "339516065722cffd9b74390679b2871a9d3b9cd40d83514baee60df6cfb3f232"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -3477,9 +3477,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-watch"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c49e6e892c99c2a4fd9884926b476f0e477eeffc1361e6d73cab71959679997"
+checksum = "79904ed7f5daeab6ab95d1bbe9cb5433ad751e007eee90187cfbb8b4565dc4fb"
 dependencies = [
  "notify-debouncer-full",
  "tauri-kit-fs",
