@@ -16,7 +16,9 @@ While a dialog is open these keys do nothing: the question on screen is answered
 
 ## Narrow windows
 
-Below 1024 pixels wide the sidebar is a drawer over the content. It starts closed; the toolbar button opens it, and picking a place, or clicking outside it, closes it.
+A template's documents are laid out in three columns: the sidebar, the list of documents (as wide as the sidebar), and the document picked in it. The list and the document scroll on their own. A new document puts the cursor in its first field, and saving leaves it in the field being written.
+
+From 1024 pixels wide the toolbar button folds the sidebar to a narrow rail and back. Below that the sidebar is a drawer over the content. It starts closed; the toolbar button opens it, and picking a place, clicking outside it or Escape closes it.
 
 ## Unsaved edits
 

@@ -58,7 +58,8 @@ export class LlDocuments extends LitElement {
     css`
     :host {
       display: grid;
-      grid-template-columns: 16rem 1fr;
+      /* The list is as wide as the sidebar beside it (1 : 1), the document takes the rest. */
+      grid-template-columns: var(--dp-sidebar-width, 220px) minmax(0, 1fr);
       gap: var(--dc-space-4, 16px);
       height: 100%;
       min-height: 0;
@@ -202,6 +203,8 @@ export class LlDocuments extends LitElement {
   private offered = new Map<string, Offer>()
   /** The draft's filled fields in the order they were filled (see `fillOrder`). */
   private filled: string[] = []
+  /** The field the person was last in, to go back to once a save has drawn the form again. */
+  private lastField?: string
   /**
    * Fields whose suggestion was rejected in this draft and not offered again. Once the draft is
    * saved the rejection is an event, and the sidecar keeps it out of the document after reopening.
@@ -366,6 +369,7 @@ export class LlDocuments extends LitElement {
   }
 
   private reset() {
+    this.lastField = undefined
     this.error = ''
     this.importing = false
     this.writtenWith = undefined
@@ -515,6 +519,8 @@ export class LlDocuments extends LitElement {
       this.draft = { kind: 'new', templateSource, templateRef: ref }
       this.opened++
       void this.prepareSuggestions(ref)
+      // A new document is started to be written: the cursor goes to its first field.
+      await this.focusForm()
     } catch (e) {
       this.error = describeError(e)
     }
@@ -541,6 +547,28 @@ export class LlDocuments extends LitElement {
   /** Starts a new document of the template, once unsaved edits are let go; the app's Ctrl+N calls this. */
   newDocument() {
     if (this.scope) this.leaveFor(() => this.startNew(this.scope!.path))
+  }
+
+  /** Puts the cursor in the form once it is drawn: in the field named, or the first one a person can reach. */
+  private async focusForm(field?: string) {
+    await this.updateComplete
+    const form = this.renderRoot.querySelector('formdown-ui')
+    if (!form) return
+    await form.updateComplete
+    if (!(field && form.focusField(field))) form.focusField()
+  }
+
+  /** Remembers the field the person is in (a field of the form names itself). */
+  private onFormFocus(e: FocusEvent) {
+    for (const target of e.composedPath()) {
+      if (!(target instanceof HTMLElement)) continue
+      const name = target.getAttribute('data-field-name') ?? target.getAttribute('name')
+      if (name) {
+        this.lastField = name
+        return
+      }
+      if (target.localName === 'formdown-ui') return
+    }
   }
 
   /** Puts the cursor in the box that finds documents, if there are any to find; the app's Ctrl+F calls this. */
@@ -608,6 +636,8 @@ export class LlDocuments extends LitElement {
       this.dirty = false
       this.changedOutside = false
       this.message = strings.saved
+      // Saving draws the form again; the person goes on where they were.
+      await this.focusForm(this.lastField)
       this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
       // What was just saved is confirmed: the next suggestions learn from it.
       void this.prepareSuggestions(this.draft?.templateRef)
@@ -945,6 +975,7 @@ export class LlDocuments extends LitElement {
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .fieldStates=${guard([this.suggestions, this.abstained], () => this.fieldStates())}
+                @focusin=${this.onFormFocus}
                 @formdown-data-update=${(e: CustomEvent<{ formData: Record<string, unknown> }>) => this.onData(e, opened)}
                 @formdown-suggestion-pick=${(e: CustomEvent<{ field: string; value: string }>) => this.accept(e.detail.field, e.detail.value)}
                 @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.reject(e.detail.field)}

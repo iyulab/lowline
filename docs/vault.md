@@ -6,7 +6,7 @@ Everything Lowline keeps is a file in a folder you choose, the vault: templates 
 
 The first screen opens an existing folder or makes a new vault in an empty one, starting from a sample template with one judgment field turned on and no documents — suggestions learn only from what a person saves.
 
-The sidebar lists the vault's templates. Each shows its table, its source and its documents; a new template starts from the end of that list. Documents naming no template the vault has are listed apart while there are any.
+The sidebar lists the vault's templates. Each shows its documents (first), its table and its source; a new template starts from the end of that list. Documents naming no template the vault has are listed apart while there are any.
 
 ## Templates
 

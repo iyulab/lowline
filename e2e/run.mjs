@@ -1256,7 +1256,7 @@ const scenarios = {
       { timeoutMs: 30_000 },
     )
     assert.deepEqual(problems, [
-      '칸 이름 "담당"이(가) 두 번 이상 쓰였습니다. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.',
+      '칸 이름 "담당"이(가) 두 번 이상 쓰였습니다(다시 쓰인 줄: 11). 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.',
       '칸 "메모"의 조건이 이 서식에 없는 칸 "분류"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.',
       'lowline.suggest의 "분류"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.',
     ])
@@ -1591,6 +1591,29 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'keeps the keyboard in the document: a new one opens on its first field, and a save leaves the cursor where it was'(app, vault) {
+    const ctrl = (key) => app.cdp.press(key, { code: `Key${key.toUpperCase()}`, modifiers: 2, keyCode: key.toUpperCase().charCodeAt(0) })
+    const focusedField = `(() => { let el = document.activeElement; while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement; return el?.getAttribute('data-field-name') ?? el?.getAttribute('name') ?? el?.localName })()`
+    const before = await documentsIn(vault)
+    await app.tabOf(INTAKE, '문서')
+    await ctrl('n')
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.cdp.waitFor(`${focusedField} === '요청'`, 'the cursor in the first field')
+    await app.cdp.insertText('키보드만으로 쓴 요청') // typed straight away, no click
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === '키보드만으로 쓴 요청'`, 'what was typed in the first field')
+    await ctrl('s')
+    await app.status('저장했습니다')
+    assert.equal(await app.cdp.evaluate(focusedField), '요청', 'the cursor still in the field after saving')
+    // A caret, not the value selected: typing goes on, it does not replace what was written.
+    assert.equal(
+      await app.cdp.evaluate(`(() => { const r = __e2e.all('formdown-ui')[0].shadowRoot; return (r.getSelection?.() ?? getSelection()).isCollapsed })()`),
+      true,
+      'the caret, not a selection',
+    )
+    await app.noAlert()
+    for (const name of (await documentsIn(vault)).filter((n) => !before.includes(n))) await rm(join(vault, '문서', name))
+  },
+
   async 'opens the vault and the place it was left at, on the next launch'(app, vault) {
     await app.tabOf(INTAKE, '문서')
     await new Promise((resolve) => setTimeout(resolve, 500)) // where it is has been written down
@@ -1626,10 +1649,43 @@ const scenarios = {
       await app.cdp.clickAt({ x: 600, y: 300 }) // the backdrop, right of the drawer
       await app.cdp.waitFor(`!__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer closed on its backdrop')
       assert.equal((await app.where()).place, '학습', 'the backdrop picked nothing')
+
+      await openDrawer()
+      await app.cdp.press('Escape', { code: 'Escape', keyCode: 27 })
+      await app.cdp.waitFor(`!__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer closed on Escape')
       await app.noAlert()
     } finally {
       await app.cdp.send('Emulation.clearDeviceMetricsOverride')
     }
+  },
+
+  async 'lays a wide window out in three columns: the sidebar folds to its rail, the list is as wide as it, each scrolls on its own'(app) {
+    const sidebar = `__e2e.all('dp-sidebar')[0]`
+    const toggle = `button[aria-label="사이드바 접기/펼치기"]`
+    await app.tabOf(INTAKE, '문서')
+    const widths = () => app.cdp.evaluate(`(() => {
+      const list = __e2e.all('ll-documents')[0].shadowRoot.querySelector('nav').getBoundingClientRect()
+      return { sidebar: Math.round(${sidebar}.getBoundingClientRect().width), list: Math.round(list.width) }
+    })()`)
+    const { sidebar: wide, list } = await widths()
+    // 1 : 1 — the list is as wide as the sidebar (the list's own column, its border inside).
+    assert.ok(Math.abs(wide - list) <= 2, `the list (${list}px) as wide as the sidebar (${wide}px)`)
+    assert.equal(await app.cdp.evaluate(`__e2e.one(${JSON.stringify(toggle)}).getAttribute('aria-expanded')`), 'true')
+    // The page does not scroll: the list and the document do, each on its own.
+    assert.ok(
+      await app.cdp.evaluate(`(() => { const p = __e2e.all('dp-page')[0]; return p.hasAttribute('fill') && p.scrollHeight <= p.clientHeight + 1 })()`),
+      'the page itself does not scroll',
+    )
+    assert.equal(await app.cdp.evaluate(`getComputedStyle(__e2e.all('ll-documents')[0].shadowRoot.querySelector('nav')).overflowY`), 'auto')
+
+    await app.click(toggle)
+    await app.cdp.waitFor(`${sidebar}.hasAttribute('collapsed')`, 'the sidebar folded to its rail')
+    assert.equal(await app.cdp.evaluate(`__e2e.one(${JSON.stringify(toggle)}).getAttribute('aria-expanded')`), 'false')
+    assert.ok((await widths()).sidebar < wide / 2, 'the rail is narrow')
+    assert.equal(await app.cdp.evaluate(`__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`), false, 'no drawer in a wide window')
+    await app.click(toggle)
+    await app.cdp.waitFor(`!${sidebar}.hasAttribute('collapsed')`, 'the sidebar whole again')
+    await app.noAlert()
   },
 
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of

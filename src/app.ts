@@ -4,6 +4,7 @@ import { live } from 'lit/directives/live.js'
 import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
+import { desktopMinWidth } from '@iyulab/desktop-patterns'
 import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
@@ -48,7 +49,8 @@ export class LlApp extends LitElement {
       height: 100%;
       min-height: 0;
     }
-    .place > :last-child {
+    .place > :last-child,
+    dp-page > ll-documents {
       flex: 1;
       min-height: 0;
     }
@@ -84,7 +86,7 @@ export class LlApp extends LitElement {
 
   /** Where the app is; unset while the vault has no template (or none is open). */
   @state() private place?: Place
-  @state() private tab: Tab = 'table'
+  @state() private tab: Tab = 'documents'
   /** The vault's templates, as the sidebar lists them. */
   @state() private templates: TemplateItem[] = []
   /** Whether some documents name no template the vault has. */
@@ -95,6 +97,11 @@ export class LlApp extends LitElement {
    * starts closed, and closes when the shell asks (its backdrop) or a place is picked from it.
    */
   @state() private sidebarOpen = false
+  /** Whether a wide window shows the sidebar folded to its rail (a drawer always shows it whole). */
+  @state() private sidebarCollapsed = false
+  private readonly wideQuery = matchMedia(`(min-width: ${desktopMinWidth}px)`)
+  @state() private wide = this.wideQuery.matches
+  private readonly onWidth = () => (this.wide = this.wideQuery.matches)
   @state() private vaultInfo?: VaultInfo
   @state() private error = ''
   /** What the app just did that left the place it showed (a template deleted); gone once elsewhere. */
@@ -152,6 +159,7 @@ export class LlApp extends LitElement {
     // Typing holds the caret solid; a pause lets it blink again.
     this.addEventListener('keydown', () => this.marks.forEach((m) => m.hold()))
     window.addEventListener('keydown', this.onShortcut)
+    this.wideQuery.addEventListener('change', this.onWidth)
     this.addEventListener('pointerdown', () => this.marks.forEach((m) => m.wake()))
     // A save is a confirmation: the mark shows "not yet" becoming "confirmed".
     this.addEventListener('ll-confirmed', () => this.marks.forEach((m) => m.confirm()))
@@ -191,6 +199,7 @@ export class LlApp extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     window.removeEventListener('keydown', this.onShortcut)
+    this.wideQuery.removeEventListener('change', this.onWidth)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
   }
@@ -205,7 +214,7 @@ export class LlApp extends LitElement {
     const session = resumed.session as { place?: unknown; tab?: unknown } | undefined
     const place = typeof session?.place === 'string' ? placeOf(session.place) : undefined
     const tab = session?.tab
-    if (place) this.resumeAt = { place, tab: tab === 'template' || tab === 'documents' ? tab : 'table' }
+    if (place) this.resumeAt = { place, tab: tab === 'template' || tab === 'table' ? tab : 'documents' }
     this.vaultInfo = resumed.vault
   }
 
@@ -359,6 +368,24 @@ export class LlApp extends LitElement {
     }
   }
 
+  /**
+   * The sidebar toggle: a wide window folds the sidebar to its rail and back; a narrow one opens it
+   * as a drawer over the content.
+   */
+  private readonly toggleSidebar = () => {
+    if (this.wide) this.sidebarCollapsed = !this.sidebarCollapsed
+    else this.sidebarOpen = !this.sidebarOpen
+  }
+
+  /**
+   * Whether the place shows a list of documents beside the one open — the three columns: sidebar, the
+   * list, what is picked in it. The list and the document then scroll on their own, not the page.
+   */
+  private showsDocuments(): boolean {
+    const place = this.place
+    return !!this.vaultInfo && (place?.kind === 'orphans' || (place?.kind === 'template' && this.tab === 'documents'))
+  }
+
   private heading(): string {
     const place = this.place
     if (place?.kind === 'learning') return strings.navLearning
@@ -381,9 +408,9 @@ export class LlApp extends LitElement {
     return html`<div class="place">
       <dc-tab-bar
         .items=${[
+          { id: 'documents', label: strings.navDocuments },
           { id: 'table', label: strings.navTable },
           { id: 'template', label: strings.navTemplates },
-          { id: 'documents', label: strings.navDocuments },
         ]}
         .activeId=${live(this.tab)}
         @dc-tab-change=${(e: DcTabChangeEvent) => void this.switchTab(e.tabId as Tab)}
@@ -402,6 +429,7 @@ export class LlApp extends LitElement {
       <dp-shell ?sidebar-open=${this.sidebarOpen} @dp-shell-sidebar-close=${() => (this.sidebarOpen = false)}>
         <dp-sidebar
           slot="sidebar"
+          ?collapsed=${this.sidebarCollapsed && this.wide}
           header=${info?.name ?? strings.appName}
           nav-label=${strings.navLabel}
           .activeId=${live(this.place ? placeId(this.place) : '')}
@@ -423,11 +451,12 @@ export class LlApp extends LitElement {
           subtitle=${this.heading()}
           show-toggle
           toggle-label=${strings.toggleSidebar}
-          @dp-toolbar-toggle=${() => (this.sidebarOpen = !this.sidebarOpen)}
+          .expanded=${this.wide ? !this.sidebarCollapsed : this.sidebarOpen}
+          @dp-toolbar-toggle=${this.toggleSidebar}
         >
           <dc-button slot="actions" variant="secondary" size="sm" @click=${this.openVault}>${strings.openVault}</dc-button>
         </dp-toolbar>
-        <dp-page>
+        <dp-page ?fill=${this.showsDocuments()} max-width=${this.showsDocuments() ? 'full' : 'md'}>
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : ''}
           ${this.notice ? html`<p class="notice" role="status">${this.notice}</p>` : ''}
           ${!info
