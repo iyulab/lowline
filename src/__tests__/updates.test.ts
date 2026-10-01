@@ -9,11 +9,13 @@ describe('settings', () => {
   })
 
   it('keep what was written', () => {
-    expect(settingsFrom('{"checkForUpdates":false}')).toEqual({ checkForUpdates: false })
+    expect(settingsFrom('{"checkForUpdates":false}')).toEqual({ checkForUpdates: false, outboundToldOnce: false })
+    expect(settingsFrom('{"outboundToldOnce":true}')).toEqual({ checkForUpdates: true, outboundToldOnce: true })
   })
 
-  it('look for updates unless told not to', () => {
+  it('look for updates unless told not to, and tell once what leaves the computer', () => {
     expect(DEFAULT_SETTINGS.checkForUpdates).toBe(true)
+    expect(DEFAULT_SETTINGS.outboundToldOnce).toBe(false)
   })
 })
 

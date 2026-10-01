@@ -10,9 +10,12 @@ In the app's local data, one file each per vault:
 - The strength each judgment field's replay chose for the values saved together, so the next launch starts from them instead of replaying its history again. They are chosen again from the vault if the file is gone.
 - A record of the suggestions this device showed for the vault: when, for which template and field, and from where — never the value. Nothing learns from it; it is counted, so decisions can be read against what was shown, including suggestions whose document was never saved.
 
-In the app's settings: this install's id, where the app was when last used (see [Working in the app](working.md)), and whether to check for updates.
+In the app's settings: this install's id, where the app was when last used (see [Working in the app](working.md)), whether to check for updates, and whether the first launch's line about what leaves this computer was answered.
 
 ## Error reports
+
+The first launch says in one line what leaves this computer — error reports and update checks — with the whole of it under 정보 (About).
+
 
 When something fails, an error report is written to `reports.jsonl` in the app's log folder: the layer, the kind of failure (a class name or an app-owned code), the status a failed request to the sidecar was answered with, the frames of the app's own code, the version and the operating system — never a message, a path, a file name, a template or a value.
 

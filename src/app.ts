@@ -64,7 +64,7 @@ export class LlApp extends LitElement {
     .error {
       color: var(--dc-color-danger, #b00020);
     }
-    .update {
+    .notice-bar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -119,6 +119,8 @@ export class LlApp extends LitElement {
   @state() private showingShortcuts = false
   /** What Lowline is and under which terms, from 정보 at the foot of the sidebar. */
   @state() private showingAbout = false
+  /** 정보 opened from the first launch's line about what leaves the computer, with that part unfolded. */
+  @state() private aboutOutbound = false
   private readonly wideQuery = matchMedia(`(min-width: ${desktopMinWidth}px)`)
   @state() private wide = this.wideQuery.matches
   private readonly onWidth = () => (this.wide = this.wideQuery.matches)
@@ -252,6 +254,15 @@ export class LlApp extends LitElement {
   private changeSettings(next: Settings) {
     this.applySettings(next)
     void deviceSettings.write(next).catch((e) => (this.error = describeError(e)))
+  }
+
+  /** The first launch's line about what leaves the computer is told once: answered, it is not shown again. */
+  private toldOutbound(more: boolean) {
+    if (this.settings) this.changeSettings({ ...this.settings, outboundToldOnce: true })
+    if (more) {
+      this.aboutOutbound = true
+      this.showingAbout = true
+    }
   }
 
   /** Installs the newer release — after the unsaved-edits question, since the app restarts. */
@@ -531,8 +542,15 @@ export class LlApp extends LitElement {
           <dc-button slot="actions" variant="secondary" size="sm" @click=${this.openVault}>${strings.openVault}</dc-button>
         </dp-toolbar>
         <dp-page ?fill=${this.showsDocuments()} max-width=${this.showsDocuments() ? 'full' : 'md'}>
+          ${this.settings && !this.settings.outboundToldOnce
+            ? html`<p class="notice-bar outbound-once" role="status">
+                ${strings.outboundOnce}
+                <dc-button size="sm" variant="secondary" @click=${() => this.toldOutbound(true)}>${strings.outboundOnceMore}</dc-button>
+                <dc-button size="sm" @click=${() => this.toldOutbound(false)}>${strings.outboundOnceOk}</dc-button>
+              </p>`
+            : nothing}
           ${this.available
-            ? html`<p class="update" role="status">
+            ? html`<p class="notice-bar update" role="status">
                 ${strings.updateAvailable(this.available.version)}
                 <dc-button size="sm" ?disabled=${this.installing} @click=${() => void this.installUpdate()}
                   >${this.installing ? strings.updateInstalling : strings.updateInstall}</dc-button
@@ -566,8 +584,12 @@ export class LlApp extends LitElement {
       ></dp-shortcut-overlay>
       <ll-about
         ?open=${this.showingAbout}
+        ?outbound=${this.aboutOutbound}
         .settings=${this.settings}
-        @close=${() => (this.showingAbout = false)}
+        @close=${() => {
+          this.showingAbout = false
+          this.aboutOutbound = false
+        }}
         @ll-settings=${(e: CustomEvent<Settings>) => this.changeSettings(e.detail)}
       ></ll-about>
       <dc-confirm-dialog

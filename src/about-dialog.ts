@@ -59,6 +59,8 @@ export class LlAbout extends LitElement {
   @property({ type: Boolean }) open = false
   /** This device's settings, as the app holds them; undefined until read. */
   @property({ attribute: false }) settings?: Settings
+  /** Opens with what leaves this computer unfolded. */
+  @property({ type: Boolean }) outbound = false
   @state() private version?: string
   @state() private notices?: string | 'loading' | 'failed'
 
@@ -107,7 +109,7 @@ export class LlAbout extends LitElement {
             >
           </p>`
         : nothing}
-      <details>
+      <details ?open=${this.outbound}>
         <summary>${strings.aboutOutbound}</summary>
         ${strings.aboutOutboundText.map((line) => html`<p class="outbound">${line}</p>`)}
       </details>

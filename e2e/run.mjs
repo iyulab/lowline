@@ -1832,7 +1832,7 @@ const scenarios = {
   },
 
   async 'tells of a newer release when it starts, installs only when asked, and looks no more once told not to'(app, vault) {
-    const banner = `__e2e.all('p.update')[0]?.textContent.replace(/\\s+/g, ' ').trim() ?? ''`
+    const banner = `(__e2e.all('p.update')[0]?.textContent.replace(/\\s+/g, ' ').trim() ?? '')`
     const settingsNow = async () => JSON.parse(await readFile(SETTINGS, 'utf8').catch(() => '{}'))
     const about = `__e2e.all('ll-about')[0]`
     const toggleChecking = async (on) => {
@@ -1870,6 +1870,27 @@ const scenarios = {
       updates.newer = null
     }
     await toggleChecking(true)
+    await app.noAlert()
+  },
+
+  async 'tells once, on the first launch, what leaves the computer, and shows the rest under 정보'(app, vault) {
+    const line = `(__e2e.all('p.outbound-once')[0]?.textContent.replace(/\\s+/g, ' ').trim() ?? '')`
+    const about = `__e2e.all('ll-about')[0]`
+    const told = async () => JSON.parse(await readFile(SETTINGS, 'utf8')).outboundToldOnce
+    await writeFile(SETTINGS, JSON.stringify({ ...JSON.parse(await readFile(SETTINGS, 'utf8')), outboundToldOnce: false }))
+    await app.reopen(vault)
+    await app.cdp.waitFor(`${line}.includes('실패 정보만 iyulab에')`, 'the one-time line')
+    await app.click('dc-button', '자세히')
+    await app.cdp.waitFor(`${about}.open && [...${about}.shadowRoot.querySelectorAll('details')].some((d) => d.open && d.textContent.includes('90일'))`, '정보 with what leaves the computer unfolded')
+    await app.click('dc-button', '닫기')
+    await app.cdp.waitFor(`!${about}.open && ${line} === ''`, 'the line answered')
+    for (let tries = 0; !(await told()); tries++) {
+      assert.ok(tries < 50, 'answered on this device')
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    await app.reopen(vault)
+    await new Promise((r) => setTimeout(r, 1_000))
+    assert.equal(await app.cdp.evaluate(line), '', 'told once only')
     await app.noAlert()
   },
 
@@ -2256,8 +2277,10 @@ async function runOnce(runs) {
   for (const dir of ['projections', 'presentations'])
     await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, dir), { recursive: true, force: true })
 
-  // This device's settings start as a fresh install's.
-  await rm(SETTINGS, { force: true })
+  // This device's settings start as a fresh install's, past the first launch's one-time line about what
+  // leaves the computer (its own scenario shows it).
+  await mkdir(dirname(SETTINGS), { recursive: true })
+  await writeFile(SETTINGS, JSON.stringify({ outboundToldOnce: true }))
 
   let app
   let failed = 0

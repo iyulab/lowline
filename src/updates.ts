@@ -7,18 +7,19 @@ import { invoke } from '@tauri-apps/api/core'
 export interface Settings {
   /** Whether to look for a newer release when the app starts and once a day while it runs. */
   checkForUpdates: boolean
+  /** Whether the person has been told, once, what leaves this computer. */
+  outboundToldOnce: boolean
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkForUpdates: true }
+export const DEFAULT_SETTINGS: Settings = { checkForUpdates: true, outboundToldOnce: false }
 
 /** The settings as written, over the defaults: a missing or unreadable file is the defaults. */
 export function settingsFrom(written: string | null): Settings {
   if (!written) return { ...DEFAULT_SETTINGS }
   try {
     const parsed = JSON.parse(written) as Partial<Record<keyof Settings, unknown>>
-    return {
-      checkForUpdates: typeof parsed.checkForUpdates === 'boolean' ? parsed.checkForUpdates : DEFAULT_SETTINGS.checkForUpdates,
-    }
+    const flag = (key: keyof Settings) => (typeof parsed[key] === 'boolean' ? (parsed[key] as boolean) : DEFAULT_SETTINGS[key])
+    return { checkForUpdates: flag('checkForUpdates'), outboundToldOnce: flag('outboundToldOnce') }
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
