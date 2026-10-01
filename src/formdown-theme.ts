@@ -2,7 +2,8 @@
 // `--formdown-*` properties, set here from the app's tokens. The tokens follow the light and dark
 // schemes, so the canvas does too. Set on the element, as outer styles win over its own defaults.
 
-import { css } from 'lit'
+import { css, unsafeCSS } from 'lit'
+import { strings } from './strings.js'
 
 export const formdownTheme = css`
   formdown-ui {
@@ -55,5 +56,13 @@ export const formdownTheme = css`
     --formdown-button-secondary-bg-hover: var(--dc-color-surface-hover);
     --formdown-button-danger-bg: var(--dc-color-danger);
     --formdown-button-danger-bg-hover: var(--dc-color-danger);
+  }
+
+  /* A value a date or number field could not take is shown beside it as written; say where it comes from. */
+  formdown-ui::part(unread-value)::before {
+    content: ${unsafeCSS(JSON.stringify(strings.unreadValue))};
+    color: var(--dc-color-text-secondary);
+    display: inline-block; /* keeps the value's underline off it */
+    margin-right: var(--dc-space-1);
   }
 `

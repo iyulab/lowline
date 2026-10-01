@@ -1043,6 +1043,15 @@ const scenarios = {
       await typeIn('방문일 부터', '')
       await typeIn('방문일 까지', '')
       await shows(4, '문서 4건')
+      // In its document the date field cannot hold it either: the value shows beside the field, and a save keeps it.
+      await app.openDocument(VISITS, '방문-4')
+      await app.cdp.waitFor(`__e2e.all('.formdown-unread').some((el) => el.textContent === '다음 주쯤')`, 'the unreadable date beside its field')
+      await app.type('[data-field-name="제목"]', '방문 4 다시')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
+      const saved = await readFile(files[4], 'utf8')
+      assert.match(saved, /방문일: 다음 주쯤/, 'the unreadable date kept by the save')
+      assert.match(saved, /방문 4 다시/)
       await app.noAlert()
     } finally {
       await app.learning()

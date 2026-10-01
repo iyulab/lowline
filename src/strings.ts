@@ -178,6 +178,8 @@ export const strings = {
   tableFilterFrom: (label: string) => `${label} 부터`,
   tableFilterUntil: (label: string) => `${label} 까지`,
   tableSkippedFields: (n: number) => `값을 읽지 못해 비운 칸 ${n}개`,
+  /** Before a value a date or number field could not take, shown beside it — the file keeps it. */
+  unreadValue: '파일에 적힌 값:',
   tableSkippedField: (document: string, field: string) => `${document} — ${field}`,
   hostStarting: '표를 준비하고 있습니다…',
   learningEmpty: '제안을 받는 판단 칸이 아직 없습니다. 서식에서 판단 칸을 정하면 여기서 곡선이 자랍니다.',

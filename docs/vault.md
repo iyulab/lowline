@@ -78,7 +78,7 @@ A value naming a document the vault does not have is kept as it is, and shown as
 
 A template's table has a row per document and a column per field. It filters by name, by a choice field's value, by the document a reference field names, by words in a field and by a number or date field's range, and it exports as CSV. A reference field shows, and exports, the name of the document it names. A table row opens its document.
 
-A date field holds a date as written (`2026-01-15`, or `2026-01-15T09:30` with a time) and reads as the same day on every computer, whatever its time zone. A value that is not a date keeps its row and is kept in the file; the table leaves that cell empty and lists the document and field so it can be fixed.
+A date field holds a date as written (`2026-01-15`, or `2026-01-15T09:30` with a time) and reads as the same day on every computer, whatever its time zone. A value that is not a date keeps its row and is kept in the file; the table leaves that cell empty and lists the document and field so it can be fixed, and the document shows the value as written beside its empty field until a date is picked. A number field shows a value that is not a number the same way.
 
 A template's list of documents finds them by their names or by the words of their values — a value's line that matched is shown beside it. An open document shows, when asked, the documents of its template most like it, leaving out those whose values are still in doubt. The words are looked up in an index of the documents' values (FluxIndex, character pairs for Korean, no model). These similar documents are for a person to look at; they never fill in a field.
 
