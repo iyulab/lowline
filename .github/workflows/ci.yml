@@ -68,12 +68,13 @@ jobs:
           npm run typecheck
           npm test
 
-      # The shell embeds the built UI and bundles the published sidecar; the tests need neither to
-      # be real, only present.
+      # The shell embeds the built UI and bundles the published sidecar and the notices; the tests
+      # need none of them to be real, only present.
       - name: Shell tests
         run: |
           npx vite build
-          mkdir -p src-host/publish
+          mkdir -p src-host/publish notices/out
+          touch notices/out/THIRD-PARTY-NOTICES.txt
           cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Sidecar tests

@@ -1,6 +1,6 @@
 // Checks the installer the way a person gets the app: installed silently for this user into a temporary
-// folder, started — and the sidecar it ships starts with it, from the installed folder — then closed,
-// taking the sidecar with it, and uninstalled. Windows only.
+// folder with its third-party notices beside it, started — and the sidecar it ships starts with it,
+// from the installed folder — then closed, taking the sidecar with it, and uninstalled. Windows only.
 //
 //   node scripts/check-installer.mjs [<installer>]
 //
@@ -9,7 +9,7 @@
 // (a build runner), or check an installer built with the e2e config.
 
 import { execFileSync, spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { findInstaller, withInstalled } from '@iyulab/tauri-kit-dev/installer'
@@ -42,6 +42,9 @@ console.log(`installer: ${installer}`)
 await withInstalled(
   installer,
   async (target) => {
+    const notices = join(target, 'THIRD-PARTY-NOTICES.txt')
+    if (!existsSync(notices) || !readFileSync(notices, 'utf8').includes('third-party packages')) throw new Error(`the installer did not ship ${notices}`)
+    console.log(`  ✓ ships its third-party notices`)
     const app = spawn(join(target, EXE), [], { stdio: 'ignore' })
     try {
       if (!(await until(() => runningFrom(SIDECAR, target) > 0, 30_000))) throw new Error(`the installed app did not start ${SIDECAR} from ${target}`)

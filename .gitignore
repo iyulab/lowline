@@ -28,3 +28,6 @@ claudedocs/
 
 # .NET sidecar publish output (bundled as a Tauri resource)
 src-host/publish/
+
+# Third-party notices, generated after the sidecar is built (scripts/notices.mjs)
+notices/out/

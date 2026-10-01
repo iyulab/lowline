@@ -38,7 +38,8 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../src-host/publish/": "host/"
+      "../src-host/publish/": "host/",
+      "../notices/out/THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
     },
     "windows": {
       "nsis": {
