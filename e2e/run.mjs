@@ -2031,7 +2031,10 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
 
       // A later launch with nothing changed: the thresholds the first launch's replay chose are kept beside
       // the cache, so the sidecar has no replay to run — its CPU over the seconds after is what an idle app costs.
+      // The first launch's work is let finish first — its replay and its text index, whichever ends last — or the
+      // later launch would only be finishing it.
       const kept = await thresholdsChosenSince(filled)
+      const settled = await sidecarQuiet()
       const again = Date.now()
       await app.reopen(vault)
       await app.showTable(INTAKE, { timeoutMs: 300_000 })
@@ -2041,7 +2044,7 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       console.log(
         `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${Object.entries(restartSteps).map(([k, v]) => `${k} ${v}`).join(' · ')} ms) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
       )
-      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}`)
+      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}${settled ? '' : ' (the first launch never went quiet)'}`)
     },
   }),
 }
@@ -2057,6 +2060,12 @@ async function thresholdsChosenSince(since, timeoutMs = 180_000) {
     }
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
+  return false
+}
+
+/** Waits until the sidecar spends under a tenth of a core over two seconds; false if it never did. */
+async function sidecarQuiet(timeoutMs = 180_000) {
+  for (const until = Date.now() + timeoutMs; Date.now() < until; ) if ((await sidecarCpuOver(2_000)) < 200) return true
   return false
 }
 
