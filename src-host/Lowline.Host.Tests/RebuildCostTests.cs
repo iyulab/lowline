@@ -109,7 +109,7 @@ public sealed class RebuildCostTests
                 var built = await Suggestions.BuildAsync(snapshot, Ct);
                 fresh.Stop();
                 var suggestions = Stopwatch.StartNew();
-                await Suggestions.BuildAsync(edited, Ct, built);
+                await Suggestions.BuildAsync(edited, Ct, built.Thresholds);
                 suggestions.Stop();
 
                 // Projection alone: a changed field list rebuilds the table with nothing appended.

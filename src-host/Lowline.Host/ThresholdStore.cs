@@ -1,0 +1,56 @@
+using System.Text.Json;
+using Gil.Forms;
+
+namespace Lowline.Host;
+
+/// <summary>
+/// The thresholds each judgment field's replay chose, kept beside the vault's projection cache so a later
+/// launch starts from them instead of replaying the whole history again — seconds on a large vault, and
+/// until it is done the fields would answer at the prior threshold, not the one their history earned. It is
+/// a cache like the projection: outside the vault, this device's own, and a file that cannot be read is no
+/// thresholds at all — the replay chooses them again.
+/// </summary>
+public static class ThresholdStore
+{
+    /// <summary>The shape of the file; one written in another is not read.</summary>
+    private const int Format = 1;
+
+    private sealed record Entry(string Template, string Field, ThresholdChoice? Choice, int SelectedAt, ThresholdChoice? KeyChoice, ThresholdChoice? Closest);
+
+    private sealed record Stored(int Format, IReadOnlyList<Entry> Fields);
+
+    private static readonly IReadOnlyDictionary<(string, string), FieldThreshold> None = new Dictionary<(string, string), FieldThreshold>();
+
+    /// <summary>
+    /// The thresholds kept at <paramref name="path"/>, each with the count of confirmed documents it was chosen
+    /// over; <see cref="FieldThreshold.Confirmed"/> is that count too, until the vault says how many it has now.
+    /// </summary>
+    public static IReadOnlyDictionary<(string Template, string Field), FieldThreshold> Load(string path)
+    {
+        try
+        {
+            using var file = File.OpenRead(path);
+            var stored = JsonSerializer.Deserialize<Stored>(file, JsonSerializerOptions.Web);
+            if (stored?.Format != Format) return None;
+            return stored.Fields.ToDictionary(
+                e => (e.Template, e.Field),
+                e => new FieldThreshold(e.Choice, e.SelectedAt, e.SelectedAt, e.KeyChoice, e.Closest));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return None;
+        }
+    }
+
+    /// <summary>Keeps the thresholds that have been chosen; one never chosen is left out.</summary>
+    public static void Save(string path, IReadOnlyDictionary<(string Template, string Field), FieldThreshold> thresholds)
+    {
+        var stored = new Stored(Format, [.. thresholds
+            .Where(t => t.Value.SelectedAt is not null)
+            .Select(t => new Entry(t.Key.Template, t.Key.Field, t.Value.Choice, t.Value.SelectedAt!.Value, t.Value.KeyChoice, t.Value.Closest))]);
+        // Written beside and moved over, so a launch never reads half a file.
+        var written = path + ".new";
+        File.WriteAllText(written, JsonSerializer.Serialize(stored, JsonSerializerOptions.Web));
+        File.Move(written, path, overwrite: true);
+    }
+}

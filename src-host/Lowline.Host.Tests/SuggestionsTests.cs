@@ -175,10 +175,10 @@ public sealed class SuggestionsTests
         Assert.True(choice.Answered >= Suggestions.MinimumAnswered);
 
         // Rebuilt from the same vault, the field keeps its threshold rather than replaying again.
-        var rebuilt = await Suggestions.BuildAsync(Many(15), Ct, previous: many);
+        var rebuilt = await Suggestions.BuildAsync(Many(15), Ct, kept: many.Thresholds);
         Assert.False(rebuilt.NeedsSelection);
         Assert.Equal(choice, rebuilt.Choice("intake@1", "담당"));
-        Assert.True((await Suggestions.BuildAsync(Many(17), Ct, previous: many)).NeedsSelection); // grew by a tenth
+        Assert.True((await Suggestions.BuildAsync(Many(17), Ct, kept: many.Thresholds)).NeedsSelection); // grew by a tenth
     }
 
     [Fact]
@@ -283,6 +283,56 @@ public sealed class SuggestionsTests
         await vault.ThresholdsSelected.WaitAsync(Ct);
         await vault.IngestAsync(Many(15), Ct);
         Assert.True(vault.ThresholdsSelected.IsCompleted); // nothing grew: no replay started
+    }
+
+    [Fact]
+    public async Task A_later_launch_starts_from_the_thresholds_the_last_one_chose()
+    {
+        var caches = Directory.CreateTempSubdirectory("lowline-thresholds-").FullName;
+        try
+        {
+            await using (var first = new VaultProjection(caches))
+            {
+                await first.IngestAsync(Many(15), "C:/vault", Ct);
+                await first.ThresholdsSelected.WaitAsync(Ct);
+            }
+            await using var later = new VaultProjection(caches);
+            await later.IngestAsync(Many(15), "C:/vault", Ct);
+            // Nothing grew since: the field answers at the threshold its history earned, with no replay to wait for.
+            Assert.True(later.ThresholdsSelected.IsCompleted);
+            var kept = ThresholdStore.Load(later.ThresholdsFileOf("C:/vault"))[("intake@1", "담당")];
+            Assert.Equal(15, kept.SelectedAt);
+            Assert.NotNull(kept.Choice);
+
+            // Another vault opened next, with a template of the same name, has its own history: its fields
+            // are replayed, not handed the first vault's thresholds.
+            var settled = later.ThresholdsSelected;
+            await later.IngestAsync(Many(15), "C:/other", Ct);
+            Assert.NotSame(settled, later.ThresholdsSelected);
+            await later.ThresholdsSelected.WaitAsync(Ct);
+        }
+        finally
+        {
+            Directory.Delete(caches, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_kept_thresholds_file_that_cannot_be_read_is_no_thresholds()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(file, "{ not json");
+            Assert.Empty(ThresholdStore.Load(file));
+            File.WriteAllText(file, """{"format": 99, "fields": []}""");
+            Assert.Empty(ThresholdStore.Load(file));
+            Assert.Empty(ThresholdStore.Load(file + ".missing"));
+        }
+        finally
+        {
+            File.Delete(file);
+        }
     }
 
     [Fact]

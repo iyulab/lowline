@@ -161,6 +161,9 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     /// </summary>
     public Task<int> CasesIndexed { get; private set; } = Task.FromResult(0);
 
+    /// <summary>The chosen thresholds of the vault at <paramref name="vault"/>, beside its projection cache.</summary>
+    public string ThresholdsFileOf(string vault) => Path.ChangeExtension(CacheFileOf(vault), ".thresholds.json");
+
     /// <summary>The text index file of the vault at <paramref name="vault"/>, beside its projection cache.</summary>
     public string CasesFileOf(string vault) => Path.ChangeExtension(CacheFileOf(vault), ".cases.db");
 
@@ -174,7 +177,10 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     /// </summary>
     public async Task<IngestResult> IngestAsync(VaultSnapshot vault, string root, CancellationToken cancellationToken)
     {
-        var suggestions = await Suggestions.BuildAsync(vault, cancellationToken, _suggestions);
+        // The thresholds this vault's fields last had: from the suggestions in use when it is the vault already open,
+        // else as an earlier launch kept them — never another vault's, whose fields may share a template's name.
+        var kept = _vault == root && _suggestions is { } current ? current.Thresholds : ThresholdStore.Load(ThresholdsFileOf(root));
+        var suggestions = await Suggestions.BuildAsync(vault, cancellationToken, kept);
         var curves = Curves.Compute(vault);
         await _gate.WaitAsync(cancellationToken);
         try
@@ -204,7 +210,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             if (suggestions.NeedsSelection)
             {
                 _selecting = new CancellationTokenSource();
-                ThresholdsSelected = SelectThresholdsAsync(suggestions, _selecting.Token);
+                ThresholdsSelected = SelectThresholdsAsync(suggestions, root, _selecting.Token);
             }
             return result;
         }
@@ -218,7 +224,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     /// Chooses thresholds away from the request that ingested the vault — the replay takes seconds on a large
     /// vault — and uses them if no later ingest has replaced these suggestions meanwhile.
     /// </summary>
-    private async Task SelectThresholdsAsync(Suggestions suggestions, CancellationToken cancellationToken)
+    private async Task SelectThresholdsAsync(Suggestions suggestions, string root, CancellationToken cancellationToken)
     {
         try
         {
@@ -226,7 +232,11 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             await _gate.WaitAsync(cancellationToken);
             try
             {
-                if (ReferenceEquals(_suggestions, suggestions)) suggestions.Apply(chosen);
+                if (ReferenceEquals(_suggestions, suggestions))
+                {
+                    suggestions.Apply(chosen);
+                    ThresholdStore.Save(ThresholdsFileOf(root), suggestions.Thresholds);
+                }
             }
             finally
             {

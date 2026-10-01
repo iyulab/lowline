@@ -119,10 +119,13 @@ public sealed class Suggestions
     /// <summary>
     /// Builds memory from the vault's saved documents, leaving out those with a conflict copy — their
     /// values are not confirmed until the person settles which copy to keep. Where documents disagree,
-    /// Gil keeps the latest confirmation, so the order they come in does not matter. Each judgment field keeps the similarity
-    /// threshold <paramref name="previous"/> chose for it until <see cref="SelectThresholdsAsync"/> chooses again.
+    /// Gil keeps the latest confirmation, so the order they come in does not matter. Each judgment field keeps the
+    /// thresholds in <paramref name="kept"/> — chosen for it by an earlier build, or kept from an earlier launch — until
+    /// <see cref="SelectThresholdsAsync"/> chooses again.
     /// </summary>
-    public static async Task<Suggestions> BuildAsync(VaultSnapshot vault, CancellationToken cancellationToken, Suggestions? previous = null)
+    public static async Task<Suggestions> BuildAsync(
+        VaultSnapshot vault, CancellationToken cancellationToken,
+        IReadOnlyDictionary<(string Template, string Field), FieldThreshold>? kept = null)
     {
         var documents = vault.Documents.Where(d => !d.Conflicted).ToLookup(d => d.Template, StringComparer.Ordinal);
         var templates = vault.Templates
@@ -135,8 +138,8 @@ public sealed class Suggestions
             foreach (var field in template.Suggest!)
             {
                 var confirmed = settled[template.Ref].Count(d => d.Values.ContainsKey(field));
-                thresholds[(template.Ref, field)] = previous?._thresholds.GetValueOrDefault((template.Ref, field)) is { } kept
-                    ? kept with { Confirmed = confirmed }
+                thresholds[(template.Ref, field)] = kept?.GetValueOrDefault((template.Ref, field)) is { } threshold
+                    ? threshold with { Confirmed = confirmed }
                     : new FieldThreshold(null, confirmed, SelectedAt: null);
             }
         }
@@ -191,6 +194,9 @@ public sealed class Suggestions
         _thresholds = thresholds;
         _forms = Forms();
     }
+
+    /// <summary>Each judgment field's thresholds as they stand, for a later build or launch to keep.</summary>
+    public IReadOnlyDictionary<(string Template, string Field), FieldThreshold> Thresholds => _thresholds;
 
     /// <summary>How a judgment field's threshold was chosen, and how it did on the replay; null until it has been.</summary>
     public ThresholdChoice? Choice(string template, string field) => _thresholds.GetValueOrDefault((template, field))?.Choice;

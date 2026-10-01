@@ -13,7 +13,7 @@ Where saved documents disagree on the same request, the latest save wins. A sugg
 
 ## How close is close enough
 
-The threshold is chosen per field by replaying its saved documents in the order they were saved: the lowest similarity down to which the replayed suggestions were right 80% of the time at every similarity, not only taken together, so many close matches cannot carry a band of poor ones. It is chosen once a field has enough saved documents, and again as they grow by a tenth; until then a fixed similarity serves.
+The threshold is chosen per field by replaying its saved documents in the order they were saved: the lowest similarity down to which the replayed suggestions were right 80% of the time at every similarity, not only taken together, so many close matches cannot carry a band of poor ones. It is chosen once a field has enough saved documents, and again as they grow by a tenth; until then a fixed similarity serves. The chosen thresholds are kept on this device beside the vault's cache, so a later launch uses them at once rather than the fixed similarity while it replays again.
 
 A judgment field left without a suggestion says why beside it: nothing confirmed yet; nothing confirmed is close enough (with how many confirmed documents it had to learn from); replaying its history never reached the target, so it suggests nothing from similar records yet; or suggestions are not available right now, while typing and saving go on.
 
