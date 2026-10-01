@@ -3442,9 +3442,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-diagnostics"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbe23ed836b338ecf8db7c717d48047d553a86099e3ee5240f08a209c072f46a"
+checksum = "92f934410272834753d2dc20b271bec46e4efa25e29578093f286afcb664e135"
 dependencies = [
  "serde",
  "serde_json",
@@ -3454,9 +3454,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-fs"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7f893a41e64586f7f83ce840c4ae487f6fad040f811d79acf32b2440eecda48"
+checksum = "dfdb898c4372c60b14fef0b6a021c52b2704efa51724a77634bb6d4f473abbc2"
 dependencies = [
  "dunce",
  "libc",
@@ -3466,21 +3466,23 @@ dependencies = [
 
 [[package]]
 name = "tauri-kit-sidecar"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20b6aec58fa3376342361703b78b07be4515cc3ca4708da12bf984f7b7653eff"
+checksum = "82254f320a45bc1e2a85bda6a2d4349d6489f8dc080d0631b0f59024189d1a25"
 dependencies = [
  "getrandom 0.3.4",
  "libc",
+ "serde",
+ "serde_json",
  "ureq",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "tauri-kit-watch"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d1797462f4d5db925e63ec81f93871de046413945e24cc23d54a7c421604c72"
+checksum = "f4af3aa54a4b134ed8aa64eace20b6bf6b7547005b4ccd2744527f86fd33274b"
 dependencies = [
  "notify-debouncer-full",
  "tauri-kit-fs",

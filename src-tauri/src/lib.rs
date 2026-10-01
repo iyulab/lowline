@@ -638,7 +638,7 @@ fn report(report: report::Report) {
 }
 
 /// Reports what the sidecar failed at away from any request.
-fn report_host_failures(failures: Vec<host::HostFailure>) {
+fn report_host_failures(failures: Vec<tauri_kit_sidecar::loopback::Fault>) {
     for failure in failures {
         report(report::new(
             report::Layer::Host,

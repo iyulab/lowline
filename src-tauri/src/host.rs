@@ -12,7 +12,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri_kit_sidecar::loopback::{Client, Loopback, LoopbackOptions, TransportError};
+use tauri_kit_sidecar::loopback::{
+    Client, Fault, Loopback, LoopbackOptions, Response, TransportError,
+};
 
 /// Must match `HostAuth.TokenVariable` in `src-host/Lowline.Host`.
 pub const TOKEN_VARIABLE: &str = "LOWLINE_HOST_TOKEN";
@@ -35,30 +37,11 @@ pub struct HostClient {
     client: Client,
 }
 
-// TODO(upstream: tauri-kit-sidecar `Response::fault` / `Fault`, pushed after 0.9.1 and not yet
-// published) — once a release carries them, `HostFailure` is `tauri_kit_sidecar::loopback::Fault`,
-// `answer` takes the `Response` and reads `response.fault()`, and `FaultAnswer` goes.
-/// A request the host failed: what the host said about it, when it said something — the
-/// exception's type and the methods it passed through (TauriKit.Sidecar.Loopback's `FaultView`).
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
-pub struct HostFailure {
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(default)]
-    pub frames: Vec<String>,
-}
-
-/// The body of a request the host failed: `{"fault":{…}}`.
-#[derive(serde::Deserialize)]
-struct FaultAnswer {
-    fault: HostFailure,
-}
-
 /// Why a request to the host did not come back with an answer.
 #[derive(Debug)]
 pub enum CallError {
     /// The host failed the request and said what failed.
-    Failed(HostFailure),
+    Failed(Fault),
     /// The host answered with this status and nothing more to go on.
     Status(u16),
     /// The request did not reach the host, or its answer could not be read.
@@ -82,13 +65,13 @@ impl From<TransportError> for CallError {
 }
 
 /// An answer by its status: the body when it succeeded; otherwise what failed, if the host said.
-pub fn answer(status: u16, body: String) -> Result<String, CallError> {
-    match status {
-        200..=299 => Ok(body),
-        500 => Err(serde_json::from_str::<FaultAnswer>(&body)
-            .map_or(CallError::Status(500), |a| CallError::Failed(a.fault))),
-        _ => Err(CallError::Status(status)),
+pub fn answer(response: Response) -> Result<String, CallError> {
+    if response.is_success() {
+        return Ok(response.body);
     }
+    Err(response
+        .fault()
+        .map_or(CallError::Status(response.status), CallError::Failed))
 }
 
 impl Host {
@@ -123,17 +106,17 @@ impl HostClient {
     /// A GET request to the host, returning the response body.
     pub fn get(&self, path: &str) -> Result<String, CallError> {
         let response = self.client.get(path)?;
-        answer(response.status, response.body)
+        answer(response)
     }
 
     /// A POST request with a JSON body, returning the response body.
     pub fn post_json(&self, path: &str, body: &str) -> Result<String, CallError> {
         let response = self.client.post_json(path, body)?;
-        answer(response.status, response.body)
+        answer(response)
     }
 
     /// The host's failures of work no request waited on, since the last time they were taken.
-    pub fn take_failures(&self) -> Vec<HostFailure> {
+    pub fn take_failures(&self) -> Vec<Fault> {
         self.post_json("/failures/take", "")
             .ok()
             .and_then(|body| serde_json::from_str(&body).ok())
@@ -210,14 +193,24 @@ pub fn executable(resource_dir: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    fn reply(status: u16, body: &str) -> Response {
+        Response {
+            status,
+            body: body.into(),
+        }
+    }
+
     #[test]
     fn an_answer_is_its_body_when_the_request_succeeded() {
-        assert_eq!(answer(200, "{}".into()).unwrap(), "{}");
+        assert_eq!(answer(reply(200, "{}")).unwrap(), "{}");
     }
 
     #[test]
     fn a_failed_request_says_what_failed_when_the_host_said() {
-        let failed = answer(500, r#"{"fault":{"type":"System.ArgumentException","at":"Lowline.Host.VaultProjection.IngestAsync","frames":["Lowline.Host.VaultProjection.IngestAsync"]}}"#.into());
+        let failed = answer(reply(
+            500,
+            r#"{"fault":{"type":"System.ArgumentException","at":"Lowline.Host.VaultProjection.IngestAsync","frames":["Lowline.Host.VaultProjection.IngestAsync"]}}"#,
+        ));
         match failed {
             Err(CallError::Failed(f)) => {
                 assert_eq!(f.kind, "System.ArgumentException");
@@ -230,11 +223,11 @@ mod tests {
     #[test]
     fn any_other_failure_is_only_its_status() {
         assert!(matches!(
-            answer(500, "".into()),
+            answer(reply(500, "")),
             Err(CallError::Status(500))
         ));
         assert!(matches!(
-            answer(404, "".into()),
+            answer(reply(404, "")),
             Err(CallError::Status(404))
         ));
     }

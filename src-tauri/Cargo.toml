@@ -23,11 +23,11 @@ serde_json = "1"
 # The device id's random bytes.
 getrandom = "0.4"
 # Error reports that carry no content, sent to Application Insights by a release build.
-tauri-kit-diagnostics = { version = "0.9.1", features = ["appinsights"] }
-tauri-kit-fs = "0.9.1"
+tauri-kit-diagnostics = { version = "0.10.0", features = ["appinsights"] }
+tauri-kit-fs = "0.10.0"
 # The sidecar as a loopback helper: a per-launch token, its port, HTTP to it.
-tauri-kit-sidecar = { version = "0.9.1", features = ["loopback"] }
-tauri-kit-watch = "0.9.1"
+tauri-kit-sidecar = { version = "0.10.0", features = ["loopback"] }
+tauri-kit-watch = "0.10.0"
 # Deleting moves a file to the system's trash (Recycle Bin, Trash, freedesktop trash), where the
 # person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"
