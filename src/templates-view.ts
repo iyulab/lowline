@@ -44,7 +44,7 @@ export class LlTemplates extends LitElement {
       flex: 1;
       min-height: 20rem;
       box-sizing: border-box;
-      font-family: ui-monospace, monospace;
+      font-family: var(--dc-font-mono, ui-monospace, monospace);
       font-size: 13px;
       padding: var(--dc-space-2, 8px);
       border: 1px solid var(--dc-color-border, #e2e2e4);
