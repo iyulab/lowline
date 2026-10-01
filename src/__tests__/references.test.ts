@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
-import { referenceChoices, referringDocuments, withReferenceNames } from '../references.js'
+import { namedEvidence, referenceChoices, referringDocuments, withReferenceNames } from '../references.js'
 
 const field = (name: string, reference?: string) => ({ name, label: name, type: 'select', multiple: false, options: [], ...(reference ? { reference } : {}) })
 const customer: TemplateSnapshot = { ref: 'customer@2', fields: [field('등급')], suggest: [] }
@@ -80,5 +80,17 @@ describe('referringDocuments', () => {
 
   it('has none for a document nothing names', () => {
     expect(referringDocuments('c-9', 'customer', [customer, inquiry], all)).toEqual([])
+  })
+})
+
+describe('namedEvidence', () => {
+  it("shows a document-naming field's value as the document's name", () => {
+    expect(namedEvidence('고객: c-2', inquiry, [customer, inquiry], documents, names)).toBe('고객: 한빛상사')
+    expect(namedEvidence('고객: 3f2a1b2c-dead', inquiry, [customer, inquiry], documents, names)).toBe('고객: 없는 고객 (3f2a1b2c)')
+  })
+
+  it('leaves any other evidence as it is', () => {
+    expect(namedEvidence('분류: c-2', inquiry, [customer, inquiry], documents, names)).toBe('분류: c-2')
+    expect(namedEvidence('문서/문의 1.md', inquiry, [customer, inquiry], documents, names)).toBe('문서/문의 1.md')
   })
 })

@@ -102,3 +102,24 @@ export function referringDocuments(
     return naming.length ? [{ template: template.ref, documents: naming }] : []
   })
 }
+
+/**
+ * A suggestion's evidence as people read it. A value settled alongside another is backed by a `field: value`
+ * line; when that field names a document, its value is the document's id, shown as the document's name.
+ */
+export function namedEvidence(
+  evidence: string,
+  template: TemplateSnapshot | undefined,
+  templates: readonly TemplateSnapshot[],
+  documents: readonly DocumentSnapshot[],
+  names: ReadonlyMap<string, string>,
+): string {
+  const at = evidence.indexOf(': ')
+  if (at < 0) return evidence
+  const name = evidence.slice(0, at)
+  const field = template?.fields.find((f) => f.name === name && f.reference)
+  if (!field) return evidence
+  const row = { path: '', values: { [name]: evidence.slice(at + 2) } }
+  const shown = withReferenceNames({ template: template!.ref, columns: [], rows: [row] }, { ...template!, fields: [field] }, templates, documents, names)
+  return `${name}: ${String(shown.rows[0].values[name])}`
+}

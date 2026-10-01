@@ -182,6 +182,35 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task A_field_naming_another_document_decides_a_judgment_field_by_that_documents_id()
+    {
+        // 고객 names a customer document by its id; which customer it is decides 담당.
+        var inquiry = new TemplateSnapshot("inquiry@1",
+        [
+            new TemplateField("요청", "textarea"),
+            new TemplateField("고객", "select"),
+            new TemplateField("담당", "select"),
+        ], Suggest: ["담당"]);
+        string[] words = ["사과", "기차", "구름", "연필", "바다", "시계", "우산", "나무", "모자", "종이"];
+        var owners = new Dictionary<string, string>
+        {
+            ["3f2a1b2c-0000-4000-8000-000000000001"] = "장비",
+            ["3f2a1b2c-0000-4000-8000-000000000002"] = "인사",
+            ["3f2a1b2c-0000-4000-8000-000000000003"] = "총무",
+        };
+        var customers = owners.Keys.ToArray();
+        var vault = new VaultSnapshot([inquiry],
+            [.. Enumerable.Range(0, 30).Select(i => new DocumentSnapshot($"문서/{i}.md", "inquiry@1",
+                Values($$"""{"요청": "{{words[i % 10]}} {{words[i / 10 * 3 % 10]}} {{i}}", "고객": "{{customers[i % 3]}}", "담당": "{{owners[customers[i % 3]]}}"}"""),
+                Modified: i))]);
+        var suggestions = await Suggestions.BuildAsync(vault, Ct);
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
+
+        var request = new SuggestRequest("inquiry@1", "담당", Values($$"""{"요청": "전혀 다른 요청", "고객": "{{customers[1]}}"}"""));
+        Assert.Equal(new Suggestion("인사", "key", $"고객: {customers[1]}", null), await suggestions.SuggestAsync(request, Ct));
+    }
+
+    [Fact]
     public async Task Answers_from_a_field_that_decides_it_once_its_history_shows_it_does()
     {
         // 부서 decides 담당 here, while no two requests are alike.

@@ -25,7 +25,7 @@ import { currentRefs, revisedRef, templateId, templateVersion } from './template
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import { referenceTargets, type Abstention, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
-import { referenceChoices, referringDocuments } from './references.js'
+import { namedEvidence, referenceChoices, referringDocuments } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -907,7 +907,10 @@ export class LlDocuments extends LitElement {
   /** What a suggestion rests on, in words: the similar document by its name, or the value it was settled with. */
   private sourceOf(s: Suggestion): string {
     if (!s.source) return strings.suggestion
-    if (s.mode === 'key') return strings.suggestionKey(s.source)
+    if (s.mode === 'key') {
+      const template = this.vaultTemplates.find((t) => t.ref === this.draft?.templateRef)
+      return strings.suggestionKey(namedEvidence(s.source, template, this.vaultTemplates, this.vaultDocuments, this.templateNames))
+    }
     const cases = s.similar ?? []
     if (cases.length > 1) return strings.suggestionSources(cases.map((c) => ({ name: this.nameOf(c.source), value: c.value ?? '' })))
     return strings.suggestionSource(this.nameOf(s.source))
