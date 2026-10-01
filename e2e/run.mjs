@@ -1817,7 +1817,8 @@ const scenarios = {
     await app.sidebar('정보')
     const about = `__e2e.all('ll-about')[0]`
     const text = `${about}.shadowRoot.textContent.replace(/\\s+/g, ' ')`
-    await app.cdp.waitFor(`${about}.open && ${text}.includes('판 0.0.0')`, 'the about dialog with the version')
+    const { version } = JSON.parse(await readFile(join(here, '..', 'src-tauri', 'tauri.conf.json'), 'utf8'))
+    await app.cdp.waitFor(`${about}.open && ${text}.includes(${q(`판 ${version}`)})`, 'the about dialog with the version')
     const shown = await app.cdp.evaluate(text)
     for (const part of ['© iyulab', 'AGPL-3.0', '어떤 보증도 없이', 'https://github.com/iyulab/lowline'])
       assert.ok(shown.includes(part), `${part} in ${shown}`)
