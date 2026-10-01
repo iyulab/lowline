@@ -648,6 +648,14 @@ fn report_host_failures(failures: Vec<tauri_kit_sidecar::loopback::Fault>) {
     }
 }
 
+/// The notices of the third-party packages shipped with the app, as the installer laid them beside
+/// it — what the about dialog shows.
+#[tauri::command]
+fn third_party_notices(app: tauri::AppHandle) -> Result<String, String> {
+    let dir = app.path().resource_dir().map_err(|e| e.to_string())?;
+    std::fs::read_to_string(dir.join("THIRD-PARTY-NOTICES.txt")).map_err(|e| e.to_string())
+}
+
 /// A failure the UI caught: its kind (an error's class name or an app-owned code) and stack. Only
 /// what the report keeps of them is written.
 #[tauri::command]
@@ -722,7 +730,8 @@ pub fn run() {
             record_event,
             list_events,
             record_presentation,
-            read_presentations
+            read_presentations,
+            third_party_notices
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")

@@ -1813,6 +1813,23 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'shows what Lowline is: its version, its license, where its source is, and the notices of what it ships with'(app) {
+    await app.sidebar('정보')
+    const about = `__e2e.all('ll-about')[0]`
+    const text = `${about}.shadowRoot.textContent.replace(/\\s+/g, ' ')`
+    await app.cdp.waitFor(`${about}.open && ${text}.includes('판 0.0.0')`, 'the about dialog with the version')
+    const shown = await app.cdp.evaluate(text)
+    for (const part of ['© iyulab', 'AGPL-3.0', '어떤 보증도 없이', 'https://github.com/iyulab/lowline'])
+      assert.ok(shown.includes(part), `${part} in ${shown}`)
+    // The notices are read only when opened: the file the installer lays beside the app.
+    await app.click('summary', '함께 쓰는 소프트웨어의 고지')
+    const notices = await app.cdp.waitFor(`${about}.shadowRoot.querySelector('pre')?.textContent`, 'the notices', { timeoutMs: 15_000 })
+    assert.ok(notices.includes('Formbase.Core') && notices.includes('lit'), 'the notices list what is shipped')
+    await app.click('dc-button', '닫기')
+    await app.cdp.waitFor(`!${about}.open`, 'the about dialog closed')
+    await app.noAlert()
+  },
+
   async 'writes and saves a document with the keyboard alone in at most 12 keys'(app, vault) {
     let keys = 0
     const press = async (key, options) => {

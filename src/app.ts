@@ -22,6 +22,7 @@ import './documents-view.js'
 import type { LlDocuments } from './documents-view.js'
 import './table-view.js'
 import './learning-view.js'
+import './about-dialog.js'
 
 /** What of a template shows: its table, its source, or its documents. */
 type Tab = 'table' | 'template' | 'documents'
@@ -33,8 +34,9 @@ function modalOpen(root: Document | ShadowRoot): boolean {
   return false
 }
 
-/** The sidebar's foot: an action that shows the shortcuts, not a place. */
+/** The sidebar's foot: actions that show the shortcuts and what Lowline is, not places. */
 const SHORTCUTS = 'shortcuts'
+const ABOUT = 'about'
 
 @customElement('ll-app')
 export class LlApp extends LitElement {
@@ -107,6 +109,8 @@ export class LlApp extends LitElement {
   @state() private sidebarCollapsed = false
   /** The shortcuts are showing (Ctrl+/, or 단축키 at the foot of the sidebar). */
   @state() private showingShortcuts = false
+  /** What Lowline is and under which terms, from 정보 at the foot of the sidebar. */
+  @state() private showingAbout = false
   private readonly wideQuery = matchMedia(`(min-width: ${desktopMinWidth}px)`)
   @state() private wide = this.wideQuery.matches
   private readonly onWidth = () => (this.wide = this.wideQuery.matches)
@@ -453,13 +457,17 @@ export class LlApp extends LitElement {
                 references: strings.navReferences,
               }, this.referenceIds)
             : []}
-          .bottomItems=${[{ id: SHORTCUTS, icon: '⌨', label: strings.shortcuts }]}
+          .bottomItems=${[
+            { id: SHORTCUTS, icon: '⌨', label: strings.shortcuts },
+            { id: ABOUT, icon: 'ⓘ', label: strings.about },
+          ]}
           @dp-sidebar-select=${(e: DpSidebarSelectEvent) => this.onSidebarSelect(e)}
           @dp-sidebar-activate=${(_: DpSidebarActivateEvent) => (this.sidebarOpen = false) /* a drawer gives way to any pick, the place already shown too */}
           @dp-sidebar-action=${(e: DpSidebarActionEvent) => {
-            if (e.itemId !== SHORTCUTS) return
+            if (e.itemId !== SHORTCUTS && e.itemId !== ABOUT) return
             this.sidebarOpen = false
-            this.showingShortcuts = true
+            if (e.itemId === SHORTCUTS) this.showingShortcuts = true
+            else this.showingAbout = true
           }}
         >
           <ll-mark slot="icon" size="20" label=""></ll-mark>
@@ -498,6 +506,7 @@ export class LlApp extends LitElement {
         ?open=${this.showingShortcuts}
         @dp-shortcut-overlay-dismiss=${() => (this.showingShortcuts = false)}
       ></dp-shortcut-overlay>
+      <ll-about ?open=${this.showingAbout} @close=${() => (this.showingAbout = false)}></ll-about>
       <dc-confirm-dialog
         heading=${strings.unsavedHeading}
         confirm-label=${strings.unsavedDiscard}

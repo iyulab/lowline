@@ -148,6 +148,12 @@ export function touches(change: VaultChanged, path: string): boolean {
 export type HostStatus = { state: 'starting' } | { state: 'ready' } | { state: 'failed'; message: string }
 
 /** The sidecar, through the shell: the UI never holds its address or token. */
+/** What the about dialog shows that only the shell can read. */
+export const about = {
+  /** The third-party notices shipped beside the app. */
+  notices: () => invoke<string>('third_party_notices'),
+}
+
 export const host = {
   status: () => invoke<HostStatus>('host_status'),
   ingest: (snapshot: VaultSnapshot) => invoke<IngestResult>('host_ingest', { snapshot }),
