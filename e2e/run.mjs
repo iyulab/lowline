@@ -917,6 +917,53 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '점수표')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async "fills a field that refers to another template's documents by their names, keeping their ids"(app, vault) {
+    const CUSTOMER = { name: '고객', ref: 'customer@1', path: '서식/고객.fd.md' }
+    const INQUIRY = { name: '문의', ref: 'inquiry@1', path: '서식/문의.fd.md' }
+    const customerBody = '# 고객\n\n상호: ___@상호\n'
+    const inquiryBody = '# 문의\n\n@고객 -> customer: [select]\n\n내용: ___@내용\n'
+    const files = [
+      [CUSTOMER.path, `---\nid: customer\nversion: 1\n---\n${customerBody}`],
+      [INQUIRY.path, `---\nid: inquiry\nversion: 1\n---\n${inquiryBody}`],
+      ['문서/한빛상사.md', `---\ntemplate: customer@1\nlowline:\n  id: c-hanbit\n상호: 한빛상사\n---\n${customerBody}`],
+      ['문서/가나상회.md', `---\ntemplate: customer@1\nlowline:\n  id: c-gana\n상호: 가나상회\n---\n${customerBody}`],
+      ['문서/옛 문의.md', `---\ntemplate: inquiry@1\n고객: 3f2a1b2c-0000-4000-8000-000000000000\n내용: 옛 기록\n---\n${inquiryBody}`],
+    ].map(([path, text]) => [join(vault, path), text])
+    for (const [file, text] of files) await writeFile(file, text)
+    const offered = () =>
+      app.cdp.evaluate(`[...__e2e.one('select[name="고객"]').options].map((o) => o.value + '=' + o.textContent.trim())`)
+    try {
+      await app.tabOf(INQUIRY, '문서', { timeoutMs: 30_000 })
+      await app.click('dc-button', '새 문서')
+      await app.cdp.waitFor(`__e2e.one('select[name="고객"]')?.options.length === 2`, 'the customers offered', { timeoutMs: 15_000 })
+      // By name, valued by id; nothing picked until the person picks.
+      assert.deepEqual(await offered(), ['c-gana=가나상회', 'c-hanbit=한빛상사'])
+      assert.equal(await app.cdp.evaluate(`__e2e.one('select[name="고객"]').selectedIndex`), -1)
+      const before = new Set(await readdir(join(vault, '문서')))
+      await app.choose('select[name="고객"]', 'c-hanbit')
+      await app.type('[data-field-name="내용"]', '견적 요청')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
+      const saved = (await readdir(join(vault, '문서'))).find((f) => !before.has(f))
+      assert.ok(saved, 'the new inquiry saved')
+      files.push([join(vault, '문서', saved)])
+      assert.equal((await fileValues(join(vault, '문서', saved))).고객, 'c-hanbit', 'the file keeps the id')
+
+      // A value naming a document the vault does not have is kept, and said to be missing.
+      await app.pickDocument('옛 문의')
+      await app.cdp.waitFor(
+        `[...(__e2e.one('select[name="고객"]')?.options ?? [])].some((o) => o.selected && o.textContent.trim() === '없는 고객 (3f2a1b2c)')`,
+        'the missing customer shown',
+        { timeoutMs: 15_000 },
+      )
+      await app.noAlert()
+    } finally {
+      await app.learning()
+      await Promise.all(files.map(([f]) => rm(f, { force: true })))
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '문의')`, 'the templates gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'filters a table by a date range and names the dates it could not read'(app, vault) {
     const VISITS = { name: '방문 기록', ref: 'visits@1', path: '서식/방문 기록.fd.md' }
     const body = '# 방문 기록\n\n제목: ___@제목\n\n@방문일: [date]\n'

@@ -61,6 +61,19 @@ What is recorded about a document — its suggestion events, the rejections that
 - Documents and templates are listed by their file names. A template's documents are listed the last name first — a new document's name starts with its day, so the latest are on top — and a sync conflict copy follows its original.
 - A file copied outside the app keeps its original's id; the copy that is then saved with a change gets a new one and becomes a document of its own.
 
+### Fields that name other documents
+
+A field written `@고객 -> customer: [select]` names one document of the template whose `id` is `customer`. The field offers that template's documents by their file names, and the document records the chosen one's id — so renaming it changes nothing in the documents that name it:
+
+```yaml
+---
+template: inquiry@1
+고객: c2a7e3f0-41d2-4b8e-9f3a-6d0e1b5c7a92
+---
+```
+
+A value naming a document the vault does not have is kept as it is, and shown as missing with the start of its id.
+
 ## Tables, finding and importing
 
 A template's table has a row per document and a column per field. It filters by name, by a choice field's value, by words in a field and by a number or date field's range, and it exports as CSV. A table row opens its document.

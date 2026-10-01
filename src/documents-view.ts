@@ -24,7 +24,8 @@ import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { currentRefs, revisedRef, templateVersion } from './template-revision.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
-import type { Abstention, CaseHit, Suggestion, TemplateSnapshot } from './projection.js'
+import type { Abstention, CaseHit, DocumentSnapshot, Suggestion, TemplateSnapshot } from './projection.js'
+import { referenceChoices } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -190,6 +191,9 @@ export class LlDocuments extends LitElement {
   private searchRun = 0
   /** Counts reads of the vault's list, and the latest read the sidecar has been handed since. */
   private reads = 0
+  /** The vault's templates and documents as last read: what reference fields offer (`references.ts`). */
+  private vaultTemplates: TemplateSnapshot[] = []
+  private vaultDocuments: DocumentSnapshot[] = []
   private handedOver = -1
   /** The documents most like the open one, once asked for by opening their list. */
   @state() private similar?: CaseHit[] | 'loading' | 'failed'
@@ -317,6 +321,8 @@ export class LlDocuments extends LitElement {
       this.templateNames = read.names
       this.currentRefs = currentRefs(read.templates)
       this.sharedIds = sharedIds(read.documents)
+      this.vaultTemplates = read.templates
+      this.vaultDocuments = read.documents
     } catch (e) {
       this.error = describeError(e)
     }
@@ -807,6 +813,12 @@ export class LlDocuments extends LitElement {
     if (await confirmDiscard()) await next()
   }
 
+  /** What the draft's reference fields can name: the documents of the templates they refer to. */
+  private choices(draft: Draft) {
+    const template = this.vaultTemplates.find((t) => t.ref === draft.templateRef)
+    return referenceChoices(template, this.vaultTemplates, this.vaultDocuments, this.templateNames, this.initialValues, draft.kind === 'existing' ? draft.id : undefined)
+  }
+
   /** Closes the open document — in a narrow window, where the list and the document take turns, for the list. */
   private backToList() {
     this.reset()
@@ -1023,6 +1035,7 @@ export class LlDocuments extends LitElement {
                 html`<formdown-ui
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
+                .choices=${guard([this.opened, this.reads], () => this.choices(draft))}
                 .fieldStates=${guard([this.suggestions, this.abstained], () => this.fieldStates())}
                 @focusin=${this.onFormFocus}
                 @formdown-data-update=${(e: CustomEvent<{ formData: Record<string, unknown> }>) => this.onData(e, opened)}
