@@ -168,6 +168,9 @@ export const strings = {
   tableFilterAtLeast: (label: string) => `${label} 이상`,
   tableFilterAtMost: (label: string) => `${label} 이하`,
   backToList: '목록으로',
+  referringTitle: '이 문서를 가리키는 문서',
+  referringNone: '아직 이 문서를 가리키는 문서가 없습니다.',
+  referringGroup: (template: string, n: number) => `${template} ${n}건`,
   // A reference field's value naming a document the vault does not have: kept, shown by the start of its id.
   missingReference: (template: string, id: string) => `없는 ${template} (${id.slice(0, 8)})`,
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,

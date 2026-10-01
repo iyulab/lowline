@@ -21,11 +21,11 @@ import {
   type FieldValues,
 } from './documents.js'
 import { documentId, newDocumentId, sharedIds } from './identity.js'
-import { currentRefs, revisedRef, templateVersion } from './template-revision.js'
+import { currentRefs, revisedRef, templateId, templateVersion } from './template-revision.js'
 import { describeError } from './errors.js'
 import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
-import type { Abstention, CaseHit, DocumentSnapshot, Suggestion, TemplateSnapshot } from './projection.js'
-import { referenceChoices } from './references.js'
+import { referenceTargets, type Abstention, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
+import { referenceChoices, referringDocuments } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -102,6 +102,31 @@ export class LlDocuments extends LitElement {
       display: block;
       font-size: 0.85em;
       color: var(--dc-color-text-muted, #666);
+    }
+    .referring h3,
+    .referring h4 {
+      margin: var(--dc-space-2, 8px) 0 var(--dc-space-1, 4px);
+      font-size: 0.875em;
+      color: var(--dc-color-text-muted, #666);
+    }
+    .referring ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .referring button {
+      text-align: left;
+      width: 100%;
+      padding: var(--dc-space-1, 4px) var(--dc-space-2, 8px);
+      border: 1px solid transparent;
+      border-radius: var(--dc-radius-md, 6px);
+      background: none;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+    .referring button:hover {
+      background: var(--dc-color-surface, #f4f4f4);
     }
     .similar summary {
       cursor: pointer;
@@ -272,6 +297,9 @@ export class LlDocuments extends LitElement {
       this.draft = undefined
       void this.refresh()
     }
+    // Asked to open a document while already showing — one that names the document open here, say. The first
+    // one is opened as the view connects.
+    if (changed.has('openPath') && this.hasUpdated && this.openPath) void this.open(this.openPath)
   }
 
   updated(changed: Map<string, unknown>) {
@@ -919,6 +947,37 @@ export class LlDocuments extends LitElement {
     </details>`
   }
 
+  /**
+   * Under a document of a template other documents refer to — a customer — the documents that name it, by
+   * template, the newest first. One of another template opens in its own place.
+   */
+  private renderReferring(id: string) {
+    const scope = this.scope
+    if (!scope || !referenceTargets(this.vaultTemplates).has(templateId(scope.ref))) return nothing
+    const groups = referringDocuments(id, templateId(scope.ref), this.vaultTemplates, this.vaultDocuments)
+    return html`<div class="referring" role="region" aria-label=${strings.referringTitle}>
+      <h3>${strings.referringTitle}</h3>
+      ${groups.length === 0
+        ? html`<p class="message">${strings.referringNone}</p>`
+        : groups.map(
+            (group) => html`<h4>${strings.referringGroup(this.templateNames.get(group.template) ?? group.template, group.documents.length)}</h4>
+              <ul>
+                ${group.documents.map(
+                  (d) => html`<li><button @click=${() => this.leaveFor(async () => this.openNaming(group.template, d.path))}>${d.name}</button></li>`,
+                )}
+              </ul>`,
+          )}
+    </div>`
+  }
+
+  /** Opens a document that names the one open here: in this view if it is of this template, else in its own place. */
+  private async openNaming(template: string, path: string) {
+    if (this.scope && templateId(template) === templateId(this.scope.ref)) return this.open(path)
+    this.dispatchEvent(
+      new CustomEvent('ll-open-document', { detail: { path, template: revisedRef(template, this.currentRefs) }, bubbles: true, composed: true }),
+    )
+  }
+
   render() {
     const draft = this.draft
     const opened = this.opened
@@ -1044,6 +1103,7 @@ export class LlDocuments extends LitElement {
               ></formdown-ui>`,
               )}
               ${draft.kind === 'existing' && this.scope ? keyed(opened, this.renderSimilar(draft.path)) : nothing}
+              ${draft.kind === 'existing' ? this.renderReferring(draft.id) : nothing}
             `
           : this.error
             ? html`<p class="error" role="alert">${this.error}</p>`

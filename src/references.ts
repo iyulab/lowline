@@ -75,3 +75,30 @@ export function withReferenceNames(
     })),
   }
 }
+
+/** The documents of one template that name a document, newest first. */
+export interface Referring {
+  template: string
+  documents: { path: string; name: string }[]
+}
+
+/**
+ * The documents whose reference fields name document `id` of template `target` (by id), by template in the
+ * vault's order, each template's newest first — what a customer's page lists under the customer.
+ */
+export function referringDocuments(
+  id: string,
+  target: string,
+  templates: readonly TemplateSnapshot[],
+  documents: readonly DocumentSnapshot[],
+): Referring[] {
+  return templates.flatMap((template) => {
+    const fields = template.fields.filter((f) => f.reference === target).map((f) => f.name)
+    if (!fields.length) return []
+    const naming = documents
+      .filter((d) => templateId(d.template) === templateId(template.ref) && d.id !== id && fields.some((f) => d.values[f] === id))
+      .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0) || a.path.localeCompare(b.path))
+      .map((d) => ({ path: d.path, name: fileName(d.path, '.md') }))
+    return naming.length ? [{ template: template.ref, documents: naming }] : []
+  })
+}

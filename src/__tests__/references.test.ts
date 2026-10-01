@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
-import { referenceChoices, withReferenceNames } from '../references.js'
+import { referenceChoices, referringDocuments, withReferenceNames } from '../references.js'
 
 const field = (name: string, reference?: string) => ({ name, label: name, type: 'select', multiple: false, options: [], ...(reference ? { reference } : {}) })
 const customer: TemplateSnapshot = { ref: 'customer@2', fields: [field('등급')], suggest: [] }
@@ -59,5 +59,26 @@ describe('withReferenceNames', () => {
 
   it('is the table itself for a template without reference fields', () => {
     expect(withReferenceNames(table, customer, [customer], documents, names)).toBe(table)
+  })
+})
+
+describe('referringDocuments', () => {
+  const naming = (path: string, id: string, template: string, values: Record<string, unknown>, modified: number): DocumentSnapshot => ({ path, id, template, values, modified })
+  const all = [
+    ...documents,
+    naming('문서/문의 a.md', 'q-a', 'inquiry@1', { 고객: 'c-2' }, 1),
+    naming('문서/문의 b.md', 'q-b', 'inquiry@1', { 고객: 'c-2' }, 3),
+    naming('문서/문의 c.md', 'q-c', 'inquiry@1', { 고객: 'c-1' }, 2),
+    naming('문서/문의 d.md', 'q-d', 'inquiry@1', { 분류: 'c-2' }, 4), // not a reference field
+  ]
+
+  it('lists the documents naming one, by template, the newest first', () => {
+    expect(referringDocuments('c-2', 'customer', [customer, inquiry], all)).toEqual([
+      { template: 'inquiry@1', documents: [{ path: '문서/문의 b.md', name: '문의 b' }, { path: '문서/문의 a.md', name: '문의 a' }] },
+    ])
+  })
+
+  it('has none for a document nothing names', () => {
+    expect(referringDocuments('c-9', 'customer', [customer, inquiry], all)).toEqual([])
   })
 })

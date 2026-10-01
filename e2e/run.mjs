@@ -972,6 +972,25 @@ const scenarios = {
         'the inquiries of 한빛상사',
         { timeoutMs: 15_000 },
       )
+
+      // A customer lists the inquiries naming it, and one opens in its own place.
+      const inquiryName = saved.replace(/\.md$/, '')
+      await app.openDocument(CUSTOMER, '한빛상사')
+      await app.cdp.waitFor(
+        `__e2e.all('div.referring button').some((b) => b.textContent.trim() === ${q(inquiryName)})`,
+        'the inquiry naming 한빛상사',
+        { timeoutMs: 15_000 },
+      )
+      assert.ok(await app.cdp.evaluate(`__e2e.all('div.referring h4').some((h) => h.textContent.trim() === '문의 1건')`))
+      await app.click('div.referring button', inquiryName)
+      await app.cdp.waitFor(
+        `__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === ${q(inquiryName)} && __e2e.one('select[name="고객"]')?.value === 'c-hanbit'`,
+        'the inquiry open in its own place',
+        { timeoutMs: 15_000 },
+      )
+      assert.equal((await app.where()).place, '문의')
+      await app.openDocument(CUSTOMER, '가나상회')
+      await app.cdp.waitFor(`__e2e.all('div.referring p').some((p) => p.textContent.trim() === '아직 이 문서를 가리키는 문서가 없습니다.')`, 'nothing naming 가나상회')
       await app.noAlert()
     } finally {
       await app.learning()
