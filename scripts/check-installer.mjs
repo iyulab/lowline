@@ -60,7 +60,7 @@ await withInstalled(
       const ps = `Get-ChildItem -LiteralPath '${target.replaceAll("'", "''")}' -Recurse -File -Include *.exe,*.dll | ForEach-Object { '{0}|{1}' -f $_.Name, (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status }`
       const programs = execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8', env: windowsPowerShellEnv() }).trim().split(/\r?\n/).map((l) => l.split('|'))
       const unsigned = programs.filter(([, status]) => status !== 'Valid').map(([name, status]) => `${name} (${status})`)
-      if (!programs.some(([name]) => name === EXE)) throw new Error(`the installer did not install ${EXE}`)
+      if (!programs.some(([name]) => name.toLowerCase() === EXE.toLowerCase())) throw new Error(`the installer did not install ${EXE}`)
       if (unsigned.length) throw new Error(`not signed: ${unsigned.join(', ')}`)
       console.log(`  ✓ every installed program is signed: ${programs.map(([name]) => name).join(', ')}`)
     }
