@@ -75,8 +75,10 @@ export class LlDocuments extends LitElement {
       padding-inline-start: var(--dc-space-4, 16px);
     }
     /* The way back to the list is needed only where the list is not beside the document. */
+    /* So is what became of a document that closed — deleted, say — said where the list is. */
     @media ${desktopMedia} {
-      .back {
+      .back,
+      .closed {
         display: none;
       }
     }
@@ -930,6 +932,11 @@ export class LlDocuments extends LitElement {
                 this.scheduleSearch()
               }}
             ></dc-input>`
+          : nothing}
+        ${!draft && !this.importing && (this.error || this.message)
+          ? html`<p class="closed ${this.error ? 'error' : 'message'}" role=${this.error ? 'alert' : 'status'}>
+              ${this.error || this.message}
+            </p>`
           : nothing}
         ${this.valueSearch === 'idle'
           ? nothing

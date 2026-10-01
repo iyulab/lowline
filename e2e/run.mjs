@@ -1748,7 +1748,7 @@ const scenarios = {
     await app.noAlert()
   },
 
-  async 'keeps a narrow window usable: the sidebar is a drawer that gives way to a pick and to its backdrop'(app) {
+  async 'keeps a narrow window usable: the sidebar is a drawer that gives way to a pick and to its backdrop'(app, vault) {
     // Below the shell's desktop breakpoint (1024px), and above the window's minimum width (720).
     const drawerOpen = () => app.cdp.evaluate(`__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`)
     const openDrawer = async () => {
@@ -1795,6 +1795,29 @@ const scenarios = {
       await app.click('dc-button.back', '목록으로')
       await app.cdp.waitFor(`!__e2e.all('dp-list-detail')[0].hasAttribute('detail-open')`, 'back at the list')
       assert.equal(await shown(), 'list')
+
+      // A document that closes by being deleted returns to the list, and the list says what became of it.
+      const doc = join(vault, '문서', '좁은 창에서 지울 문의.md')
+      await writeFile(doc, `---
+template: intake@1
+요청: 지울 기록
+---
+${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
+      try {
+        await app.pickDocument('좁은 창에서 지울 문의')
+        await app.cdp.waitFor(`__e2e.all('dp-list-detail')[0].hasAttribute('detail-open')`, 'the document open')
+        await app.click('dc-button', '지우기')
+        await app.click('dc-button', '휴지통으로 옮기기')
+        await deleteForGoodOverSmb(app, '영구히 지우기')
+        const said = SMB ? '지웠습니다' : '휴지통으로 옮겼습니다'
+        await app.cdp.waitFor(
+          `__e2e.all('p.closed').some((p) => p.checkVisibility() && p.textContent.trim() === ${q(said)}) && ${'!'}__e2e.all('dp-list-detail')[0].hasAttribute('detail-open')`,
+          'the list saying the document is gone',
+        )
+        await trashed(join(vault, '문서'))
+      } finally {
+        await rm(doc, { force: true })
+      }
       await app.noAlert()
     } finally {
       await app.cdp.send('Emulation.clearDeviceMetricsOverride')
