@@ -17,6 +17,7 @@
     "test": "vitest run && desktop-compact-check-tokens --defined node_modules/@iyulab/desktop-patterns/tokens.css --defined src/styles.css src",
     "build:e2e": "tauri build --debug --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "test:e2e": "node e2e/run.mjs",
+    "check:installer": "node scripts/check-installer.mjs",
     "tauri": "tauri",
     "test:host": "dotnet test --project src-host/Lowline.Host.Tests",
     "brand:icons": "node scripts/brand-icons.ts",
