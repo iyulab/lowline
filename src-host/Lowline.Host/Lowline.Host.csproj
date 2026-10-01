@@ -21,8 +21,8 @@
     <PackageReference Include="Formbase.Sqlite" Version="0.17.1" />
     <PackageReference Include="Formbase.DependencyInjection" Version="0.17.1" />
     <PackageReference Include="Gil" Version="0.8.0" />
-    <PackageReference Include="FluxIndex.SDK" Version="0.69.0" />
-    <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.69.0" />
+    <PackageReference Include="FluxIndex.SDK" Version="0.69.1" />
+    <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.69.1" />
     <PackageReference Include="TauriKit.Sidecar.Loopback" Version="0.10.0" />
   </ItemGroup>
 
