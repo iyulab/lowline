@@ -21,7 +21,7 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { parseFormdown } from '@formdown/core'
-import { App, EXPORTS, IDENTIFIER, exe, q, screenshot, sidecarsRunning } from './app.mjs'
+import { App, EXPORTS, IDENTIFIER, SETTINGS, exe, q, screenshot, sidecarsRunning, updates } from './app.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = '서식/버그 리포트.fd.md'
@@ -1830,6 +1830,48 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'tells of a newer release when it starts, installs only when asked, and looks no more once told not to'(app, vault) {
+    const banner = `__e2e.all('p.update')[0]?.textContent.replace(/\\s+/g, ' ').trim() ?? ''`
+    const settingsNow = async () => JSON.parse(await readFile(SETTINGS, 'utf8').catch(() => '{}'))
+    const about = `__e2e.all('ll-about')[0]`
+    const toggleChecking = async (on) => {
+      await app.sidebar('정보')
+      await app.cdp.waitFor(`${about}.open && !!${about}.shadowRoot.querySelector('dc-checkbox')`, 'the about dialog with its update setting')
+      await app.cdp.evaluate(`${about}.shadowRoot.querySelector('dc-checkbox').click()`)
+      await app.cdp.waitFor(`${about}.shadowRoot.querySelector('dc-checkbox').checked === ${on}`, `checking ${on ? 'on' : 'off'}`)
+      for (let tries = 0; (await settingsNow()).checkForUpdates !== on; tries++) {
+        assert.ok(tries < 50, 'the setting written to this device')
+        await new Promise((r) => setTimeout(r, 100))
+      }
+      await app.click('dc-button', '닫기')
+      await app.cdp.waitFor(`!${about}.open`, 'the about dialog closed')
+    }
+
+    // Nothing newer: nothing to tell, though it looked.
+    assert.ok(updates.requests > 0, 'it looked when it started')
+    assert.equal(await app.cdp.evaluate(banner), '', 'nothing told while nothing is newer')
+
+    updates.newer = '99.0.0'
+    try {
+      await app.reopen(vault)
+      await app.cdp.waitFor(`${banner}.includes('새 판 99.0.0')`, 'the newer release told', { timeoutMs: 15_000 })
+      // Put off: told no more in this run of the app, and nothing installed.
+      await app.click('dc-button', '나중에')
+      await app.cdp.waitFor(`${banner} === ''`, 'put off')
+
+      await toggleChecking(false)
+      const looks = updates.requests
+      await app.reopen(vault)
+      await new Promise((r) => setTimeout(r, 2_000))
+      assert.equal(updates.requests, looks, 'no look while checking is off')
+      assert.equal(await app.cdp.evaluate(banner), '', 'nothing told while checking is off')
+    } finally {
+      updates.newer = null
+    }
+    await toggleChecking(true)
+    await app.noAlert()
+  },
+
   async 'writes and saves a document with the keyboard alone in at most 12 keys'(app, vault) {
     let keys = 0
     const press = async (key, options) => {
@@ -2212,6 +2254,9 @@ async function runOnce(runs) {
   // shown would only pile up.
   for (const dir of ['projections', 'presentations'])
     await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, dir), { recursive: true, force: true })
+
+  // This device's settings start as a fresh install's.
+  await rm(SETTINGS, { force: true })
 
   let app
   let failed = 0

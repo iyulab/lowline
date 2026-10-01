@@ -3,10 +3,12 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { getVersion } from '@tauri-apps/api/app'
 import { strings } from './strings.js'
 import { about } from './vault-client.js'
+import type { Settings } from './updates.js'
 
 /**
  * What Lowline is and under which terms: its version, its copyright and license, where its source is, and the
- * notices of the software it ships with — the notices read only when the person opens them.
+ * notices of the software it ships with — the notices read only when the person opens them. Also what
+ * leaves this computer, and whether to look for a newer release: a change is told as `ll-settings`.
  */
 @customElement('ll-about')
 export class LlAbout extends LitElement {
@@ -45,6 +47,9 @@ export class LlAbout extends LitElement {
       overflow-wrap: anywhere;
       user-select: text;
     }
+    .outbound {
+      margin: var(--dc-space-2, 8px) 0 0;
+    }
     .actions {
       display: flex;
       justify-content: flex-end;
@@ -52,6 +57,8 @@ export class LlAbout extends LitElement {
   `
 
   @property({ type: Boolean }) open = false
+  /** This device's settings, as the app holds them; undefined until read. */
+  @property({ attribute: false }) settings?: Settings
   @state() private version?: string
   @state() private notices?: string | 'loading' | 'failed'
 
@@ -73,6 +80,12 @@ export class LlAbout extends LitElement {
     }
   }
 
+  private setCheckForUpdates(on: boolean) {
+    if (!this.settings) return
+    const settings: Settings = { ...this.settings, checkForUpdates: on }
+    this.dispatchEvent(new CustomEvent<Settings>('ll-settings', { detail: settings, bubbles: true, composed: true }))
+  }
+
   private close() {
     this.open = false
     this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }))
@@ -85,6 +98,19 @@ export class LlAbout extends LitElement {
       <p class="muted">${this.version ? strings.aboutVersion(this.version) : nothing} · ${strings.aboutCopyright}</p>
       <p>${strings.aboutLicense}</p>
       <p>${strings.aboutSource}: <span class="source">${strings.aboutSourceUrl}</span></p>
+      ${this.settings
+        ? html`<p>
+            <dc-checkbox
+              .checked=${this.settings.checkForUpdates}
+              @change=${(e: Event) => this.setCheckForUpdates((e.target as HTMLInputElement).checked)}
+              >${strings.aboutCheckUpdates}</dc-checkbox
+            >
+          </p>`
+        : nothing}
+      <details>
+        <summary>${strings.aboutOutbound}</summary>
+        ${strings.aboutOutboundText.map((line) => html`<p class="outbound">${line}</p>`)}
+      </details>
       <details @toggle=${(e: Event) => (e.target as HTMLDetailsElement).open && void this.showNotices()}>
         <summary>${strings.aboutNotices}</summary>
         ${notices === undefined || notices === 'loading'

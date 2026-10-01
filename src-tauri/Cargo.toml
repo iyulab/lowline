@@ -31,6 +31,7 @@ tauri-kit-watch = "0.10.0"
 # Deleting moves a file to the system's trash (Recycle Bin, Trash, freedesktop trash), where the
 # person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"
+tauri-plugin-updater = "2.13.1"
 
 [dev-dependencies]
 # Canonical paths without the `\\?\` prefix on Windows, to compare with what the trash reports.

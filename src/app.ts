@@ -17,6 +17,7 @@ import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesA
 import { onVaultChanged, onWritten, vault, type VaultInfo } from './vault-client.js'
 import { openVault, readVault, resumeVault } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
+import { DEFAULT_SETTINGS, UpdateWatch, settings as deviceSettings, update, type AvailableUpdate, type Settings } from './updates.js'
 import './templates-view.js'
 import './documents-view.js'
 import type { LlDocuments } from './documents-view.js'
@@ -62,6 +63,13 @@ export class LlApp extends LitElement {
     }
     .error {
       color: var(--dc-color-danger, #b00020);
+    }
+    .update {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--dc-space-2, 8px);
+      margin: 0 0 var(--dc-space-2, 8px);
     }
     .notice {
       margin: 0 0 var(--dc-space-2, 8px);
@@ -118,6 +126,12 @@ export class LlApp extends LitElement {
   @state() private error = ''
   /** What the app just did that left the place it showed (a template deleted); gone once elsewhere. */
   @state() private notice = ''
+  /** This device's settings, once read. */
+  @state() private settings?: Settings
+  /** A newer release the person has not put off; installed only when they say so. */
+  @state() private available?: AvailableUpdate
+  @state() private installing = false
+  private readonly updates = new UpdateWatch(update.check, (found) => (this.available = found))
   /** Where the app was when it was last used, to be shown once the vault it reopened is read. */
   private resumeAt?: { place: Place; tab: Tab }
   /** A document to open in the documents view, asked for from elsewhere (a table row). */
@@ -193,6 +207,7 @@ export class LlApp extends LitElement {
       if (await confirmDiscard()) await win.destroy()
     })
     void this.resume()
+    void this.loadSettings()
     this.addEventListener('ll-open-document', (e) => {
       const { path, template } = (e as CustomEvent<{ path: string; template: string }>).detail
       this.openPath = path
@@ -217,6 +232,38 @@ export class LlApp extends LitElement {
     this.wideQuery.removeEventListener('change', this.onWidth)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
+    this.updates.stop()
+  }
+
+  private async loadSettings() {
+    this.applySettings(await deviceSettings.read().catch(() => ({ ...DEFAULT_SETTINGS })))
+  }
+
+  /** Takes settings into effect: looking for updates starts or stops with its setting. */
+  private applySettings(next: Settings) {
+    this.settings = next
+    if (next.checkForUpdates) this.updates.start()
+    else {
+      this.updates.stop()
+      this.available = undefined
+    }
+  }
+
+  private changeSettings(next: Settings) {
+    this.applySettings(next)
+    void deviceSettings.write(next).catch((e) => (this.error = describeError(e)))
+  }
+
+  /** Installs the newer release — after the unsaved-edits question, since the app restarts. */
+  private async installUpdate() {
+    if (!(await confirmDiscard())) return
+    this.installing = true
+    try {
+      await update.install()
+    } catch {
+      this.installing = false
+      this.error = strings.updateFailed
+    }
   }
 
   /**
@@ -484,6 +531,17 @@ export class LlApp extends LitElement {
           <dc-button slot="actions" variant="secondary" size="sm" @click=${this.openVault}>${strings.openVault}</dc-button>
         </dp-toolbar>
         <dp-page ?fill=${this.showsDocuments()} max-width=${this.showsDocuments() ? 'full' : 'md'}>
+          ${this.available
+            ? html`<p class="update" role="status">
+                ${strings.updateAvailable(this.available.version)}
+                <dc-button size="sm" ?disabled=${this.installing} @click=${() => void this.installUpdate()}
+                  >${this.installing ? strings.updateInstalling : strings.updateInstall}</dc-button
+                >
+                <dc-button size="sm" variant="secondary" ?disabled=${this.installing} @click=${() => (this.available = undefined)}
+                  >${strings.updateLater}</dc-button
+                >
+              </p>`
+            : nothing}
           ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : ''}
           ${this.notice ? html`<p class="notice" role="status">${this.notice}</p>` : ''}
           ${!info
@@ -506,7 +564,12 @@ export class LlApp extends LitElement {
         ?open=${this.showingShortcuts}
         @dp-shortcut-overlay-dismiss=${() => (this.showingShortcuts = false)}
       ></dp-shortcut-overlay>
-      <ll-about ?open=${this.showingAbout} @close=${() => (this.showingAbout = false)}></ll-about>
+      <ll-about
+        ?open=${this.showingAbout}
+        .settings=${this.settings}
+        @close=${() => (this.showingAbout = false)}
+        @ll-settings=${(e: CustomEvent<Settings>) => this.changeSettings(e.detail)}
+      ></ll-about>
       <dc-confirm-dialog
         heading=${strings.unsavedHeading}
         confirm-label=${strings.unsavedDiscard}

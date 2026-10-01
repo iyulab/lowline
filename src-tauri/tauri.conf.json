@@ -48,5 +48,13 @@
         "installerIcon": "icons/icon.ico"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGN0I2NjlGMzZGMjAwMEIKUldRTEFQSTJuMlo3djBlNm5NMW9XUVdhNTgrYzNGVTF1N2NtYkI3TnltUkdBRnVOWFNuTzcwbVoK",
+      "endpoints": [
+        "https://github.com/iyulab/lowline-releases/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

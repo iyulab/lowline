@@ -1,5 +1,6 @@
 mod host;
 mod report;
+mod update;
 mod vault;
 
 use std::path::{Path, PathBuf};
@@ -87,6 +88,31 @@ fn write_session(session: String, app: AppHandle) -> CommandResult<()> {
         std::fs::create_dir_all(dir).map_err(io_error)?;
     }
     tauri_kit_fs::write_atomic(&file, session.as_bytes()).map_err(io_error)
+}
+
+/// How Lowline is set up on this device, as the UI wrote it — kept with the session, outside any vault.
+fn settings_file(app: &AppHandle) -> std::io::Result<PathBuf> {
+    let dir = app.path().app_config_dir().map_err(std::io::Error::other)?;
+    Ok(dir.join("settings.json"))
+}
+
+/// This device's settings; none before any was written.
+#[tauri::command]
+fn read_settings(app: AppHandle) -> CommandResult<Option<String>> {
+    match std::fs::read_to_string(settings_file(&app).map_err(io_error)?) {
+        Ok(settings) => Ok(Some(settings)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(io_error(e)),
+    }
+}
+
+#[tauri::command]
+fn write_settings(settings: String, app: AppHandle) -> CommandResult<()> {
+    let file = settings_file(&app).map_err(io_error)?;
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir).map_err(io_error)?;
+    }
+    tauri_kit_fs::write_atomic(&file, settings.as_bytes()).map_err(io_error)
 }
 
 #[derive(Serialize)]
@@ -654,6 +680,16 @@ fn report(report: report::Report) {
     }
 }
 
+/// Stops the sidecar, reporting what it failed at on its own first — when the app ends, and before an
+/// update's installer replaces it.
+fn stop_host(app: &AppHandle) {
+    let host = app.state::<HostState>();
+    if let Ok(client) = host.client() {
+        report_host_failures(client.take_failures());
+    }
+    host.stop();
+}
+
 /// Reports what the sidecar failed at away from any request.
 fn report_host_failures(failures: Vec<tauri_kit_sidecar::loopback::Fault>) {
     for failure in failures {
@@ -713,7 +749,9 @@ fn start_reports(app: &tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
+        .manage(update::UpdateState::default())
         .manage(HostState::default())
         .setup(|app| {
             start_reports(app.handle());
@@ -724,6 +762,10 @@ pub fn run() {
             open_vault,
             resume_vault,
             write_session,
+            read_settings,
+            write_settings,
+            update::check_update,
+            update::install_update,
             folder_is_empty,
             list_templates,
             list_documents,
@@ -754,10 +796,7 @@ pub fn run() {
         .expect("error while building Lowline")
         .run(|app, event| {
             if let RunEvent::Exit = event {
-                if let Ok(client) = app.state::<HostState>().client() {
-                    report_host_failures(client.take_failures());
-                }
-                app.state::<HostState>().stop();
+                stop_host(app);
             }
         });
 }

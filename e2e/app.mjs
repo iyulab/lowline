@@ -9,6 +9,7 @@
 //   await screenshot(app.cdp, dir, 'name')
 //   await app.quit()
 
+import { createServer } from 'node:http'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -26,6 +27,30 @@ export const IDENTIFIER = 'com.iyulab.lowline.e2e'
 /** Where the debug shell saves exports instead of asking in a save dialog no script can answer. */
 export const EXPORTS = join(tmpdir(), 'lowline-e2e-exports')
 
+/**
+ * Where the e2e build looks for updates: a release file served here, newer only while `newer` names a
+ * version. `requests` counts the looks. The server lives as long as this process and keeps it no longer.
+ */
+export const updates = { newer: null, requests: 0 }
+const updateServer = createServer((_, res) => {
+  updates.requests++
+  if (!updates.newer) return res.writeHead(204).end()
+  res.writeHead(200, { 'content-type': 'application/json' }).end(
+    JSON.stringify({
+      version: updates.newer,
+      notes: '',
+      pub_date: new Date().toISOString(),
+      platforms: { 'windows-x86_64': { signature: 'unsigned', url: 'http://127.0.0.1:9/never-downloaded.exe' } },
+    }),
+  )
+})
+await new Promise((ready) => updateServer.listen(0, '127.0.0.1', ready))
+updateServer.unref()
+const UPDATE_ENDPOINT = `http://127.0.0.1:${updateServer.address().port}/latest.json`
+
+/** This device's settings for the e2e build (the shell's app config folder). */
+export const SETTINGS = join(process.env.APPDATA ?? tmpdir(), IDENTIFIER, 'settings.json')
+
 export const q = (s) => JSON.stringify(s)
 
 /** The window is ready once the app element is there. */
@@ -36,7 +61,7 @@ const LAUNCH = {
   exe,
   port: PORT,
   ready: READY,
-  env: { LOWLINE_EXPORT_TO: EXPORTS },
+  env: { LOWLINE_EXPORT_TO: EXPORTS, LOWLINE_UPDATE_ENDPOINT: UPDATE_ENDPOINT },
   debugPortFromEnv: false,
   // A launch that joins a WebView2 browser still shutting down on this profile never opens the port.
   webviewProfile: IDENTIFIER,

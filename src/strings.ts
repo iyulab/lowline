@@ -23,6 +23,18 @@ export const strings = {
   aboutNoticesLoading: '읽는 중…',
   aboutNoticesFailed: '고지 파일을 읽지 못했습니다. 설치 폴더의 THIRD-PARTY-NOTICES.txt에 같은 내용이 있습니다.',
   aboutClose: '닫기',
+  aboutCheckUpdates: '새 판이 나왔는지 확인하기 — 시작할 때와 하루 한 번',
+  aboutOutbound: '이 컴퓨터 밖으로 나가는 것',
+  aboutOutboundText: [
+    'Lowline은 문서를 이 컴퓨터의 폴더에만 저장합니다. 문서 내용, 칸 값, 파일 이름, 서식 이름, 폴더 경로는 어떤 경우에도 밖으로 보내지 않습니다.',
+    '앱이 오류로 실패하면 고치는 데 필요한 정보만 iyulab에 보냅니다: 실패한 부분과 종류, Lowline 자신의 코드 위치, 앱 판 번호, Windows 판. 이 정보는 Microsoft Azure(한국 중부)에 90일 동안 저장되며, 접속 IP 주소는 저장하지 않습니다. 첫 안정판이 나오기 전까지는 오류 보고를 끌 수 없으며, 안정판부터는 설정에서 끌 수 있습니다.',
+    '새 판 확인을 켜 두면 시작할 때와 하루 한 번 GitHub에서 새 판이 있는지 확인합니다. 위에서 끌 수 있습니다.',
+  ],
+  updateAvailable: (version: string) => `새 판 ${version}이 나왔습니다.`,
+  updateInstall: '지금 설치',
+  updateInstalling: '설치하는 중…',
+  updateLater: '나중에',
+  updateFailed: '새 판을 설치하지 못했습니다. 나중에 다시 해 보세요.',
   // Each with the key as it is pressed; Ctrl on Windows (⌘ on a Mac does the same).
   shortcutList: [
     { combo: 'Ctrl+S', description: '저장' },
