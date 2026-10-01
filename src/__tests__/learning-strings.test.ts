@@ -17,4 +17,10 @@ describe('why a field has no replay', () => {
   it('says only that it fell short when the replay found too few to say by how much', () => {
     expect(strings.learningNoReplay('below-target', null)).toContain('목표만큼 맞히는 기준이 없어')
   })
+
+  it('says what a field needs for a suggestion whenever its replay fell short', () => {
+    for (const closest of [short, { ...short, precision: 0.83 }, null])
+      expect(strings.learningNoReplay('below-target', closest)).toContain('이 칸을 가르는 칸이 서식에 있는지')
+    expect(strings.learningNoReplay('few')).not.toContain('가르는 칸')
+  })
 })

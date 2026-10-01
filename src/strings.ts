@@ -199,15 +199,17 @@ export const strings = {
   hostStarting: '표를 준비하고 있습니다…',
   learningEmpty: '제안을 받는 판단 칸이 아직 없습니다. 서식에서 판단 칸을 정하면 여기서 곡선이 자랍니다.',
   learningUndecided: '아직 결정된 제안이 없습니다 — 제안을 수락·교정·거절하며 저장하면 곡선이 자랍니다.',
+  // What a field needs for a suggestion: another field whose value the documents settled it alongside.
+  learningWhatSuggests: '제안은 다른 칸에 같은 값이 든 문서들이 이 칸을 목표만큼 자주 같게 확정해 왔을 때 나옵니다 — 이 칸을 가르는 칸이 서식에 있는지 보세요.',
   learningNoReplay: (why: FieldCurve['whyNoReplay'], closest?: FieldCurve['closest']) =>
     why === 'few'
       ? '기록이 아직 적어 다시 물어보지 않았습니다 — 확정한 문서가 늘면 저장된 기록을 순서대로 다시 물어 제안 기준을 고릅니다.'
       : why === 'below-target' && closest
         ? closest.precision >= closest.target
-          ? `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%를 맞혀 합쳐서는 목표 ${Math.round(closest.target * 100)}%에 닿지만, 그 안의 한 구간이 목표에 못 미쳐 이 칸은 아직 제안하지 않습니다.`
-          : `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%만 맞혀 목표 ${Math.round(closest.target * 100)}%에 못 미칩니다 — 이 칸은 아직 제안하지 않습니다.`
+          ? `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%를 맞혀 합쳐서는 목표 ${Math.round(closest.target * 100)}%에 닿지만, 그 안의 한 구간이 목표에 못 미쳐 이 칸은 아직 제안하지 않습니다. ${strings.learningWhatSuggests}`
+          : `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%만 맞혀 목표 ${Math.round(closest.target * 100)}%에 못 미칩니다 — 이 칸은 아직 제안하지 않습니다. ${strings.learningWhatSuggests}`
       : why === 'below-target'
-        ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 제안하지 않습니다.'
+        ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 제안하지 않습니다. ' + strings.learningWhatSuggests
         : '저장된 기록을 순서대로 다시 물어 제안 기준을 고르는 중입니다 — 끝나면 이 화면을 다시 열어 보세요.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
