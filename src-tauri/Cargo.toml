@@ -28,10 +28,9 @@ getrandom = "0.4"
 # store — the roots and proxy an office PC is set up with. `native-tls-no-default` alone does not
 # compile the native-tls transport in ureq 3.4, so the full feature is needed.
 ureq = { version = "3", default-features = false, features = ["native-tls", "win-system-proxy"] }
-# Added together: adding a crate from the same git source later re-resolves Cargo.lock.
-tauri-kit-fs = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
-tauri-kit-sidecar = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
-tauri-kit-watch = { git = "https://github.com/iyulab/tauri-kit", tag = "v0.5.0" }
+tauri-kit-fs = "0.6.0"
+tauri-kit-sidecar = "0.6.0"
+tauri-kit-watch = "0.6.0"
 # Deleting moves a file to the system's trash (Recycle Bin, Trash, freedesktop trash), where the
 # person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"
