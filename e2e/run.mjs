@@ -2010,6 +2010,8 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
           times[step] = (times[step] ?? 0) + 1
         }
         return Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, times[k] > 1 ? Math.round(v) + ' (' + times[k] + '×)' : Math.round(v)])) })()`)
+      // Ten thousand new documents: the sidecar replays the fields' history for their thresholds meanwhile.
+      const replaying = await sidecarCpuOver(5_000)
 
       await app.cdp.evaluate(`performance.clearMeasures()`)
       const edited = Date.now()
@@ -2019,11 +2021,46 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       const steps = await app.cdp.evaluate(
         `Object.fromEntries(performance.getEntriesByType('measure').filter((m) => m.name.startsWith('vault:')).map((m) => [m.name.slice(6), Math.round(m.duration)]))`,
       )
+
+      // A later launch with nothing changed: the thresholds the first launch's replay chose are kept beside
+      // the cache, so the sidecar has no replay to run — its CPU over the seconds after is what an idle app costs.
+      const kept = await thresholdsChosenSince(filled)
+      const again = Date.now()
+      await app.reopen(vault)
+      await app.showTable(INTAKE, { timeoutMs: 300_000 })
+      await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(고침)'))`, 'the table again', { timeoutMs: 300_000 })
+      const unchanged = Date.now() - again
+      const idle = await sidecarCpuOver(5_000)
       console.log(
         `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${Object.entries(restartSteps).map(([k, v]) => `${k} ${v}`).join(' · ')} ms) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
       )
+      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}`)
     },
   }),
+}
+
+/** Waits until the sidecar has kept thresholds chosen after `since` beside the e2e app's caches; false if it never did. */
+async function thresholdsChosenSince(since, timeoutMs = 180_000) {
+  const { stat } = await import('node:fs/promises')
+  const caches = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'projections')
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    for (const name of await readdir(caches).catch(() => [])) {
+      if (name.endsWith('.thresholds.json') && (await stat(join(caches, name))).mtimeMs >= since) return true
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  return false
+}
+
+/** The CPU time the sidecar spends over the next `ms`, in milliseconds. */
+async function sidecarCpuOver(ms) {
+  const { execFileSync } = await import('node:child_process')
+  const cpu = () =>
+    Number(execFileSync('powershell', ['-NoProfile', '-Command', `(Get-Process Lowline.Host).TotalProcessorTime.TotalMilliseconds`], { encoding: 'utf8' }).trim())
+  const before = cpu()
+  await new Promise((resolve) => setTimeout(resolve, ms))
+  return Math.round(cpu() - before)
 }
 
 /**
