@@ -1617,6 +1617,39 @@ const scenarios = {
     for (const name of (await documentsIn(vault)).filter((n) => !before.includes(n))) await rm(join(vault, '문서', name))
   },
 
+  async 'shows the shortcuts on Ctrl+/, and moves along the document list with the arrow keys as one Tab stop'(app) {
+    const focused = `(() => { let el = document.activeElement; while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement; return el })()`
+    await app.tabOf(INTAKE, '문서')
+    await app.cdp.press('/', { code: 'Slash', modifiers: 2, keyCode: 191 })
+    await app.cdp.waitFor(`__e2e.all('dp-shortcut-overlay')[0]?.open === true`, 'the shortcuts showing')
+    const rows = await app.cdp.evaluate(`[...__e2e.all('dp-shortcut-overlay')[0].shadowRoot.querySelectorAll('li')].map((li) => li.textContent.replace(/\\s+/g, ' ').trim())`)
+    assert.ok(rows.includes('저장 Ctrl+S') && rows.includes('단축키 보기 Ctrl+/'), rows.join(' | '))
+    // While they show, the other shortcuts wait: Ctrl+N leaves what is open as it was.
+    const shown = `__e2e.all('ll-documents')[0].shadowRoot.querySelector('formdown-ui')?.content ?? null`
+    const before = await app.cdp.evaluate(shown)
+    await app.cdp.press('n', { code: 'KeyN', modifiers: 2, keyCode: 78 })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    assert.equal(await app.cdp.evaluate(shown), before, 'no new document under the shortcuts')
+    await app.cdp.press('Escape', { code: 'Escape', keyCode: 27 })
+    await app.cdp.waitFor(`!__e2e.all('dp-shortcut-overlay')[0].open`, 'the shortcuts gone on Escape')
+
+    // The list is one Tab stop: from the find box, Tab lands on one document and the next Tab leaves the list.
+    await app.cdp.press('f', { code: 'KeyF', modifiers: 2, keyCode: 70 })
+    await app.cdp.waitFor(`${focused}?.type === 'search'`, 'the find box focused')
+    const stops = await app.cdp.evaluate(`__e2e.all('ll-documents')[0].shadowRoot.querySelectorAll('nav button.document[tabindex="0"]').length`)
+    assert.equal(stops, 1, 'one Tab stop in the list')
+    await app.cdp.press('Tab', { code: 'Tab', keyCode: 9 })
+    await app.cdp.waitFor(`${focused}?.classList.contains('document')`, 'a document of the list focused')
+    await app.cdp.press('Home', { code: 'Home', keyCode: 36 })
+    const first = await app.cdp.waitFor(`${focused}?.classList.contains('document') && ${focused}.textContent.trim()`, 'the first document focused')
+    await app.cdp.press('ArrowDown', { code: 'ArrowDown', keyCode: 40 })
+    const second = await app.cdp.waitFor(`${focused}?.classList.contains('document') && ${focused}.textContent.trim()`, 'the next document focused')
+    assert.notEqual(second, first, 'ArrowDown moved along the list')
+    await app.cdp.press('Home', { code: 'Home', keyCode: 36 })
+    assert.equal(await app.cdp.evaluate(`${focused}.textContent.trim()`), first, 'Home went back to the first')
+    await app.noAlert()
+  },
+
   async 'opens the vault and the place it was left at, on the next launch'(app, vault) {
     await app.tabOf(INTAKE, '문서')
     await new Promise((resolve) => setTimeout(resolve, 500)) // where it is has been written down

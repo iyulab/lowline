@@ -571,6 +571,26 @@ export class LlDocuments extends LitElement {
     }
   }
 
+  /**
+   * The list is one stop for Tab — the open document, or the first — and the arrow keys move within it,
+   * so getting past a long list takes one key, not one per document.
+   */
+  private tabStop(paths: string[]): string | undefined {
+    const open = this.draft?.kind === 'existing' ? this.draft.path : undefined
+    return open !== undefined && paths.includes(open) ? open : paths[0]
+  }
+
+  /** ↑ ↓ Home End move focus along the list; Enter (the button's own) opens the document. */
+  private moveInList(e: KeyboardEvent, at: number) {
+    const buttons = [...this.renderRoot.querySelectorAll<HTMLButtonElement>('nav button.document')]
+    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: buttons.length - 1 }[e.key]
+    if (to === undefined || to < 0 || to >= buttons.length) return
+    e.preventDefault()
+    buttons[at].tabIndex = -1
+    buttons[to].tabIndex = 0
+    buttons[to].focus()
+  }
+
   /** Puts the cursor in the box that finds documents, if there are any to find; the app's Ctrl+F calls this. */
   focusFinder() {
     this.renderRoot.querySelector<HTMLElement>('nav dc-input')?.focus()
@@ -907,9 +927,12 @@ export class LlDocuments extends LitElement {
               ? nothing
               : html`<p class="message">${strings.documentsNoMatch}</p>`
             : this.listed().map(
-              ({ entry: d, line }) => html`<button
+              ({ entry: d, line }, i, listed) => html`<button
+                class="document"
                 aria-current=${draft?.kind === 'existing' && draft.path === d.path}
+                tabindex=${this.tabStop(listed.map((l) => l.entry.path)) === d.path ? 0 : -1}
                 @click=${() => this.leaveFor(() => this.open(d.path))}
+                @keydown=${(e: KeyboardEvent) => this.moveInList(e, i)}
               >
                 ${shownName(d)}
                 ${noteFor(conflictLabel(d, this.documents, '.md'))}

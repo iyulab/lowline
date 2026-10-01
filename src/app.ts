@@ -3,7 +3,7 @@ import { customElement, queryAll, state } from 'lit/decorators.js'
 import { live } from 'lit/directives/live.js'
 import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
+import type { DpSidebarActionEvent, DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
 import { desktopMinWidth } from '@iyulab/desktop-patterns'
 import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
 import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -31,6 +31,9 @@ function modalOpen(root: Document | ShadowRoot): boolean {
   for (const el of root.querySelectorAll('*')) if (el.shadowRoot && modalOpen(el.shadowRoot)) return true
   return false
 }
+
+/** The sidebar's foot: an action that shows the shortcuts, not a place. */
+const SHORTCUTS = 'shortcuts'
 
 @customElement('ll-app')
 export class LlApp extends LitElement {
@@ -99,6 +102,8 @@ export class LlApp extends LitElement {
   @state() private sidebarOpen = false
   /** Whether a wide window shows the sidebar folded to its rail (a drawer always shows it whole). */
   @state() private sidebarCollapsed = false
+  /** The shortcuts are showing (Ctrl+/, or 단축키 at the foot of the sidebar). */
+  @state() private showingShortcuts = false
   private readonly wideQuery = matchMedia(`(min-width: ${desktopMinWidth}px)`)
   @state() private wide = this.wideQuery.matches
   private readonly onWidth = () => (this.wide = this.wideQuery.matches)
@@ -126,14 +131,17 @@ export class LlApp extends LitElement {
    * - Ctrl+S (⌘S) saves whatever is being edited — a template or a document.
    * - Ctrl+N starts a new document of the template shown, on its documents tab.
    * - Ctrl+F goes to the box that finds the template's documents.
+   * - Ctrl+/ shows the shortcuts, and hides them again.
    * While a dialog is open they do nothing: the question on screen is answered first.
    */
   private readonly onShortcut = (e: KeyboardEvent) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
     const key = e.key.toLowerCase()
-    if (key !== 's' && key !== 'n' && key !== 'f') return
+    if (key !== 's' && key !== 'n' && key !== 'f' && key !== '/') return
     e.preventDefault()
-    if (modalOpen(document)) return
+    if (key === '/' && this.showingShortcuts) return void (this.showingShortcuts = false)
+    if (modalOpen(document) || this.showingShortcuts) return
+    if (key === '/') return void (this.showingShortcuts = true)
     if (key === 's') {
       const editor = this.renderRoot.querySelector<HTMLElement & { save(): Promise<void> }>('ll-templates, ll-documents')
       void editor?.save()
@@ -441,7 +449,13 @@ export class LlApp extends LitElement {
                 orphans: strings.orphanDocuments,
               })
             : []}
+          .bottomItems=${[{ id: SHORTCUTS, icon: '⌨', label: strings.shortcuts }]}
           @dp-sidebar-select=${(e: DpSidebarSelectEvent) => this.onSidebarSelect(e)}
+          @dp-sidebar-action=${(e: DpSidebarActionEvent) => {
+            if (e.itemId !== SHORTCUTS) return
+            this.sidebarOpen = false
+            this.showingShortcuts = true
+          }}
         >
           <ll-mark slot="icon" size="20" label=""></ll-mark>
         </dp-sidebar>
@@ -472,6 +486,13 @@ export class LlApp extends LitElement {
             : this.renderPlace(info)}
         </dp-page>
       </dp-shell>
+      <dp-shortcut-overlay
+        heading=${strings.shortcuts}
+        close-label=${strings.shortcutsClose}
+        .shortcuts=${strings.shortcutList}
+        ?open=${this.showingShortcuts}
+        @dp-shortcut-overlay-dismiss=${() => (this.showingShortcuts = false)}
+      ></dp-shortcut-overlay>
       <dc-confirm-dialog
         heading=${strings.unsavedHeading}
         confirm-label=${strings.unsavedDiscard}

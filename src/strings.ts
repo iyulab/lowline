@@ -10,6 +10,18 @@ export const strings = {
   navLearning: '학습',
   orphanDocuments: '서식 없는 문서',
   toggleSidebar: '사이드바 접기/펼치기',
+  shortcuts: '단축키',
+  shortcutsClose: '닫기',
+  // Each with the key as it is pressed; Ctrl on Windows (⌘ on a Mac does the same).
+  shortcutList: [
+    { combo: 'Ctrl+S', description: '저장' },
+    { combo: 'Ctrl+N', description: '새 문서' },
+    { combo: 'Ctrl+F', description: '문서 찾기' },
+    { combo: '↑ ↓ Home End', description: '문서 목록에서 옮겨 가기' },
+    { combo: 'Tab · Enter', description: '제안 값으로 가서 받기' },
+    { combo: 'Esc', description: '서랍·대화상자 닫기' },
+    { combo: 'Ctrl+/', description: '단축키 보기' },
+  ],
   openVault: '볼트 열기',
   openVaultTitle: '볼트로 쓸 폴더 선택',
   tagline: '서식을 노트처럼 쓰는 로컬 에디터',

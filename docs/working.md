@@ -11,8 +11,10 @@ The app opens the vault and the place it was showing when it was last used — t
 | Ctrl+S (⌘S) | Saves what is being edited — a document or a template — from any field, or with focus on the page itself |
 | Ctrl+N | Starts a new document of the template shown, from any of its tabs |
 | Ctrl+F | Goes to the box that finds the template's documents |
+| ↑ ↓ Home End | Move along the list of documents, which is one stop for Tab; Enter opens the document |
+| Ctrl+/ | Shows these keys, and hides them again; so does Shortcuts at the foot of the sidebar |
 
-While a dialog is open these keys do nothing: the question on screen is answered first. A suggested value is a button beside its field: Tab reaches it and Enter takes it, and focus goes back to the field.
+While a dialog or the list of keys is open the other keys do nothing: the question on screen is answered first. A suggested value is a button beside its field: Tab reaches it and Enter takes it, and focus goes back to the field.
 
 ## Narrow windows
 
