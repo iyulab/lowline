@@ -163,6 +163,7 @@ export const strings = {
   tableFilterText: '칸에 든 글자',
   tableFilterAtLeast: (label: string) => `${label} 이상`,
   tableFilterAtMost: (label: string) => `${label} 이하`,
+  backToList: '목록으로',
   tableSkipped: (n: number) => `표에 넣지 못한 문서 ${n}건`,
   tableFilterFrom: (label: string) => `${label} 부터`,
   tableFilterUntil: (label: string) => `${label} 까지`,

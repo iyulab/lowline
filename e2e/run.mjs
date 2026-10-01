@@ -1773,6 +1773,28 @@ const scenarios = {
       await openDrawer()
       await app.cdp.press('Escape', { code: 'Escape', keyCode: 27 })
       await app.cdp.waitFor(`!__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer closed on Escape')
+
+      // Picking the place already shown still closes the drawer.
+      await openDrawer()
+      await app.learning()
+      await app.cdp.waitFor(`!__e2e.all('dp-shell')[0].hasAttribute('sidebar-open')`, 'the drawer closed on the place already shown')
+
+      // The list and a document take turns: one pane at a time, and a way back to the list.
+      await openDrawer()
+      await app.tabOf(INTAKE, '문서')
+      const shown = () => app.cdp.evaluate(`(() => {
+        const view = __e2e.all('dp-list-detail')[0], root = view.shadowRoot
+        const visible = (sel) => getComputedStyle(root.querySelector(sel)).display !== 'none'
+        return (visible('.list') ? 'list' : '') + (visible('.detail') ? 'detail' : '')
+      })()`)
+      await app.cdp.waitFor(`__e2e.all('ll-documents')[0]?.shadowRoot.querySelector('nav button.document')`, 'the list')
+      assert.equal(await shown(), 'list')
+      await app.click('nav button.document')
+      await app.cdp.waitFor(`__e2e.all('dp-list-detail')[0].hasAttribute('detail-open')`, 'the document open')
+      assert.equal(await shown(), 'detail')
+      await app.click('dc-button.back', '목록으로')
+      await app.cdp.waitFor(`!__e2e.all('dp-list-detail')[0].hasAttribute('detail-open')`, 'back at the list')
+      assert.equal(await shown(), 'list')
       await app.noAlert()
     } finally {
       await app.cdp.send('Emulation.clearDeviceMetricsOverride')
@@ -1796,7 +1818,8 @@ const scenarios = {
       await app.cdp.evaluate(`(() => { const p = __e2e.all('dp-page')[0]; return p.hasAttribute('fill') && p.scrollHeight <= p.clientHeight + 1 })()`),
       'the page itself does not scroll',
     )
-    assert.equal(await app.cdp.evaluate(`getComputedStyle(__e2e.all('ll-documents')[0].shadowRoot.querySelector('nav')).overflowY`), 'auto')
+    for (const pane of ['.list', '.detail'])
+      assert.equal(await app.cdp.evaluate(`getComputedStyle(__e2e.all('dp-list-detail')[0].shadowRoot.querySelector('${pane}')).overflowY`), 'auto', pane)
 
     await app.click(toggle)
     await app.cdp.waitFor(`${sidebar}.hasAttribute('collapsed')`, 'the sidebar folded to its rail')

@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
+import { desktopMedia } from '@iyulab/desktop-patterns/breakpoints'
+import '@iyulab/desktop-patterns/list-detail'
 import { guard } from 'lit/directives/guard.js'
 import { keyed } from 'lit/directives/keyed.js'
 import type { FieldStates } from '@formdown/ui'
@@ -56,11 +58,10 @@ export class LlDocuments extends LitElement {
   static styles = [
     formdownTheme,
     css`
+    /* dp-list-detail lays the list out as wide as the sidebar beside it (1 : 1), the document taking
+       the rest — and, in a narrow window, shows one of the two. */
     :host {
-      display: grid;
-      /* The list is as wide as the sidebar beside it (1 : 1), the document takes the rest. */
-      grid-template-columns: var(--dp-sidebar-width, 220px) minmax(0, 1fr);
-      gap: var(--dc-space-4, 16px);
+      display: flex;
       height: 100%;
       min-height: 0;
     }
@@ -68,7 +69,16 @@ export class LlDocuments extends LitElement {
       display: flex;
       flex-direction: column;
       gap: var(--dc-space-1, 4px);
-      overflow: auto;
+      padding-inline-end: var(--dc-space-2, 8px);
+    }
+    section {
+      padding-inline-start: var(--dc-space-4, 16px);
+    }
+    /* The way back to the list is needed only where the list is not beside the document. */
+    @media ${desktopMedia} {
+      .back {
+        display: none;
+      }
     }
     nav button {
       text-align: left;
@@ -122,8 +132,8 @@ export class LlDocuments extends LitElement {
       display: flex;
       flex-direction: column;
       gap: var(--dc-space-2, 8px);
-      min-height: 0;
-      overflow: auto;
+      min-height: 100%;
+      box-sizing: border-box;
     }
     /* When the column is narrow the status goes to a line of its own; a heading or a button never breaks. */
     .bar {
@@ -795,6 +805,12 @@ export class LlDocuments extends LitElement {
     if (await confirmDiscard()) await next()
   }
 
+  /** Closes the open document — in a narrow window, where the list and the document take turns, for the list. */
+  private backToList() {
+    this.reset()
+    this.draft = undefined
+  }
+
   private startImport() {
     this.reset()
     this.draft = undefined
@@ -892,8 +908,8 @@ export class LlDocuments extends LitElement {
   render() {
     const draft = this.draft
     const opened = this.opened
-    return html`
-      <nav aria-label=${strings.navDocuments}>
+    return html`<dp-list-detail ?detail-open=${!!draft || this.importing}>
+      <nav slot="list" aria-label=${strings.navDocuments}>
         ${this.scope
           ? html`<div class="new">
               <dc-button size="sm" variant="secondary" @click=${() => this.leaveFor(() => this.startNew(this.scope!.path))}
@@ -951,6 +967,9 @@ export class LlDocuments extends LitElement {
           : draft
           ? html`
               <div class="bar">
+                <dc-button class="back" size="sm" variant="ghost" @click=${() => this.leaveFor(() => this.backToList())}
+                  >${strings.backToList}</dc-button
+                >
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
                 ${draft.kind === 'existing'
                   ? html`<ll-rename
@@ -1012,7 +1031,7 @@ export class LlDocuments extends LitElement {
               ? html`<p class="message" role="status">${this.message}</p>`
               : nothing}
       </section>
-    `
+    </dp-list-detail>`
   }
 }
 

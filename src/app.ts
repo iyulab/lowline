@@ -3,8 +3,8 @@ import { customElement, queryAll, state } from 'lit/decorators.js'
 import { live } from 'lit/directives/live.js'
 import { open } from '@tauri-apps/plugin-dialog'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { DpSidebarActionEvent, DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
-import { desktopMinWidth } from '@iyulab/desktop-patterns'
+import type { DpSidebarActionEvent, DpSidebarActivateEvent, DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
+import { desktopMinWidth } from '@iyulab/desktop-patterns/breakpoints'
 import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
@@ -304,7 +304,6 @@ export class LlApp extends LitElement {
   }
 
   private onSidebarSelect(e: DpSidebarSelectEvent) {
-    this.sidebarOpen = false // a drawer over the content gives way to what was picked
     if (e.itemId === NEW_TEMPLATE) {
       e.preventDefault() // an action, not a place: the selection stays where it is
       void this.createTemplate()
@@ -451,6 +450,7 @@ export class LlApp extends LitElement {
             : []}
           .bottomItems=${[{ id: SHORTCUTS, icon: '⌨', label: strings.shortcuts }]}
           @dp-sidebar-select=${(e: DpSidebarSelectEvent) => this.onSidebarSelect(e)}
+          @dp-sidebar-activate=${(_: DpSidebarActivateEvent) => (this.sidebarOpen = false) /* a drawer gives way to any pick, the place already shown too */}
           @dp-sidebar-action=${(e: DpSidebarActionEvent) => {
             if (e.itemId !== SHORTCUTS) return
             this.sidebarOpen = false
