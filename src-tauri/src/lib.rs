@@ -537,15 +537,32 @@ async fn blocking(
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| {
-            if let host::CallError::Failed(failure) = &e {
-                report(report::new(
-                    report::Layer::Host,
-                    &failure.kind,
-                    &failure.frames.join("\n"),
-                ));
+            if let Some(failure) = call_failure(&e) {
+                report(failure);
             }
             e.to_string()
         })
+}
+
+/// The report a failed call to the sidecar makes: what the sidecar said failed; or, when it said
+/// nothing, its status or that it could not be reached. A 404 is an answer — there is nothing
+/// there, such as a table of a template the sidecar does not hold — not a failure.
+fn call_failure(error: &host::CallError) -> Option<report::Report> {
+    match error {
+        host::CallError::Failed(failure) => Some(report::new(
+            report::Layer::Host,
+            &failure.kind,
+            &failure.frames.join("\n"),
+        )),
+        host::CallError::Status(404) => None,
+        host::CallError::Status(status) => Some(
+            report::new(report::Layer::Host, "HostAnswered", "")
+                .detail("status", &status.to_string()),
+        ),
+        host::CallError::Transport(_) => {
+            Some(report::new(report::Layer::Host, "HostUnreachable", ""))
+        }
+    }
 }
 
 /// A suggestion for one judgment field of a document being filled in.
@@ -749,6 +766,31 @@ pub fn run() {
 mod tests {
     use super::*;
     use tauri_kit_watch::Change;
+
+    #[test]
+    fn a_failed_call_reports_what_the_sidecar_said_or_its_status_and_a_404_reports_nothing() {
+        let said = call_failure(&host::CallError::Failed(
+            tauri_kit_sidecar::loopback::Fault {
+                kind: "System.IO.IOException".into(),
+                at: None,
+                frames: vec!["Lowline.Host.VaultProjection.IngestAsync".into()],
+            },
+        ))
+        .unwrap();
+        assert_eq!(
+            (said.layer.as_str(), said.kind.as_str()),
+            ("host", "System.IO.IOException")
+        );
+
+        let status = call_failure(&host::CallError::Status(400)).unwrap();
+        assert_eq!(status.kind, "HostAnswered");
+        assert_eq!(
+            status.details.get("status").map(String::as_str),
+            Some("400")
+        );
+
+        assert!(call_failure(&host::CallError::Status(404)).is_none());
+    }
 
     #[test]
     fn watches_only_the_places_the_app_reads() {

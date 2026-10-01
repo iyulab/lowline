@@ -14,6 +14,6 @@ In the app's settings: this install's id, and where the app was when last used (
 
 ## Error reports
 
-When something fails, an error report is written to `reports.jsonl` in the app's log folder: the layer, the kind of failure (a class name or an app-owned code), the frames of the app's own code, the version and the operating system — never a message, a path, a file name, a template or a value.
+When something fails, an error report is written to `reports.jsonl` in the app's log folder: the layer, the kind of failure (a class name or an app-owned code), the status a failed request to the sidecar was answered with, the frames of the app's own code, the version and the operating system — never a message, a path, a file name, a template or a value.
 
 A release build sends the reports written since its last send on the next launch, over the operating system's TLS and certificate store. The file stays, so what was sent can still be read, until it passes 1 MiB and a launch drops its oldest reports. A build made without somewhere to send them — every development build — sends nothing.
