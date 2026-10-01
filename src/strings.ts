@@ -232,7 +232,7 @@ lowline:
 
 @부서: [select options="영업,개발,인사,총무"]
 
-@담당: [select options="장비,계정,급여,시설"]
+@담당: [radio options="장비,계정,급여,시설"]
 
 @메모: [textarea rows=3]
 `

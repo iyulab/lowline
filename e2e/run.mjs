@@ -1543,6 +1543,8 @@ const scenarios = {
       assert.deepEqual(await readdir(join(empty, '서식')), ['문의 접수.fd.md'])
       const sample = parseFormdown(await readFile(join(empty, '서식', '문의 접수.fd.md'), 'utf8'))
       assert.deepEqual(sample.frontMatter?.data?.lowline, { suggest: ['담당'] })
+      // Its judgment field is a radio group: a suggested option shows in the field itself, not beside it.
+      assert.equal(sample.forms.find((f) => f.name === '담당')?.type, 'radio')
       assert.ok(!existsSync(join(empty, '문서')), 'no documents: suggestions learn only from what a person confirms')
 
       await app.click('dc-button', '새 문서')
