@@ -19,6 +19,15 @@ const { productName, version } = JSON.parse(readFileSync(join(root, 'src-tauri',
 const EXE = `${productName}.exe`
 const SIDECAR = 'Lowline.Host.exe'
 
+/**
+ * The environment for Windows PowerShell: without the module path PowerShell 7 sets for its children,
+ * under which Windows PowerShell cannot load its own modules (signatures, for one).
+ */
+function windowsPowerShellEnv() {
+  const { PSModulePath, ...env } = process.env
+  return env
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** The running processes named `name` whose executable is under `folder`. */
@@ -45,6 +54,16 @@ await withInstalled(
     const notices = join(target, 'THIRD-PARTY-NOTICES.txt')
     if (!existsSync(notices) || !readFileSync(notices, 'utf8').includes('third-party packages')) throw new Error(`the installer did not ship ${notices}`)
     console.log(`  ✓ ships its third-party notices`)
+    // A release build is signed: every program it installs carries a valid signature. Only the
+    // installed copies say so — the bundler signs what goes into the installer, not the build output.
+    if (process.env.LOWLINE_EXPECT_SIGNED) {
+      const ps = `Get-ChildItem -LiteralPath '${target.replaceAll("'", "''")}' -Recurse -File -Include *.exe,*.dll | ForEach-Object { '{0}|{1}' -f $_.Name, (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status }`
+      const programs = execFileSync('powershell', ['-NoProfile', '-Command', ps], { encoding: 'utf8', env: windowsPowerShellEnv() }).trim().split(/\r?\n/).map((l) => l.split('|'))
+      const unsigned = programs.filter(([, status]) => status !== 'Valid').map(([name, status]) => `${name} (${status})`)
+      if (!programs.some(([name]) => name === EXE)) throw new Error(`the installer did not install ${EXE}`)
+      if (unsigned.length) throw new Error(`not signed: ${unsigned.join(', ')}`)
+      console.log(`  ✓ every installed program is signed: ${programs.map(([name]) => name).join(', ')}`)
+    }
     const app = spawn(join(target, EXE), [], { stdio: 'ignore' })
     try {
       if (!(await until(() => runningFrom(SIDECAR, target) > 0, 30_000))) throw new Error(`the installed app did not start ${SIDECAR} from ${target}`)
