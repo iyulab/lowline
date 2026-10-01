@@ -538,7 +538,7 @@ async fn blocking(
         .map_err(|e| e.to_string())?
         .map_err(|e| {
             if let host::CallError::Failed(failure) = &e {
-                report(report::Report::new(
+                report(report::new(
                     report::Layer::Host,
                     &failure.kind,
                     &failure.frames.join("\n"),
@@ -619,11 +619,7 @@ fn start_host(app: &tauri::AppHandle) {
         })();
         if result.is_err() {
             // Why it failed is a message, and messages do not leave the device: the kind says enough.
-            report(report::Report::new(
-                report::Layer::Host,
-                "HostStartFailed",
-                "",
-            ));
+            report(report::new(report::Layer::Host, "HostStartFailed", ""));
         }
         app.state::<HostState>().set(result);
     });
@@ -644,7 +640,7 @@ fn report(report: report::Report) {
 /// Reports what the sidecar failed at away from any request.
 fn report_host_failures(failures: Vec<host::HostFailure>) {
     for failure in failures {
-        report(report::Report::new(
+        report(report::new(
             report::Layer::Host,
             &failure.kind,
             &failure.frames.join("\n"),
@@ -656,7 +652,7 @@ fn report_host_failures(failures: Vec<host::HostFailure>) {
 /// what the report keeps of them is written.
 #[tauri::command]
 fn report_error(kind: String, stack: String) {
-    report(report::Report::new(report::Layer::Ui, &kind, &stack));
+    report(report::new(report::Layer::Ui, &kind, &stack));
 }
 
 /// Starts writing error reports, and reports a panic of the shell — to disk only, from the panic
@@ -673,7 +669,7 @@ fn start_reports(app: &tauri::AppHandle) {
         return;
     }
     // What earlier launches wrote goes out now, away from startup; what fails stays for the next.
-    if let Some(sink) = report::Sink::of_build() {
+    if let Some(sink) = report::sink_of_build() {
         std::thread::spawn(move || {
             let _ = sink.send_pending(&report::Sink::agent(), &file, &sent);
         });
@@ -684,7 +680,7 @@ fn start_reports(app: &tauri::AppHandle) {
             .location()
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_default();
-        report(report::Report::new(report::Layer::Shell, "Panic", &at));
+        report(report::new(report::Layer::Shell, "Panic", &at));
         previous(info);
     }));
 }

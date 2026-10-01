@@ -14,7 +14,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && node scripts/check-tokens.ts",
+    "test": "vitest run && desktop-compact-check-tokens --defined node_modules/@iyulab/desktop-patterns/tokens.css --defined src/styles.css src",
     "build:e2e": "tauri build --debug --no-bundle --config src-tauri/tauri.e2e.conf.json",
     "test:e2e": "node e2e/run.mjs",
     "tauri": "tauri",
@@ -30,8 +30,8 @@
   "dependencies": {
     "@formdown/core": "0.12.1",
     "@formdown/ui": "0.12.1",
-    "@iyulab/desktop-compact": "0.8.2",
-    "@iyulab/desktop-patterns": "0.6.0",
+    "@iyulab/desktop-compact": "0.9.0",
+    "@iyulab/desktop-patterns": "0.6.1",
     "@tauri-apps/api": "^2.12.0",
     "@tauri-apps/plugin-dialog": "^2.8.0",
     "lit": "^3.3.3"

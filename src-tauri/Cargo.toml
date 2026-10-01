@@ -20,25 +20,21 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Canonical paths without the `\\?\` prefix on Windows (already a Tauri dependency).
-dunce = "1"
 # The sidecar: a per-launch token, and HTTP to it on loopback.
 getrandom = "0.4"
-# Loopback HTTP to the sidecar, and HTTPS for error reports through the OS's TLS and certificate
-# store — the roots and proxy an office PC is set up with. `native-tls-no-default` alone does not
-# compile the native-tls transport in ureq 3.4, so the full feature is needed.
+# Loopback HTTP to the sidecar — the same ureq, with the same features, that
+# tauri-kit-diagnostics sends error reports with, so the app builds one.
 ureq = { version = "3", default-features = false, features = ["native-tls", "win-system-proxy"] }
-tauri-kit-fs = "0.6.0"
-tauri-kit-sidecar = "0.6.0"
-tauri-kit-watch = "0.6.0"
+# Error reports that carry no content, sent to Application Insights by a release build.
+tauri-kit-diagnostics = { version = "0.7.0", features = ["appinsights"] }
+tauri-kit-fs = "0.7.0"
+tauri-kit-sidecar = "0.7.0"
+tauri-kit-watch = "0.7.0"
 # Deleting moves a file to the system's trash (Recycle Bin, Trash, freedesktop trash), where the
 # person restores it from — the vault keeps no trash of its own.
 trash = "5.2.9"
 
-# Whether a location has a Recycle Bin at all: on a network share or a removable drive the system
-# deletes for good, without asking, when told to recycle.
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32_System_WindowsProgramming"] }
-
 [dev-dependencies]
+# Canonical paths without the `\\?\` prefix on Windows, to compare with what the trash reports.
+dunce = "1"
 tempfile = "3"

@@ -5,12 +5,12 @@
 //! links that point outside. Writes are atomic (the old content or the new, never a torn file).
 
 use std::fs;
-use std::io::{self, Write};
-use std::path::{Component, Path, PathBuf};
+use std::io;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
-use tauri_kit_fs::conflict_copy_of;
+use tauri_kit_fs::{conflict_copy_of, has_trash, is_changed, is_outside, Expect, Root};
 use tauri_kit_watch::OwnWrites;
 
 /// Folder for form templates.
@@ -88,7 +88,7 @@ pub struct Entry {
 
 #[derive(Debug, Clone)]
 pub struct Vault {
-    root: PathBuf,
+    root: Root,
     /// What this app wrote, so the vault watch does not report it back as an outside edit.
     own: OwnWrites,
 }
@@ -96,13 +96,10 @@ pub struct Vault {
 impl Vault {
     /// Opens an existing folder as a vault.
     pub fn open(path: &Path) -> Result<Self> {
-        let root = dunce::canonicalize(path).map_err(|e| match e.kind() {
+        let root = Root::open(path).map_err(|e| match e.kind() {
             io::ErrorKind::NotFound => VaultError::NotFound(path.display().to_string()),
             _ => VaultError::Io(e),
         })?;
-        if !root.is_dir() {
-            return Err(VaultError::NotFound(path.display().to_string()));
-        }
         Ok(Vault {
             root,
             own: OwnWrites::new(),
@@ -110,7 +107,7 @@ impl Vault {
     }
 
     pub fn root(&self) -> &Path {
-        &self.root
+        self.root.path()
     }
 
     /// The record of this app's own writes, for the vault watch.
@@ -120,37 +117,7 @@ impl Vault {
 
     /// Maps a vault-relative path to a location inside the vault, or refuses it.
     pub fn resolve(&self, rel: &str) -> Result<PathBuf> {
-        let outside = || VaultError::OutsideVault(rel.to_string());
-        let rel_path = Path::new(rel);
-        if rel.is_empty() {
-            return Err(outside());
-        }
-        for component in rel_path.components() {
-            match component {
-                Component::Normal(_) => {}
-                // `..`, `.`, a root or a drive prefix never name a place inside the vault.
-                _ => return Err(outside()),
-            }
-        }
-        let joined = self.root.join(rel_path);
-
-        // A link inside the vault may point outside it: check where the nearest existing
-        // ancestor (or the file itself) really is.
-        let mut probe = joined.as_path();
-        loop {
-            if probe.exists() {
-                let real = dunce::canonicalize(probe)?;
-                if !real.starts_with(&self.root) {
-                    return Err(outside());
-                }
-                break;
-            }
-            match probe.parent() {
-                Some(parent) => probe = parent,
-                None => return Err(outside()),
-            }
-        }
-        Ok(joined)
+        self.root.resolve(rel).map_err(|e| outside_or_io(rel, e))
     }
 
     /// Lists the files directly inside `dir` whose names end with `suffix`, sorted by path, and the
@@ -228,15 +195,20 @@ impl Vault {
     /// Replaces a file atomically, but only while it still holds `expected` — what the app last read
     /// or wrote there — so an edit made elsewhere since is not overwritten unseen; otherwise this fails
     /// with [`VaultError::Changed`] and the file is left as it is. A file that is gone is written again:
-    /// making it loses nothing. The check and the write are moments apart, not one step — this narrows
-    /// a lost update to that moment; it is not a lock.
+    /// making it loses nothing. The content is checked again right before the
+    /// new content lands, so a lost update is narrowed to that moment; it is not a lock.
     pub fn write_if_unchanged(&self, rel: &str, expected: &str, content: &str) -> Result<()> {
-        match self.read(rel) {
-            Ok(current) if current != expected => return Err(VaultError::Changed(rel.to_string())),
-            Ok(_) | Err(VaultError::NotFound(_)) => {}
-            Err(e) => return Err(e),
-        }
-        self.write(rel, content)
+        let abs = self.prepare(rel)?;
+        self.own.record(&abs, content.as_bytes());
+        let expect = Expect::HoldsOrMissing(expected.as_bytes());
+        tauri_kit_fs::replace_if(&abs, expect, content.as_bytes()).map_err(|e| {
+            self.own.forget(&abs);
+            if is_changed(&e) {
+                VaultError::Changed(rel.to_string())
+            } else {
+                VaultError::Io(e)
+            }
+        })
     }
 
     /// Creates a file atomically, refusing to replace one that is already there.
@@ -329,64 +301,23 @@ impl Vault {
     ///
     /// The line and its newline go out in one write and are flushed to disk before this returns.
     /// A crash can still leave a partial last line; readers skip a line they cannot parse.
-    /// TODO: move to tauri-kit-fs once a second app needs append-only logs (thin-app procedure 2).
     pub fn append_line(&self, rel: &str, line: &str) -> Result<()> {
-        if line.contains(['\n', '\r']) {
-            return Err(VaultError::Io(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "a line cannot hold a line break",
-            )));
-        }
         let abs = self.prepare(rel)?;
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&abs)?;
-        let mut bytes = Vec::with_capacity(line.len() + 1);
-        bytes.extend_from_slice(line.as_bytes());
-        bytes.push(b'\n');
-        file.write_all(&bytes)?;
-        file.sync_data()?;
+        tauri_kit_fs::append_line(&abs, line)?;
         Ok(())
     }
 
     fn prepare(&self, rel: &str) -> Result<PathBuf> {
-        let abs = self.resolve(rel)?;
-        if let Some(parent) = abs.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        // Creating the folders may have followed a link; check again now that they exist.
-        self.resolve(rel)
+        self.root.prepare(rel).map_err(|e| outside_or_io(rel, e))
     }
 }
 
-/// Whether a file at `path` can go to a trash the person restores it from. On Windows a network
-/// share (`\\server\share`, or a drive letter mapped to one) and a removable drive have no Recycle
-/// Bin. A root the system cannot place is left to the trash to refuse.
-#[cfg(windows)]
-fn has_trash(path: &Path) -> bool {
-    use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::GetDriveTypeW;
-    use windows_sys::Win32::System::WindowsProgramming::{DRIVE_REMOTE, DRIVE_REMOVABLE};
-
-    let Some(Component::Prefix(prefix)) = path.components().next() else {
-        return true;
-    };
-    let root: Vec<u16> = prefix
-        .as_os_str()
-        .encode_wide()
-        .chain("\\".encode_utf16())
-        .chain(Some(0))
-        .collect();
-    // SAFETY: `root` is a NUL-terminated wide string that outlives the call.
-    let kind = unsafe { GetDriveTypeW(root.as_ptr()) };
-    !matches!(kind, DRIVE_REMOTE | DRIVE_REMOVABLE)
-}
-
-/// Elsewhere the trash itself refuses a location it cannot take.
-#[cfg(not(windows))]
-fn has_trash(_: &Path) -> bool {
-    true
+fn outside_or_io(rel: &str, e: io::Error) -> VaultError {
+    if is_outside(&e) {
+        VaultError::OutsideVault(rel.to_string())
+    } else {
+        VaultError::Io(e)
+    }
 }
 
 #[cfg(test)]
@@ -412,19 +343,6 @@ mod tests {
         v.write_if_unchanged("문서/a.md", "theirs", "made again")
             .unwrap();
         assert_eq!(v.read("문서/a.md").unwrap(), "made again");
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn a_local_folder_has_a_trash_and_a_network_share_has_none() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(has_trash(dir.path()));
-        // This PC's administrative share of its system drive: the same folder, reached over SMB.
-        let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
-        let share = format!(r"\\localhost\{}$\Windows", system.trim_end_matches(':'));
-        if Path::new(&share).exists() {
-            assert!(!has_trash(Path::new(&share)));
-        }
     }
 
     fn vault() -> (tempfile::TempDir, Vault) {
