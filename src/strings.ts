@@ -43,7 +43,7 @@ export const strings = {
     p.kind === 'front-matter'
       ? `서식 앞부분(front matter)을 읽을 수 없어 저장하지 않습니다 — ${p.detail}`
       : p.kind === 'duplicate-field'
-        ? `칸 이름 "${p.name}"이(가) 두 번 이상 쓰였습니다. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.`
+        ? `칸 이름 "${p.name}"이(가) 두 번 이상 쓰였습니다${p.lines.length ? `(다시 쓰인 줄: ${p.lines.join(', ')})` : ''}. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.`
         : p.kind === 'unknown-condition'
           ? `칸 "${p.field}"의 조건이 이 서식에 없는 칸 "${p.name}"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.`
           : p.kind === 'shared-id'

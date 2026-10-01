@@ -218,7 +218,8 @@ describe('templateProblems', () => {
 
   it('names a field name used more than once, once', () => {
     const source = `${head}@담당: [select options="장비"]\n\n@담당: [text]\n\n@담당: [text]\n`
-    expect(templateProblems(source)).toEqual([{ kind: 'duplicate-field', name: '담당' }])
+    // Lines of the source, front matter included: the first 담당 is line 7, its repeats 9 and 11.
+    expect(templateProblems(source)).toEqual([{ kind: 'duplicate-field', name: '담당', lines: [9, 11] }])
   })
 
   it('names a suggest entry that is not a field', () => {

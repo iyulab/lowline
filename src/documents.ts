@@ -201,7 +201,7 @@ function rank(order: readonly string[], name: string): number {
  */
 export type TemplateProblem =
   | { kind: 'front-matter'; detail: string }
-  | { kind: 'duplicate-field'; name: string }
+  | { kind: 'duplicate-field'; name: string; lines: number[] }
   | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
@@ -258,7 +258,13 @@ export function templateProblems(source: string): TemplateProblem[] {
     .filter((d) => d.code.startsWith('front-matter-') && d.severity === 'error')
     .map((d) => ({ kind: 'front-matter', detail: d.message }))
   const names = parsed.forms.map((f) => f.name)
-  for (const name of new Set(names.filter((n, i) => names.indexOf(n) !== i))) problems.push({ kind: 'duplicate-field', name })
+  // The parser says where each repeat of a name is (the lines of the source, front matter included).
+  const repeats = new Map<string, number[]>()
+  for (const d of parsed.diagnostics ?? []) {
+    if (d.code !== 'duplicate-field-name' || d.field === undefined) continue
+    repeats.set(d.field, [...(repeats.get(d.field) ?? []), ...(d.span ? [d.span.line] : [])])
+  }
+  for (const [name, lines] of repeats) problems.push({ kind: 'duplicate-field', name, lines })
   for (const field of parsed.forms) {
     const named = new Set(Object.values(field.conditions ?? {}).map((c) => c?.field).filter((n): n is string => !!n))
     for (const name of named) if (!names.includes(name)) problems.push({ kind: 'unknown-condition', field: field.name, name })
