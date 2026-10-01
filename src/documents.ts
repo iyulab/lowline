@@ -170,7 +170,7 @@ export function fileNameFor(name: string, suffix: string): string | null {
 
 /**
  * Turns suggestions on or off for one field of a template, under its front matter's `lowline.suggest`
- * (D-46) — the only place the choice is kept. The list follows the template's field order; other keys
+ * — the only place the choice is kept. The list follows the template's field order; other keys
  * under `lowline`, and everything else in the file, are left as they are.
  */
 export function setSuggest(templateSource: string, field: string, on: boolean): string {

@@ -84,7 +84,7 @@ export function referenceTargets(templates: readonly TemplateSnapshot[]): Set<st
 }
 
 /**
- * The fields a template turns suggestions on for. Off unless the author names them (D-46): under the
+ * The fields a template turns suggestions on for. Off unless the author names them: under the
  * front matter's `lowline` key, so a tool that only knows Formdown reads the template unchanged.
  * Names that are not fields of the template are ignored.
  */

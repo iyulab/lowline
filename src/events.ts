@@ -1,5 +1,5 @@
 // Suggestion events: what a person did with a suggestion, recorded when the document is saved —
-// saving is when a value is confirmed. The only learning signals are these explicit ones (D-28).
+// saving is when a value is confirmed. The only learning signals are these explicit ones.
 // Suggestions shown and never saved are kept apart, on the device (see `Presentation`).
 
 import type { FieldValue, FieldValues } from './documents.js'

@@ -251,7 +251,7 @@ export const strings = {
 /**
  * The sample a new vault starts with: an intake form with one judgment field turned on, so saving a
  * few requests shows what suggestions are. It holds no documents — suggestions learn only from what
- * a person confirms. Provisional: which domains the app's samples come from is still open (B-09).
+ * a person confirms. Provisional: which domains the app's samples come from is still open.
  */
 export function sampleTemplate(id: string): string {
   return `---

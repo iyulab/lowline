@@ -297,7 +297,7 @@ export class LlTemplates extends LitElement {
 
   /**
    * Gives a field the name it shows — its label — leaving its name, which documents, the table and what was
-   * learned know it by (D-85), as it is: an edit of the source like any other, kept by saving. A name left
+   * learned know it by, as it is: an edit of the source like any other, kept by saving. A name left
    * empty, or the field's own name, takes the label away.
    */
   private setLabel(field: string, typed: string) {

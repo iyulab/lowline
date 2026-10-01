@@ -56,7 +56,7 @@ export function sidebarEntries(
   references: ReadonlySet<string> = new Set(),
 ): SidebarEntry[] {
   // Templates other templates' fields refer to — customers, items — are what records are about: they lead,
-  // in a group of their own. Nothing marks them; a field referring to one does (B-59 D1).
+  // in a group of their own. Nothing marks them; a field referring to one does.
   const isReference = (t: TemplateItem) => references.has(templateId(t.ref))
   const item = (icon: string) => (t: TemplateItem) => ({ id: placeId({ kind: 'template', ref: t.ref }), icon, label: t.name })
   const referred = templates.filter(isReference)

@@ -1,5 +1,5 @@
 /**
- * A template's revisions are one template (D-85): its identity is its `id`, and `version` counts its revisions.
+ * A template's revisions are one template: its identity is its `id`, and `version` counts its revisions.
  * A document or an event names the revision it was written with (`id@version`, as its file says — files are never
  * rewritten for this). Read against the vault, it belongs to the template of the same id, whatever revision that
  * template is at now, so its values stay in the template's list and table, and what it taught stays learned.
