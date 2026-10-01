@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cellText, documentSnapshot, templateSnapshot } from '../projection.js'
+import { cellText, documentSnapshot, referenceTargets, templateSnapshot } from '../projection.js'
 import { newDocument } from '../documents.js'
 
 const template = `---
@@ -44,6 +44,17 @@ describe('templateSnapshot', () => {
     expect(templateSnapshot(twice).suggest).toEqual(['심각도'])
   })
 
+  it("carries the template a field refers to by its id, and only for a field that refers to one", () => {
+    const inquiry = '---\nid: inquiry\nversion: 1\n---\n# 문의\n\n@고객 -> customer: [select]\n@태그 <-> tag: [checkbox]\n@제목: [text]\n'
+    const fields = templateSnapshot(inquiry).fields
+    expect(fields.map((f) => [f.name, f.reference])).toEqual([
+      ['고객', 'customer'],
+      // Many to many is not read yet: its field is the type it is written as.
+      ['태그', undefined],
+      ['제목', undefined],
+    ])
+  })
+
   it('turns suggestions on only for fields the author names', () => {
     expect(templateSnapshot(template.replace(/lowline:\n  suggest: .*\n/, '')).suggest).toEqual([])
     expect(templateSnapshot(template.replace('suggest: [심각도, 없는칸]', 'suggest: 심각도')).suggest).toEqual([])
@@ -85,5 +96,19 @@ describe('cellText', () => {
   it('tells a box left unchecked apart from a value never given', () => {
     expect(cellText(false)).not.toBe(cellText(undefined))
     expect(cellText(undefined)).toBe('')
+  })
+})
+
+describe('referenceTargets', () => {
+  const field = (name: string, reference?: string) => ({ name, label: name, type: 'select', multiple: false, options: [], ...(reference ? { reference } : {}) })
+  const customer = { ref: 'customer@2', fields: [field('이름')], suggest: [] }
+  const inquiry = { ref: 'inquiry@1', fields: [field('고객', 'customer'), field('담당', 'staff')], suggest: [] }
+
+  it('is the templates in the vault some field refers to, by id whatever their revision', () => {
+    expect([...referenceTargets([customer, inquiry])]).toEqual(['customer'])
+  })
+
+  it('has none without a field that refers to a template', () => {
+    expect([...referenceTargets([customer])]).toEqual([])
   })
 })

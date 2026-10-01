@@ -29,7 +29,7 @@ On a template's page:
 - A choice field's options are edited in the field list and written back into that field in the source, nowhere else.
 - **Rename** in the field list changes what a field shows — its `label` — and leaves its name as it is. A field's name is what documents record its value under and what suggestions learn by, so the values and what was learned stay with it. Renaming the field in the source instead makes it a new field; the page then says which documents hold values in a field the source no longer has.
 - Typing in the source completes a field just started — `@` after three underscores, for the field's name, and `[]` after `@name: `, for its type — and one undo takes the completion away.
-- Problems in the source are listed above it: a field name used twice (documents keep one value per name, so the field is read as it first appears), a condition that names a field the template does not have, a judgment field that is not a field, and another template file with the same id.
+- Problems in the source are listed above it: a field name used twice (documents keep one value per name, so the field is read as it first appears), a condition that names a field the template does not have, a judgment field that is not a field, another template file with the same id, and a field that refers to a template the vault does not have (`@customer -> customer: [select]` names the template by its `id`) or to many documents (`<->`, not read yet).
 
 ### Versions
 

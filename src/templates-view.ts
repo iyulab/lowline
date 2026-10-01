@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
+import { fileName, fileNameFor, referenceProblems, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
 import { readVault } from './vault-snapshot.js'
 import type { DocumentSnapshot } from './projection.js'
 import type { TemplateItem } from './template-scope.js'
@@ -497,6 +497,7 @@ export class LlTemplates extends LitElement {
       problems = [
         ...templateProblems(this.source),
         ...sharedId(this.source, this.path, this.templateItems),
+        ...referenceProblems(this.source, this.templateItems),
         ...strayFields(this.source, this.documents),
       ]
     } catch {

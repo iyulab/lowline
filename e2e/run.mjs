@@ -1303,7 +1303,7 @@ const scenarios = {
   async 'says what is wrong in a template source, and does not save one whose front matter cannot be read'(app, vault) {
     const EDGE = { name: '경계 서식', ref: 'edge@1', path: '서식/경계 서식.fd.md' }
     const file = join(vault, EDGE.path)
-    const source = '---\nid: edge\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n# 경계\n\n@담당: [select options="장비,인사"]\n\n@담당: [text]\n\n@메모: [text visible-if="분류=급함"]\n'
+    const source = '---\nid: edge\nversion: 1\nlowline:\n  suggest: [담당, 분류]\n---\n# 경계\n\n@담당: [select options="장비,인사"]\n\n@담당: [text]\n\n@메모: [text visible-if="분류=급함"]\n\n@고객 -> customer: [select]\n\n@태그 <-> tag: [checkbox]\n'
     const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
     const hostReports = async () => (existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter((l) => l.includes('"layer":"host"')).length : 0)
     const hostBefore = await hostReports()
@@ -1318,6 +1318,8 @@ const scenarios = {
       '칸 이름 "담당"이(가) 두 번 이상 쓰였습니다(다시 쓰인 줄: 11). 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.',
       '칸 "메모"의 조건이 이 서식에 없는 칸 "분류"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.',
       'lowline.suggest의 "분류"은(는) 이 서식의 칸이 아니라 제안이 켜지지 않습니다.',
+      '칸 "고객"이(가) 가리키는 서식 "customer"이(가) 볼트에 없습니다. 고를 문서가 없어, 그 서식(id: customer)이 생길 때까지 값은 적힌 그대로 둡니다.',
+      '칸 "태그"의 "<-> tag"(여러 문서를 가리킴)은 아직 읽지 않습니다 — 이 칸은 적힌 타입 그대로 쓰입니다. 한 문서를 가리키려면 "->"를 쓰세요.',
     ])
     assert.equal(
       await app.cdp.evaluate(`__e2e.all('dc-checkbox').filter((c) => c.getAttribute('name') === '담당').length`),

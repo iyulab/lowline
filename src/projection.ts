@@ -4,6 +4,7 @@
 import { parseFormdown } from '@formdown/core'
 import { documentFrontMatter, templateInfo } from './documents.js'
 import { documentId } from './identity.js'
+import { templateId } from './template-revision.js'
 import type { SuggestionEvent } from './events.js'
 
 export interface TemplateField {
@@ -16,6 +17,11 @@ export interface TemplateField {
   multiple: boolean
   /** A choice field's options (select, radio, checkbox group); empty for any other field. */
   options: string[]
+  /**
+   * The id of the template whose documents the field's value names (`@고객 -> customer: [select]`): its value
+   * is one of those documents' ids. Absent for a field that refers to none.
+   */
+  reference?: string
 }
 
 export interface TemplateSnapshot {
@@ -61,8 +67,20 @@ export function templateSnapshot(source: string): TemplateSnapshot {
     type: f.type,
     multiple: f.type === 'checkbox' && Array.isArray(f.options) && f.options.length > 0,
     options: ['select', 'radio', 'checkbox'].includes(f.type) && Array.isArray(f.options) ? f.options.map(String) : [],
+    // One document of another template (`->`); many to many (`<->`) is not read yet.
+    ...(f.relation?.type === 'fk' ? { reference: f.relation.target } : {}),
   }))
   return { ref, fields, suggest: suggestFields(parsed.frontMatter?.data, fields) }
+}
+
+/**
+ * The templates the vault's fields refer to, by id: a template is one whose documents are what other
+ * documents are about (a customer, an item) because a field says so — nothing marks it otherwise. Only
+ * templates in the vault count.
+ */
+export function referenceTargets(templates: readonly TemplateSnapshot[]): Set<string> {
+  const present = new Set(templates.map((t) => templateId(t.ref)))
+  return new Set(templates.flatMap((t) => t.fields.flatMap((f) => (f.reference && present.has(f.reference) ? [f.reference] : []))))
 }
 
 /**

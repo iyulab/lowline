@@ -206,6 +206,8 @@ export type TemplateProblem =
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
   | { kind: 'shared-id'; id: string; names: string[] }
+  | { kind: 'unknown-reference'; field: string; target: string }
+  | { kind: 'many-to-many'; field: string; target: string }
 
 /**
  * Fields the template's documents hold values in that its source does not have — a field renamed or
@@ -250,6 +252,28 @@ export function sharedId(source: string, path: string, templates: readonly { ref
   }
   const names = templates.filter((t) => t.path !== path && templateId(t.ref) === id).map((t) => t.name)
   return names.length ? [{ kind: 'shared-id', id, names }] : []
+}
+
+/**
+ * Fields that refer to another template's documents and cannot: the template they name is not in the vault
+ * (a template refers to its own documents too), or they name many (`<->`), which is not read yet — such a
+ * field is the type it is written as.
+ */
+export function referenceProblems(source: string, templates: readonly { ref: string }[]): TemplateProblem[] {
+  const present = new Set(templates.map((t) => templateId(t.ref)))
+  try {
+    present.add(templateInfo(source).id)
+  } catch {
+    // A template that cannot be read has no id of its own to refer to.
+  }
+  const problems: TemplateProblem[] = []
+  for (const field of parseFormdown(source).forms) {
+    const relation = field.relation
+    if (!relation) continue
+    if (relation.type === 'many-to-many') problems.push({ kind: 'many-to-many', field: field.name, target: relation.target })
+    else if (!present.has(relation.target)) problems.push({ kind: 'unknown-reference', field: field.name, target: relation.target })
+  }
+  return problems
 }
 
 export function templateProblems(source: string): TemplateProblem[] {

@@ -12,6 +12,7 @@ import {
   setDocumentId,
   setSuggest,
   reviseDocument,
+  referenceProblems,
   sharedId,
   strayFields,
   templateBody,
@@ -282,6 +283,26 @@ describe('sharedId', () => {
   it('has none for a template alone with its id, or one whose front matter cannot be read', () => {
     expect(sharedId(source, '서식/접수.fd.md', templates.slice(0, 1))).toEqual([])
     expect(sharedId('# 앞부분 없음\n', '서식/접수.fd.md', templates)).toEqual([])
+  })
+})
+
+describe('referenceProblems', () => {
+  const inquiry = '---\nid: inquiry\nversion: 1\n---\n# 문의\n\n@고객 -> customer: [select]\n@상위 -> inquiry: [select]\n@태그 <-> tag: [checkbox]\n'
+  const templates = [
+    { ref: 'inquiry@1', path: '서식/문의.fd.md', name: '문의' },
+    { ref: 'customer@2', path: '서식/고객.fd.md', name: '고객' },
+  ]
+
+  it('says nothing of a field referring to a template in the vault, whatever its revision, or to its own', () => {
+    expect(referenceProblems(inquiry, templates).filter((p) => p.kind === 'unknown-reference')).toEqual([])
+  })
+
+  it('names a field referring to a template the vault does not have', () => {
+    expect(referenceProblems(inquiry, templates.slice(0, 1))).toContainEqual({ kind: 'unknown-reference', field: '고객', target: 'customer' })
+  })
+
+  it('names a many-to-many field, which is not read as a reference yet', () => {
+    expect(referenceProblems(inquiry, templates)).toEqual([{ kind: 'many-to-many', field: '태그', target: 'tag' }])
   })
 })
 
