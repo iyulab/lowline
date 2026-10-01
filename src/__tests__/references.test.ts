@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
-import { referenceChoices } from '../references.js'
+import { referenceChoices, withReferenceNames } from '../references.js'
 
 const field = (name: string, reference?: string) => ({ name, label: name, type: 'select', multiple: false, options: [], ...(reference ? { reference } : {}) })
 const customer: TemplateSnapshot = { ref: 'customer@2', fields: [field('등급')], suggest: [] }
@@ -34,5 +34,30 @@ describe('referenceChoices', () => {
   it('has none for a template without reference fields, or none at all', () => {
     expect(referenceChoices(customer, [customer], documents, names, {})).toEqual({})
     expect(referenceChoices(undefined, [customer], documents, names, {})).toEqual({})
+  })
+})
+
+describe('withReferenceNames', () => {
+  const table = {
+    template: 'inquiry@1',
+    columns: [{ name: '고객', type: 'select' }, { name: '분류', type: 'select' }],
+    rows: [
+      { path: '문서/문의 1.md', values: { 고객: 'c-2', 분류: 'c-2' } },
+      { path: '문서/문의 2.md', values: { 고객: '3f2a1b2c-dead', 분류: null } },
+      { path: '문서/문의 3.md', values: { 고객: null, 분류: null } },
+    ],
+  }
+
+  it("shows a reference field's value as the document's name, a missing one as missing, and leaves other fields", () => {
+    const shown = withReferenceNames(table, inquiry, [customer, inquiry], documents, names)
+    expect(shown.rows.map((r) => [r.values['고객'], r.values['분류']])).toEqual([
+      ['한빛상사', 'c-2'],
+      ['없는 고객 (3f2a1b2c)', null],
+      [null, null],
+    ])
+  })
+
+  it('is the table itself for a template without reference fields', () => {
+    expect(withReferenceNames(table, customer, [customer], documents, names)).toBe(table)
   })
 })

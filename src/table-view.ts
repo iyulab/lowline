@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { fileName } from './documents.js'
 import { describeError } from './errors.js'
-import { DATE_TYPES, PATH_COLUMN, cellText, type ColumnFilter, type IngestResult, type ProjectionTable, type TemplateField, type TemplateSnapshot } from './projection.js'
+import { DATE_TYPES, PATH_COLUMN, cellText, type ColumnFilter, type DocumentSnapshot, type IngestResult, type ProjectionTable, type TemplateField, type TemplateSnapshot } from './projection.js'
+import { referenceChoices, withReferenceNames } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { tableCsv } from './export.js'
@@ -69,6 +70,8 @@ export class LlTable extends LitElement {
   /** What the last export wrote, said in place of the row count until the table changes. */
   @state() private exported = ''
   @state() private names = new Map<string, string>()
+  /** The vault's documents as last handed over: what reference fields name (`references.ts`). */
+  @state() private documents: DocumentSnapshot[] = []
   /**
    * The table's filters, one per column and kind (`op:column`) — a name or a field's text it contains, a
    * choice field's value, a number field's lower and upper bound.
@@ -109,6 +112,7 @@ export class LlTable extends LitElement {
       const synced = await syncVault(change)
       this.templates = synced.templates
       this.names = synced.names
+      this.documents = synced.documents
       this.ingest = synced.ingest
       this.waiting = false
       await this.show(this.template)
@@ -130,6 +134,12 @@ export class LlTable extends LitElement {
     }
   }
 
+  /** The table as people read it: a reference field names a document, not its id. */
+  private shown(table: ProjectionTable): ProjectionTable {
+    const template = this.templates.find((t) => t.ref === table.template)
+    return withReferenceNames(table, template, this.templates, this.documents, this.names)
+  }
+
   /**
    * Saves the table as CSV where the person picks, named after the template. What was written is said
    * in the bar; a closed dialog says nothing.
@@ -141,7 +151,7 @@ export class LlTable extends LitElement {
     this.error = ''
     try {
       const name = `${this.names.get(table.template) ?? table.template}.csv`.replace(/[\\/:*?"<>|]/g, ' ')
-      const file = await vault.exportFile(name, tableCsv(table, (f) => this.label(f), strings.tableExportDocument), strings.tableExportFilter, 'csv')
+      const file = await vault.exportFile(name, tableCsv(this.shown(table), (f) => this.label(f), strings.tableExportDocument), strings.tableExportFilter, 'csv')
       if (file) this.exported = strings.tableExported(file)
     } catch (e) {
       this.error = describeError(e)
@@ -175,10 +185,13 @@ export class LlTable extends LitElement {
    */
   private renderFilters(template: TemplateSnapshot | undefined) {
     if (!template) return nothing
-    const choices = template.fields.filter((f) => (f.type === 'select' || f.type === 'radio') && f.options.length > 0)
+    const choices = template.fields.filter((f) => !f.reference && (f.type === 'select' || f.type === 'radio') && f.options.length > 0)
+    // A reference field is filtered by the document it names, picked by name.
+    const references = template.fields.filter((f) => f.reference)
+    const named = referenceChoices(template, this.templates, this.documents, this.names, {})
     // Every other field but checkboxes, numbers and dates is text to the projection.
     const texts = template.fields.filter(
-      (f) => !choices.includes(f) && !['checkbox', 'number', 'range', ...DATE_TYPES].includes(f.type),
+      (f) => !choices.includes(f) && !references.includes(f) && !['checkbox', 'number', 'range', ...DATE_TYPES].includes(f.type),
     )
     const numbers = template.fields.filter((f) => f.type === 'number' || f.type === 'range')
     const dates = template.fields.filter((f) => DATE_TYPES.includes(f.type))
@@ -200,6 +213,15 @@ export class LlTable extends LitElement {
           aria-label=${f.label}
           .value=${value(f.name, 'equal')}
           .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...f.options.map((o) => ({ value: o, label: o }))]}
+          @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
+        ></dc-select>`,
+      )}
+      ${references.map(
+        (f: TemplateField) => html`<dc-select
+          size="sm"
+          aria-label=${f.label}
+          .value=${value(f.name, 'equal')}
+          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...(named[f.name] ?? [])]}
           @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
         ></dc-select>`,
       )}
@@ -296,7 +318,7 @@ export class LlTable extends LitElement {
   render() {
     if (this.error) return html`<p class="error" role="alert">${this.error}</p>`
     if (this.waiting) return html`<p class="message" role="status">${strings.hostStarting}</p>`
-    const table = this.table
+    const table = this.table && this.shown(this.table)
     const skipped = this.ingest?.skipped.length ?? 0
     const filtered = this.filters.size > 0
     return html`

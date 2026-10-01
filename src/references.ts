@@ -4,7 +4,7 @@
 // nothing in the files that name it.
 
 import { fileName, type FieldValues } from './documents.js'
-import type { DocumentSnapshot, TemplateSnapshot } from './projection.js'
+import type { DocumentSnapshot, ProjectionTable, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { templateId } from './template-revision.js'
 
@@ -43,4 +43,35 @@ export function referenceChoices(
     choices[field.name] = listed
   }
   return choices
+}
+
+/**
+ * The table as people read it: each reference field's value — a document's id — as that document's name,
+ * or as missing when the vault does not have it. What the table filters and sorts by stays the id.
+ */
+export function withReferenceNames(
+  table: ProjectionTable,
+  template: TemplateSnapshot | undefined,
+  templates: readonly TemplateSnapshot[],
+  documents: readonly DocumentSnapshot[],
+  names: ReadonlyMap<string, string>,
+): ProjectionTable {
+  const fields = (template?.fields ?? []).filter((f) => f.reference)
+  if (!fields.length) return table
+  // A document is found among its own template's documents only, as the field offers them.
+  const nameOf = new Map(documents.map((d) => [`${templateId(d.template)}\n${d.id}`, fileName(d.path, '.md')]))
+  const shown = (target: string, value: unknown) => {
+    if (typeof value !== 'string' || !value) return value
+    const name = nameOf.get(`${target}\n${value}`)
+    if (name !== undefined) return name
+    const ref = templates.find((t) => templateId(t.ref) === target)?.ref
+    return strings.missingReference((ref && names.get(ref)) || target, value)
+  }
+  return {
+    ...table,
+    rows: table.rows.map((row) => ({
+      ...row,
+      values: { ...row.values, ...Object.fromEntries(fields.map((f) => [f.name, shown(f.reference!, row.values[f.name])])) },
+    })),
+  }
 }

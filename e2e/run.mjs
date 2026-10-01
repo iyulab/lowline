@@ -956,6 +956,22 @@ const scenarios = {
         'the missing customer shown',
         { timeoutMs: 15_000 },
       )
+
+      // The table names the customer, and filters by the customer picked by name.
+      await app.showTable(INQUIRY)
+      const cells = () => app.cdp.evaluate(`__e2e.all('tbody tr').map((r) => r.textContent.replace(/\\s+/g, ' ').trim())`)
+      await app.cdp.waitFor(`__e2e.all('tbody tr').length === 2`, 'both inquiries in the table', { timeoutMs: 15_000 })
+      const rows = await cells()
+      assert.ok(rows.some((r) => r.includes('한빛상사')), `named in the table: ${rows}`)
+      assert.ok(rows.some((r) => r.includes('없는 고객 (3f2a1b2c)')), `missing said in the table: ${rows}`)
+      assert.ok(!rows.some((r) => r.includes('c-hanbit')), 'the id is not what is shown')
+      await app.cdp.evaluate(`(() => { const s = __e2e.all('dc-select').find((el) => el.getAttribute('aria-label') === '고객')
+        const inner = s.shadowRoot.querySelector('select'); inner.value = 'c-hanbit'; inner.dispatchEvent(new Event('change')); return true })()`)
+      await app.cdp.waitFor(
+        `__e2e.all('[role=status]').some((el) => el.textContent.trim() === '조건에 맞는 문서 1건') && __e2e.all('tbody tr').length === 1`,
+        'the inquiries of 한빛상사',
+        { timeoutMs: 15_000 },
+      )
       await app.noAlert()
     } finally {
       await app.learning()
