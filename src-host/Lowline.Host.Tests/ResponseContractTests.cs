@@ -95,12 +95,13 @@ public sealed class ResponseContractTests
         };
         var written = Zeroed(responses).ToJsonString(Written).ReplaceLineEndings("\n") + "\n";
 
-        var path = FixturePath();
+        // Written into the source tree; checked against the copy the build puts beside the tests.
         if (Environment.GetEnvironmentVariable("LOWLINE_UPDATE_CONTRACT") == "1")
         {
-            File.WriteAllText(path, written);
+            File.WriteAllText(FixturePath(), written);
             return;
         }
+        var path = Path.Combine(AppContext.BaseDirectory, "sidecar-responses.json");
         Assert.True(File.Exists(path), $"{path} is missing; write it with LOWLINE_UPDATE_CONTRACT=1");
         Assert.True(File.ReadAllText(path) == written,
             "The sidecar's answers changed. Write the file again with LOWLINE_UPDATE_CONTRACT=1, then run the UI's tests: " +
