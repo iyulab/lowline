@@ -133,9 +133,7 @@ public sealed class RebuildCostTests
                 line += $" · restart {start.ElapsedMilliseconds} ms · cache {new FileInfo(restarted.CacheFileOf("")).Length / (1024 * 1024)} MB";
             }
 
-            TestContext.Current.TestOutputHelper?.WriteLine(line);
-            if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
-                await File.AppendAllTextAsync(output, line + Environment.NewLine, Ct);
+            await Measurement.ReportAsync(line, Ct);
         }
         finally
         {
@@ -202,9 +200,7 @@ public sealed class RebuildCostTests
             }
 
             var line = $"{count} docs, long used · " + string.Join(" · ", lines);
-            TestContext.Current.TestOutputHelper?.WriteLine(line);
-            if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
-                await File.AppendAllTextAsync(output, line + Environment.NewLine, Ct);
+            await Measurement.ReportAsync(line, Ct);
         }
         finally
         {

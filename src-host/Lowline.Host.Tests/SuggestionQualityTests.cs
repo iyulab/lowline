@@ -34,8 +34,6 @@ public sealed class SuggestionQualityTests
         }
 
         var line = $"{confirmed} confirmed · {Asked} asked · right {right} · wrong {wrong} · abstained {abstained}";
-        TestContext.Current.TestOutputHelper?.WriteLine(line);
-        if (Environment.GetEnvironmentVariable("LOWLINE_PERF_OUT") is { Length: > 0 } output)
-            await File.AppendAllTextAsync(output, line + Environment.NewLine, ct);
+        await Measurement.ReportAsync(line, ct);
     }
 }
