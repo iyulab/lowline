@@ -7,7 +7,7 @@ The vault's files are the only originals. Everything else the app keeps can be d
 In the app's local data, one file each per vault:
 
 - A cache of the tables and the index of the documents' values. It is rebuilt from the vault.
-- The strength each judgment field's replay chose for the values saved together, so the next launch starts from them instead of replaying its history again. They are chosen again from the vault if the file is gone.
+- The strength each judgment field's replay chose for the values saved together, so the next launch starts from them instead of replaying its history again. They are chosen again from the vault if the file is gone, after an update of what measures them, or when a field's choices change.
 - A record of the suggestions this device showed for the vault: when, for which template and field, and from where — never the value. Nothing learns from it; it is counted, so decisions can be read against what was shown, including suggestions whose document was never saved.
 
 In the app's settings: this install's id, where the app was when last used (see [Working in the app](working.md)), whether to check for updates, and whether the first launch's line about what leaves this computer was answered.
