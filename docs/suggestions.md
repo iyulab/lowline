@@ -2,7 +2,7 @@
 
 ## What is suggested, and from what
 
-Fill in the observed fields and a judgment field gets a suggested value when the values filled in settle it: the sidecar remembers the values people saved together (Gil, no model), and a field that another field decides — where replaying its saved documents shows that field's value alone gets it right often enough — is suggested the value saved alongside it. The suggestion says which value it rests on. When the values filled in settle nothing, it suggests nothing, and says so.
+Fill in the observed fields and a judgment field gets a suggested value when the values filled in settle it: the sidecar remembers the values people saved together (Gil, no model). Each value filled in lends strength to the values saved alongside it, and values filled in that agree add up; a judgment field whose strongest value is strong enough — where replaying its saved documents shows that strength gets it right often enough — is suggested that value. The suggestion says which filled-in value it rests on most. When the values filled in settle nothing, it suggests nothing, and says so.
 
 A suggestion is drawn by its field: the value to take — shown in an empty text field in place of its placeholder — what it rests on, and a way to decline it. A suggestion is not a value until the person takes it; taking it and saving is a confirmation, and only confirmations are learned from.
 
@@ -10,7 +10,7 @@ Similar documents are not suggested from. On a field judged from its observed va
 
 ## How often is often enough
 
-The strength a field's values saved together need is chosen per field by replaying its saved documents in the order they were saved: the lowest strength down to which the replayed suggestions were right 80% of the time, in every band and not only taken together. It is chosen once a field has enough saved documents, and again as they grow by a tenth; until then nothing is suggested for the field. The chosen strengths are kept on this device beside the vault's cache, so a later launch uses them at once rather than replaying again.
+The strength a field's values saved together need is chosen per field by replaying its saved documents in the order they were saved: the lowest strength down to which the replayed suggestions were right 80% of the time, in every band and not only taken together. It is chosen once a field has enough saved documents, and again as they grow by a tenth; until then nothing is suggested for the field. The chosen strengths are kept on this device beside the vault's cache, so a later launch uses them at once rather than replaying again — except the first launch after an update of what measures it (Gil), which replays once more, since an update may measure strength on another scale.
 
 A judgment field left without a suggestion says why beside it: nothing confirmed yet; its history has not yet shown that the values saved together are right often enough (with how many confirmed documents it had to learn from); the values filled in settle nothing; or suggestions are not available right now, while typing and saving go on.
 
