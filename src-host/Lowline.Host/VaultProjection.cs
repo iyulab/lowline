@@ -6,8 +6,11 @@ using Formbase.Core.Schema;
 
 namespace Lowline.Host;
 
-/// <summary>A field of a template, as the UI's Formdown parser reports it.</summary>
-public sealed record TemplateField(string Name, string Type, bool Multiple = false);
+/// <summary>
+/// A field of a template, as the UI's Formdown parser reports it: a choice field with its options (none for any
+/// other field).
+/// </summary>
+public sealed record TemplateField(string Name, string Type, bool Multiple = false, IReadOnlyList<string>? Options = null);
 
 /// <summary>
 /// A template: its `id@version`, its fields in template order, and the judgment fields its author

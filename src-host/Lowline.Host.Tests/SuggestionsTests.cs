@@ -262,6 +262,48 @@ public sealed class SuggestionsTests
         [.. Enumerable.Range(1, count).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
             Values($$"""{"요청": "노트북 배터리 문제 {{i}}", "부서": "영업", "담당": "장비"}"""), Modified: i))]);
 
+    /// <summary><see cref="Many"/> under a template whose 담당 is a choice of <paramref name="choices"/>.</summary>
+    private static VaultSnapshot ManyChoosing(int count, params string[] choices) => Many(count) with
+    {
+        Templates = [Intake with { Fields = [.. Intake.Fields.Select(f => f.Name == "담당" ? f with { Options = choices } : f)] }],
+    };
+
+    [Fact]
+    public async Task A_choice_since_dropped_is_not_suggested()
+    {
+        var request = new SuggestRequest("intake@1", "담당", Values("""{"요청": "모니터가 깜빡여요", "부서": "영업"}"""));
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(ManyChoosing(15, "장비", "총무"), Ct);
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+        Assert.Equal("장비", (await vault.SuggestAsync(request, Ct))!.Value);
+
+        // The template no longer offers 장비: what was settled under it is not offered, though still remembered.
+        await vault.IngestAsync(ManyChoosing(15, "총무", "재무"), Ct);
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+        Assert.Null((await vault.SuggestAsync(request, Ct))!.Value);
+
+        // Taken back, it is offered again.
+        await vault.IngestAsync(ManyChoosing(15, "장비", "총무"), Ct);
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+        Assert.Equal("장비", (await vault.SuggestAsync(request, Ct))!.Value);
+    }
+
+    [Fact]
+    public async Task Changed_choices_have_the_threshold_chosen_again()
+    {
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(ManyChoosing(15, "장비", "총무"), Ct);
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+        await vault.IngestAsync(ManyChoosing(15, "장비", "총무"), Ct);
+        Assert.True(vault.ThresholdsSelected.IsCompleted); // nothing changed: no replay
+
+        // Nothing grew, but the values the field may be suggested did: its replay counted others.
+        var settled = vault.ThresholdsSelected;
+        await vault.IngestAsync(ManyChoosing(15, "장비", "총무", "재무"), Ct);
+        Assert.NotSame(settled, vault.ThresholdsSelected);
+        await vault.ThresholdsSelected.WaitAsync(Ct);
+    }
+
     [Fact]
     public async Task A_vault_ingest_chooses_thresholds_in_the_background()
     {

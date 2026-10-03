@@ -127,8 +127,12 @@ public sealed class Suggestions
             foreach (var field in template.Suggest!)
             {
                 var confirmed = settled[template.Ref].Count(d => d.Values.ContainsKey(field));
+                // A threshold chosen while the field had other choices is used until it is chosen again over these:
+                // the values it may be suggested are not the ones its replay counted.
                 thresholds[(template.Ref, field)] = kept?.GetValueOrDefault((template.Ref, field)) is { } threshold
-                    ? threshold with { Confirmed = confirmed }
+                    ? threshold.ChosenOver(DomainOf(template, field))
+                        ? threshold with { Confirmed = confirmed }
+                        : threshold with { Confirmed = confirmed, SelectedAt = null }
                     : new FieldThreshold(null, confirmed, SelectedAt: null);
             }
         }
@@ -164,7 +168,8 @@ public sealed class Suggestions
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
             var key = ThresholdSelection.SelectKeyThreshold(
                 new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
-            chosen[(template, field)] = new FieldThreshold(key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise);
+            chosen[(template, field)] = new FieldThreshold(
+                key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field));
         }
         return chosen;
     }
@@ -200,6 +205,13 @@ public sealed class Suggestions
         t => Form(t, field => _thresholds[(t.Ref, field)])!,
         StringComparer.Ordinal);
 
+    /// <summary>The choices a field's value is one of — a field of one choice with options — or null when its value is open.</summary>
+    private static IReadOnlyList<string>? DomainOf(TemplateField field) =>
+        field is { Multiple: false, Options: [_, ..] options } ? options : null;
+
+    private static IReadOnlyList<string>? DomainOf(TemplateSnapshot template, string field) =>
+        template.Fields.FirstOrDefault(f => f.Name == field) is { } f ? DomainOf(f) : null;
+
     /// <summary>A template as a Gil form, or null when its author turned suggestions on for no field.</summary>
     private static FormDefinition? Form(TemplateSnapshot template, Func<string, FieldThreshold> threshold)
     {
@@ -212,6 +224,9 @@ public sealed class Suggestions
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
                 DependsOn = observed,
+                // A field of one choice is suggested only a choice it has now: a value settled under an option
+                // since dropped is remembered, not offered.
+                Candidates = DomainOf(f),
             }
             : new FieldDefinition(f.Name, FieldRole.Observed));
         // No model is called, so the language is never used.
@@ -296,8 +311,14 @@ public sealed class Suggestions
 /// (null: not yet chosen, or none was right often enough); <see cref="Confirmed"/> is how many it has now.
 /// <see cref="Closest"/> is the strength that came closest to the target, chosen or not.
 /// </summary>
-public sealed record FieldThreshold(ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null)
+/// <param name="Domain">The choices the field had when its threshold was chosen; null for a field whose value is open.</param>
+public sealed record FieldThreshold(
+    ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null)
 {
+    /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
+    public bool ChosenOver(IReadOnlyList<string>? domain) =>
+        Domain is null ? domain is null : domain is not null && Domain.SequenceEqual(domain, StringComparer.Ordinal);
+
     /// <summary>The strength the field's values settled alongside answer at; none — nothing is offered — until one has been chosen.</summary>
     public double? KeyThreshold => Choice?.Threshold;
 }
