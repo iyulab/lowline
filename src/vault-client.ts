@@ -78,10 +78,14 @@ export const vault = {
     await invoke<void>('write_file_if_unchanged', { path, expected, content })
     wrote(path)
   },
-  /** Creates the file atomically; rejects with `already-exists` instead of replacing one. */
-  create: async (path: string, content: string) => {
-    await invoke<void>('create_file', { path, content })
+  /**
+   * Creates a file named `name` in `dir` atomically — under that name numbered, `name (1)`, when it
+   * is taken; never replacing one. Resolves to the path it was created at.
+   */
+  create: async (dir: string, name: string, content: string) => {
+    const path = await invoke<string>('create_file', { dir, name, content })
     wrote(path)
+    return path
   },
   /** Gives a file another name in its folder; rejects with `already-exists` instead of replacing one. */
   rename: async (from: string, to: string) => {

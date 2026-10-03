@@ -135,7 +135,7 @@ export function documentTitle(source: string, values: FieldValues): string | und
  * A file name for a new document: the date, then the first field value that reads as a
  * title. Characters that are not allowed in file names are replaced.
  */
-export function documentFileName(date: Date, title: string | undefined, attempt = 1): string {
+export function documentFileName(date: Date, title: string | undefined): string {
   const day = [
     date.getFullYear(),
     String(date.getMonth() + 1).padStart(2, '0'),
@@ -147,8 +147,7 @@ export function documentFileName(date: Date, title: string | undefined, attempt 
     .trim()
     .slice(0, 60)
     .replace(/[. ]+$/, '')
-  const base = cleaned ? `${day}-${cleaned}` : day
-  return attempt > 1 ? `${base}-${attempt}.md` : `${base}.md`
+  return cleaned ? `${day}-${cleaned}.md` : `${day}.md`
 }
 
 /** The name a file is shown by (R-1): its file name, without `suffix`. */

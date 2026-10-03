@@ -289,10 +289,16 @@ fn write_file_if_unchanged(
     with_vault(&state, |v| v.write_if_unchanged(&path, &expected, &content))
 }
 
-/// Creates a file atomically; fails with `already-exists` rather than replace one.
+/// Creates a file named `name` in `dir`, numbering the name when it is taken; never replaces one.
+/// Returns the path it was created at.
 #[tauri::command]
-fn create_file(path: String, content: String, state: State<AppState>) -> CommandResult<()> {
-    with_vault(&state, |v| v.create(&path, &content))
+fn create_file(
+    dir: String,
+    name: String,
+    content: String,
+    state: State<AppState>,
+) -> CommandResult<String> {
+    with_vault(&state, |v| v.create(&dir, &name, &content))
 }
 
 /// Gives a file another name in its folder; fails with `already-exists` rather than replace one.

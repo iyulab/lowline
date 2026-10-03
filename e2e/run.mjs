@@ -261,9 +261,17 @@ const scenarios = {
       'the preview labels',
     )
     assert.ok(labels.includes('메모'), `labels: ${labels.join(', ')}`)
-    // Back to the fixture template for the scenarios that follow.
+
+    // A second one takes the name numbered before the template ending, so it is still a template.
+    await app.newTemplate()
+    await app.cdp.waitFor(`!!__e2e.one('button.item', '새 서식 (1)')`, 'the second starter in the sidebar')
+    const both = (await readdir(join(vault, '서식'))).filter((n) => n.startsWith('새 서식')).sort()
+    assert.deepEqual(both, ['새 서식 (1).fd.md', '새 서식.fd.md'])
+    // Back to the fixture template for the scenarios that follow, without the second starter.
     await app.templateOf(BUG)
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the fixture template')
+    await rm(join(vault, '서식', '새 서식 (1).fd.md'))
+    await app.cdp.waitFor(`!__e2e.one('button.item', '새 서식 (1)')`, 'the second starter gone from the sidebar')
   },
 
   async 'creates a document, edits it, and saves again in place'(app, vault) {

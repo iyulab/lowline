@@ -4,44 +4,24 @@ import { sampleTemplate, starterTemplate, strings } from './strings.js'
 import { vault } from './vault-client.js'
 
 /** Creates a document file in `dir`; a name already taken gets a number. Returns its vault path. */
-export async function createDocumentFile(
+export function createDocumentFile(
   dir: string,
   source: string,
   title: string | undefined,
   date = new Date(),
 ): Promise<string> {
-  for (let attempt = 1; ; attempt++) {
-    const path = `${dir}/${documentFileName(date, title, attempt)}`
-    try {
-      await vault.create(path, source)
-      return path
-    } catch (e) {
-      if ((e as { kind?: string }).kind !== 'already-exists' || attempt >= 99) throw e
-    }
-  }
+  return vault.create(dir, documentFileName(date, title), source)
 }
 
 /**
  * Creates a template file in `dir` from the starter, under the new-template name — numbered when
  * taken — with an identity of its own. Returns its vault path.
  */
-export async function createTemplateFile(dir: string, now = Date.now()): Promise<string> {
-  const source = starterTemplate(`template-${now.toString(36)}`)
-  for (let attempt = 1; ; attempt++) {
-    const name = attempt === 1 ? strings.newTemplateName : `${strings.newTemplateName} ${attempt}`
-    const path = `${dir}/${name}.fd.md`
-    try {
-      await vault.create(path, source)
-      return path
-    } catch (e) {
-      if ((e as { kind?: string }).kind !== 'already-exists' || attempt >= 99) throw e
-    }
-  }
+export function createTemplateFile(dir: string, now = Date.now()): Promise<string> {
+  return vault.create(dir, `${strings.newTemplateName}.fd.md`, starterTemplate(`template-${now.toString(36)}`))
 }
 
 /** Puts the sample template in a new vault's `dir`. Returns its vault path. */
-export async function createSampleTemplate(dir: string, now = Date.now()): Promise<string> {
-  const path = `${dir}/${strings.sampleTemplateName}.fd.md`
-  await vault.create(path, sampleTemplate(`sample-${now.toString(36)}`))
-  return path
+export function createSampleTemplate(dir: string, now = Date.now()): Promise<string> {
+  return vault.create(dir, `${strings.sampleTemplateName}.fd.md`, sampleTemplate(`sample-${now.toString(36)}`))
 }

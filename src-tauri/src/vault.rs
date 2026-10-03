@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::Serialize;
-use tauri_kit_fs::{conflict_copy_of, has_trash, is_changed, is_outside, Expect, Root};
+use tauri_kit_fs::{
+    claim_free_path, conflict_copy_of, has_trash, is_changed, is_outside, Expect, NameKind, Root,
+};
 use tauri_kit_watch::OwnWrites;
 
 /// Folder for form templates.
@@ -211,17 +213,36 @@ impl Vault {
         })
     }
 
-    /// Creates a file atomically, refusing to replace one that is already there.
-    pub fn create(&self, rel: &str, content: &str) -> Result<()> {
-        let abs = self.prepare(rel)?;
-        self.own.record(&abs, content.as_bytes());
-        tauri_kit_fs::write_atomic_new(&abs, content.as_bytes()).map_err(|e| {
-            self.own.forget(&abs);
-            match e.kind() {
-                io::ErrorKind::AlreadyExists => VaultError::AlreadyExists(rel.to_string()),
-                _ => VaultError::Io(e),
-            }
+    /// Creates a file named `name` in the folder `dir` atomically — or, when something is there
+    /// already, under that name numbered: `name (1)`, `name (2)`, …, before the template ending for a
+    /// template (`새 서식 (1).fd.md`), before the extension otherwise. It never replaces a file.
+    /// Returns the path the file was created at.
+    pub fn create(&self, dir: &str, name: &str, content: &str) -> Result<String> {
+        if name.contains(['/', '\\']) {
+            return Err(VaultError::Io(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "a file name, not a path",
+            )));
+        }
+        let rel = format!("{dir}/{name}");
+        let abs = self.prepare(&rel)?;
+        let folder = abs.parent().expect("a file's path has its folder");
+        let kind = if name.ends_with(TEMPLATE_SUFFIX) {
+            NameKind::Suffix(TEMPLATE_SUFFIX)
+        } else {
+            NameKind::File
+        };
+        let (path, ()) = claim_free_path(folder, name, kind, |path| {
+            self.own.record(path, content.as_bytes());
+            tauri_kit_fs::write_atomic_new(path, content.as_bytes())
+                .inspect_err(|_| self.own.forget(path))
         })
+        .map_err(|e| match e.kind() {
+            io::ErrorKind::AlreadyExists => VaultError::AlreadyExists(rel.clone()),
+            _ => VaultError::Io(e),
+        })?;
+        let created = path.file_name().expect("a claimed path names a file");
+        Ok(format!("{dir}/{}", created.to_string_lossy()))
     }
 
     /// Gives a file another name in the same folder, refusing to replace one that is already there.
@@ -458,21 +479,39 @@ mod tests {
     }
 
     #[test]
-    fn create_never_replaces() {
+    fn create_numbers_a_taken_name_and_never_replaces() {
         let (_dir, v) = vault();
-        v.create("문서/a.md", "first").unwrap();
-        assert!(matches!(
-            v.create("문서/a.md", "second"),
-            Err(VaultError::AlreadyExists(_))
-        ));
+        assert_eq!(v.create("문서", "a.md", "first").unwrap(), "문서/a.md");
+        assert_eq!(v.create("문서", "a.md", "second").unwrap(), "문서/a (1).md");
+        assert_eq!(v.create("문서", "a.md", "third").unwrap(), "문서/a (2).md");
         assert_eq!(v.read("문서/a.md").unwrap(), "first");
+        assert_eq!(v.read("문서/a (1).md").unwrap(), "second");
+
+        // A template keeps its whole ending, so it is still read as a template.
+        assert_eq!(
+            v.create("서식", "새 서식.fd.md", "x").unwrap(),
+            "서식/새 서식.fd.md"
+        );
+        assert_eq!(
+            v.create("서식", "새 서식.fd.md", "y").unwrap(),
+            "서식/새 서식 (1).fd.md"
+        );
+
+        assert!(matches!(
+            v.create("문서", "sub/a.md", "z"),
+            Err(VaultError::Io(_))
+        ));
+        assert!(matches!(
+            v.create("..", "a.md", "z"),
+            Err(VaultError::OutsideVault(_))
+        ));
     }
 
     #[test]
     fn renames_within_a_folder_and_never_replaces() {
         let (_dir, v) = vault();
-        v.create("문서/a.md", "first").unwrap();
-        v.create("문서/b.md", "second").unwrap();
+        v.write("문서/a.md", "first").unwrap();
+        v.write("문서/b.md", "second").unwrap();
         assert!(matches!(
             v.rename("문서/a.md", "문서/b.md"),
             Err(VaultError::AlreadyExists(_))
@@ -492,7 +531,7 @@ mod tests {
     #[test]
     fn refuses_to_rename_into_another_folder_or_out_of_the_vault() {
         let (_dir, v) = vault();
-        v.create("문서/a.md", "first").unwrap();
+        v.write("문서/a.md", "first").unwrap();
         assert!(v.rename("문서/a.md", "서식/a.md").is_err());
         assert!(v.rename("문서/a.md", "../a.md").is_err());
         assert_eq!(v.read("문서/a.md").unwrap(), "first");
@@ -504,8 +543,8 @@ mod tests {
     #[test]
     fn trashes_a_file_into_the_system_trash() {
         let (_dir, v) = vault();
-        v.create("문서/지울 문서.md", "gone").unwrap();
-        v.create("문서/남을 문서.md", "stays").unwrap();
+        v.write("문서/지울 문서.md", "gone").unwrap();
+        v.write("문서/남을 문서.md", "stays").unwrap();
         v.trash("문서/지울 문서.md").unwrap();
         assert!(matches!(
             v.read("문서/지울 문서.md"),
@@ -527,7 +566,7 @@ mod tests {
     #[test]
     fn removes_files_only() {
         let (_dir, v) = vault();
-        v.create("문서/a.md", "a").unwrap();
+        v.write("문서/a.md", "a").unwrap();
         v.remove("문서/a.md").unwrap();
         assert!(matches!(v.read("문서/a.md"), Err(VaultError::NotFound(_))));
         assert!(matches!(

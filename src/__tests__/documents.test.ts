@@ -147,7 +147,6 @@ describe('documentFileName', () => {
   it('starts with the date and uses the title', () => {
     expect(documentFileName(day, 'Editor freezes')).toBe('2026-09-28-Editor freezes.md')
     expect(documentFileName(day, undefined)).toBe('2026-09-28.md')
-    expect(documentFileName(day, 'A', 3)).toBe('2026-09-28-A-3.md')
   })
 
   it('replaces characters that are not allowed in file names', () => {
