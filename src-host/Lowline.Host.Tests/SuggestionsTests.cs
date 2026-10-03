@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Lowline.Host.Tests;
 
@@ -318,6 +319,50 @@ public sealed class SuggestionsTests
         finally
         {
             File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public async Task Thresholds_another_Gil_chose_are_chosen_again()
+    {
+        var caches = Directory.CreateTempSubdirectory("lowline-thresholds-").FullName;
+        try
+        {
+            string file;
+            await using (var first = new VaultProjection(caches))
+            {
+                await first.IngestAsync(Many(15), "C:/vault", Ct);
+                await first.ThresholdsSelected.WaitAsync(Ct);
+                file = first.ThresholdsFileOf("C:/vault");
+            }
+            string? ScorerIn() => JsonNode.Parse(File.ReadAllText(file))!["scorer"]?.GetValue<string>();
+            Assert.NotEmpty(ThresholdStore.Load(file));
+            Assert.Equal(ThresholdStore.Scorer, ScorerIn());
+
+            // The same file as an earlier Gil wrote it — its thresholds on that Gil's scale — and as one
+            // written before the file said which Gil chose them.
+            void Rewrite(Action<JsonObject> change)
+            {
+                var kept = JsonNode.Parse(File.ReadAllText(file))!.AsObject();
+                change(kept);
+                File.WriteAllText(file, kept.ToJsonString());
+            }
+            Rewrite(kept => kept["scorer"] = "0.8.0");
+            Assert.Empty(ThresholdStore.Load(file));
+            Rewrite(kept => kept.Remove("scorer"));
+            Assert.Empty(ThresholdStore.Load(file));
+
+            await using var later = new VaultProjection(caches);
+            await later.IngestAsync(Many(15), "C:/vault", Ct);
+            // Nothing grew, yet the field is replayed — what was kept is not on this Gil's scale — and its
+            // threshold kept again, now as this Gil's.
+            await later.ThresholdsSelected.WaitAsync(Ct);
+            Assert.Equal(ThresholdStore.Scorer, ScorerIn());
+            Assert.NotEmpty(ThresholdStore.Load(file));
+        }
+        finally
+        {
+            Directory.Delete(caches, recursive: true);
         }
     }
 
