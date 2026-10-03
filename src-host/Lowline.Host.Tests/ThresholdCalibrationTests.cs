@@ -147,18 +147,29 @@ public sealed class ThresholdCalibrationTests
         await vault.ThresholdsSelected.WaitAsync(ct);
         var replay = (await vault.CurvesAsync(ct)).Single();
 
+        // As the app goes: each document asked about is then confirmed and remembered, and the thresholds are
+        // chosen again as the confirmed grow by a tenth — so what is asked meets the history as it is by then.
         int right = 0, wrong = 0, abstained = 0;
-        foreach (var document in all.Documents.Skip(confirmed))
+        var promised = new List<double>();
+        for (var i = confirmed; i < all.Documents.Count; i++)
         {
+            var document = all.Documents[i];
             var values = document.Values.Where(v => v.Key != "담당").ToDictionary(v => v.Key, v => v.Value);
             var suggestion = (await vault.SuggestAsync(new SuggestRequest("routing@1", "담당", values), ct))!;
             if (suggestion.Value is null) abstained++;
-            else if (suggestion.Value == document.Values["담당"].GetString()) right++;
-            else wrong++;
+            else
+            {
+                if (suggestion.Value == document.Values["담당"].GetString()) right++;
+                else wrong++;
+                if ((await vault.CurvesAsync(ct)).Single().Replay?.Precision is { } precision) promised.Add(precision);
+            }
+            await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);
+            await vault.ThresholdsSelected.WaitAsync(ct);
         }
 
         await Measurement.ReportAsync(
             $"two keys · {confirmed} confirmed · {asked} asked · {replay.WhyNoReplay ?? "replay"} threshold {replay.Replay?.Threshold:F4} precision {replay.Replay?.Precision:P0} answered {replay.Replay?.AnswerRate:P0}"
-            + $" · live right {right} wrong {wrong} abstained {abstained}", ct);
+            + $" · asked and confirmed in turn: right {right} wrong {wrong} abstained {abstained}"
+            + $" ({(right + wrong == 0 ? 0 : 100.0 * right / (right + wrong)):F0}% right, promised {(promised.Count == 0 ? 0 : 100 * promised.Average()):F0}%)", ct);
     }
 }
