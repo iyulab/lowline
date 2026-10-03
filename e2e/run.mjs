@@ -2090,14 +2090,17 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(0)'))`, 'the large table', { timeoutMs: 300_000 })
       const first = Date.now() - filled
       // Where the restart went: the window and the vault opened, then each sync step, summed over the
-      // syncs it took — so a slower restart says which step grew.
-      const restartSteps = await app.cdp.evaluate(`(() => { const sum = {}; const times = {}
-        for (const m of performance.getEntriesByType('measure')) if (m.name.startsWith('vault:')) {
-          const step = m.name.slice(6)
-          sum[step] = (sum[step] ?? 0) + m.duration
-          times[step] = (times[step] ?? 0) + 1
-        }
-        return Object.fromEntries(Object.entries(sum).map(([k, v]) => [k, times[k] > 1 ? Math.round(v) + ' (' + times[k] + '×)' : Math.round(v)])) })()`)
+      // syncs it took, each sync's share apart — so a slower restart says which step grew, and whether in
+      // the first sync or in the ones after it.
+      const syncSteps = async () => {
+        const each = await app.cdp.evaluate(`(() => { const each = {}
+          for (const m of performance.getEntriesByType('measure')) if (m.name.startsWith('vault:')) (each[m.name.slice(6)] ??= []).push(Math.round(m.duration))
+          return each })()`)
+        return Object.entries(each)
+          .map(([k, v]) => `${k} ${v.reduce((a, b) => a + b, 0)}${v.length > 1 ? ` (${v.join('+')})` : ''}`)
+          .join(' · ')
+      }
+      const restartSteps = await syncSteps()
       // Ten thousand new documents: the sidecar replays the fields' history for their thresholds meanwhile.
       const replaying = await sidecarCpuOver(5_000)
 
@@ -2118,14 +2121,16 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       const settled = await sidecarQuiet()
       const again = Date.now()
       await app.reopen(vault)
+      const reopened = Date.now() - again
       await app.showTable(INTAKE, { timeoutMs: 300_000 })
       await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(고침)'))`, 'the table again', { timeoutMs: 300_000 })
       const unchanged = Date.now() - again
+      const unchangedSteps = await syncSteps()
       const idle = await sidecarCpuOver(5_000)
       console.log(
-        `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${Object.entries(restartSteps).map(([k, v]) => `${k} ${v}`).join(' · ')} ms) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
+        `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${restartSteps} ms) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
       )
-      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}${settled ? '' : ' (the first launch never went quiet)'}`)
+      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms (window and vault ${reopened} · ${unchangedSteps} ms) · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}${settled ? '' : ' (the first launch never went quiet)'}`)
     },
   }),
 }
