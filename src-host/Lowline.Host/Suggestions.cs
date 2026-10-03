@@ -21,6 +21,19 @@ public sealed record SuggestRequest(
 /// </summary>
 public sealed record Suggestion(string? Value, string Mode, string? Source, string? Reason = null);
 
+/// <summary>What a <see cref="Suggestion"/> is: a value to offer, none, or none because the person turned it down.</summary>
+public static class SuggestionMode
+{
+    /// <summary>A value settled alongside one the document has.</summary>
+    public const string Key = "key";
+
+    /// <summary>No value; <see cref="Suggestion.Reason"/> says why.</summary>
+    public const string Abstain = "abstain";
+
+    /// <summary>The person turned down this field's suggestion for this document; it is not offered again.</summary>
+    public const string Rejected = "rejected";
+}
+
 /// <summary>Why a judgment field gets no suggestion — each is said differently, so "none" is never a wrong reason.</summary>
 public static class Abstention
 {
@@ -253,7 +266,7 @@ public sealed class Suggestions
         if (!_forms.TryGetValue(request.Template, out var form)) return null;
         if (form.Fields.FirstOrDefault(f => f.Name == request.Field) is not { Role: FieldRole.Judged }) return null;
         if (request.Document is { } document && _rejected.Contains((document, request.Field)))
-            return new Suggestion(null, "rejected", null, null);
+            return new Suggestion(null, SuggestionMode.Rejected, null, null);
 
         // A judgment rests on the fields people fill in; the document's own saved version is never its evidence.
         var observed = Texts(request.Values)
@@ -264,7 +277,7 @@ public sealed class Suggestions
 
         // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
         if (suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SettledFieldMemory } answer, ..] })
-            return new Suggestion(answer.Value, "key", answer.Evidence);
+            return new Suggestion(answer.Value, SuggestionMode.Key, answer.Evidence);
         return Abstain(request.Template, request.Field);
     }
 
@@ -278,7 +291,7 @@ public sealed class Suggestions
         var reason = threshold.Confirmed == 0 ? Abstention.NoHistory
             : threshold.KeyThreshold is null ? Abstention.BelowTarget
             : Abstention.Undecided;
-        return new Suggestion(null, "abstain", null, reason);
+        return new Suggestion(null, SuggestionMode.Abstain, null, reason);
     }
 
     /// <summary>

@@ -207,7 +207,7 @@ export interface Suggestion {
    * `key`: settled alongside a value this document has · `abstain` · `rejected`. Similar documents are never offered
    * as a suggestion — they are shown, with the values they confirmed, only when the person opens "비슷한 사례".
    */
-  mode: string
+  mode: 'key' | 'abstain' | 'rejected'
   /** What it rests on: the other field's value (`부서: 영업`). */
   source: string | null
   /** Why there is none, when `value` is null and the field was asked (`abstain`). */

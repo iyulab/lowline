@@ -1,0 +1,315 @@
+{
+  "ingest": {
+    "appended": 0,
+    "retired": 0,
+    "projections": [
+      "intake@1"
+    ],
+    "skipped": [
+      {
+        "path": "문서/옛.md",
+        "reason": "template gone@1 is not in the vault"
+      }
+    ],
+    "skippedFields": [
+      {
+        "template": "intake@1",
+        "path": "문서/1.md",
+        "field": "수량",
+        "reason": "field '수량' is not convertible to Decimal"
+      }
+    ]
+  },
+  "projection": {
+    "template": "intake@1",
+    "columns": [
+      {
+        "name": "요청",
+        "type": "textarea"
+      },
+      {
+        "name": "부서",
+        "type": "select"
+      },
+      {
+        "name": "수량",
+        "type": "number"
+      },
+      {
+        "name": "담당",
+        "type": "select"
+      },
+      {
+        "name": "긴급",
+        "type": "select"
+      }
+    ],
+    "rows": [
+      {
+        "path": "문서/1.md",
+        "values": {
+          "요청": "노트북 배터리 1",
+          "부서": "영업",
+          "수량": null,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/10.md",
+        "values": {
+          "요청": "노트북 배터리 10",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/11.md",
+        "values": {
+          "요청": "노트북 배터리 11",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/12.md",
+        "values": {
+          "요청": "노트북 배터리 12",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/13.md",
+        "values": {
+          "요청": "노트북 배터리 13",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/14.md",
+        "values": {
+          "요청": "노트북 배터리 14",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/15.md",
+        "values": {
+          "요청": "노트북 배터리 15",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/2.md",
+        "values": {
+          "요청": "모니터가 깜빡여요 모니터 교체",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/3.md",
+        "values": {
+          "요청": "모니터가 깜빡여요",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/4.md",
+        "values": {
+          "요청": "노트북 배터리 4",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/5.md",
+        "values": {
+          "요청": "노트북 배터리 5",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/6.md",
+        "values": {
+          "요청": "노트북 배터리 6",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/7.md",
+        "values": {
+          "요청": "노트북 배터리 7",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      },
+      {
+        "path": "문서/8.md",
+        "values": {
+          "요청": "노트북 배터리 8",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "높음"
+        }
+      },
+      {
+        "path": "문서/9.md",
+        "values": {
+          "요청": "노트북 배터리 9",
+          "부서": "영업",
+          "수량": 0,
+          "담당": "장비",
+          "긴급": "낮음"
+        }
+      }
+    ]
+  },
+  "curves": [
+    {
+      "template": "intake@1",
+      "field": "담당",
+      "accepted": 0,
+      "corrected": 0,
+      "rejected": 0,
+      "points": [
+        {
+          "n": 0,
+          "at": "2026-10-03T10:00:00.000Z",
+          "rate": 0
+        },
+        {
+          "n": 0,
+          "at": "2026-10-03T10:01:00.000Z",
+          "rate": 0
+        },
+        {
+          "n": 0,
+          "at": "2026-10-03T10:02:00.000Z",
+          "rate": 0
+        }
+      ],
+      "replay": {
+        "threshold": 0,
+        "precision": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0
+      },
+      "whyNoReplay": null,
+      "closest": null,
+      "bySource": [
+        {
+          "source": "key",
+          "decided": 0,
+          "accepted": 0
+        }
+      ]
+    },
+    {
+      "template": "intake@1",
+      "field": "긴급",
+      "accepted": 0,
+      "corrected": 0,
+      "rejected": 0,
+      "points": [],
+      "replay": null,
+      "whyNoReplay": "below-target",
+      "closest": {
+        "precision": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0,
+        "target": 0
+      },
+      "bySource": []
+    }
+  ],
+  "suggestions": [
+    {
+      "value": "장비",
+      "mode": "key",
+      "source": "부서: 영업",
+      "reason": null
+    },
+    {
+      "value": null,
+      "mode": "abstain",
+      "source": null,
+      "reason": "below-target"
+    },
+    {
+      "value": null,
+      "mode": "rejected",
+      "source": null,
+      "reason": null
+    }
+  ],
+  "search": [
+    {
+      "path": "문서/2.md",
+      "template": "intake@1",
+      "text": "모니터가 깜빡여요 모니터 교체\n영업\n1\n장비\n높음",
+      "conflicted": false,
+      "score": 0
+    }
+  ],
+  "similar": [
+    {
+      "path": "문서/2.md",
+      "template": "intake@1",
+      "text": "모니터가 깜빡여요 모니터 교체\n영업\n1\n장비\n높음",
+      "conflicted": false,
+      "score": 0
+    }
+  ],
+  "words": {
+    "mode": [
+      "key",
+      "abstain",
+      "rejected"
+    ],
+    "reason": [
+      "no-history",
+      "below-target",
+      "undecided"
+    ],
+    "whyNoReplay": [
+      "few",
+      "pending",
+      "below-target"
+    ]
+  }
+}
