@@ -220,6 +220,30 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task Answers_from_a_judgment_the_person_already_confirmed_in_the_document()
+    {
+        // 승인 goes with 담당, and nothing observed says which 담당 a request has: only a confirmed 담당 decides 승인.
+        var routed = new TemplateSnapshot("routed@1",
+        [
+            new TemplateField("요청", "textarea"),
+            new TemplateField("담당", "select"),
+            new TemplateField("승인", "select"),
+        ], Suggest: ["담당", "승인"]);
+        Dictionary<string, string> approvers = new() { ["장비"] = "김", ["인사"] = "이", ["총무"] = "박" };
+        var vault = new VaultSnapshot([routed], [
+            .. Enumerable.Range(0, 30).Select(i => new DocumentSnapshot($"문서/{i}.md", "routed@1",
+                Values($$"""{"요청": "{{Words[i % 10]}} {{i}}", "담당": "{{Owners[Departments[i % 3]]}}", "승인": "{{approvers[Owners[Departments[i % 3]]]}}"}"""),
+                Modified: i))]);
+        var suggestions = await Suggestions.BuildAsync(vault, Ct);
+        suggestions.Apply(suggestions.SelectThresholds(Ct));
+
+        var asked = new SuggestRequest("routed@1", "승인", Values("""{"요청": "전혀 다른 요청"}"""));
+        Assert.Equal(new Suggestion(null, "abstain", null, Abstention.Undecided), await suggestions.SuggestAsync(asked, Ct));
+        var owned = asked with { Values = Values("""{"요청": "전혀 다른 요청", "담당": "인사"}""") };
+        Assert.Equal(new Suggestion("이", "key", "담당: 인사"), await suggestions.SuggestAsync(owned, Ct));
+    }
+
+    [Fact]
     public async Task Says_a_field_its_replay_held_back_apart_from_one_these_values_settle_nothing_for()
     {
         // One 부서, owners alternating: the value last settled alongside it is never the next one's.

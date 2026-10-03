@@ -15,9 +15,9 @@ public sealed record SuggestRequest(
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
 /// nothing is guessed to fill the gap — and <see cref="Reason"/> then says why, as one of
 /// <see cref="Abstention"/>'s. <see cref="Source"/> is the document whose confirmed value it comes from. Every value
-/// offered rests on values settled alongside the document's observed ones (<c>key</c>): only that layer keeps the
-/// precision its replay promises. Similar documents are never offered as a suggestion — the person looks at them
-/// when they choose to, with the values they confirmed.
+/// offered rests on values settled alongside ones the document holds — its observed values, and judgments already
+/// confirmed in it (<c>key</c>): only that layer keeps the precision its replay promises. Similar documents are never
+/// offered as a suggestion — the person looks at them when they choose to, with the values they confirmed.
 /// </summary>
 public sealed record Suggestion(string? Value, string Mode, string? Source, string? Reason = null);
 
@@ -41,13 +41,13 @@ public static class Abstention
     public const string NoHistory = "no-history";
 
     /// <summary>
-    /// The values settled alongside the observed values have not yet shown, on a replay of the field's history, that
+    /// The values settled alongside the document's other values have not yet shown, on a replay of the field's history, that
     /// they are right often enough — too few confirmed, the replay not finished, or none right often enough — so
     /// nothing is offered for the field until they have.
     /// </summary>
     public const string BelowTarget = "below-target";
 
-    /// <summary>The field's values settled alongside have shown they decide it, and this document's observed values settle none.</summary>
+    /// <summary>The field's values settled alongside have shown they decide it, and this document's other values settle none.</summary>
     public const string Undecided = "undecided";
 }
 
@@ -84,10 +84,10 @@ public sealed class Suggestions
 
     /// <summary>
     /// Every saved document goes into its memory; asking writes nothing to it. One layer answers: values settled
-    /// alongside the document's observed values, once replay has shown they decide the field
-    /// (<see cref="FieldDefinition.KeyThreshold"/>). Similar documents are left out — on a field judged from its
-    /// observed values alone they are right well below the precision their replay promised, and no threshold fixes
-    /// that — so no document memory is kept.
+    /// alongside the document's other values, once replay has shown they decide the field
+    /// (<see cref="FieldDefinition.KeyThreshold"/>). Similar documents are left out — until a form has many thousands
+    /// of confirmed documents they are right well below the precision their replay promises, and a form here rarely
+    /// has — so no document memory is kept.
     /// </summary>
     private readonly FormResolver _resolver = new(new FieldMemory(), documentMemory: null);
     private readonly Dictionary<string, TemplateSnapshot> _templates;
@@ -168,7 +168,7 @@ public sealed class Suggestions
         t.SelectedAt is not { } at || Math.Abs(t.Confirmed - at) * 10 >= Math.Max(at, 10));
 
     /// <summary>
-    /// Chooses the strength at which each judgment field's values settled alongside its observed values answer, by
+    /// Chooses the strength at which each judgment field's values settled alongside the document's other values answer, by
     /// replaying its confirmed documents in the order they were saved. It runs apart from building memory and its
     /// result is applied with <see cref="Apply"/>.
     /// </summary>
@@ -230,13 +230,14 @@ public sealed class Suggestions
     {
         var judged = template.Suggest ?? [];
         if (!template.Fields.Any(f => judged.Contains(f.Name))) return null;
-        // A judgment rests on the fields people fill in, not on other judgments: those are suggested too.
-        var observed = template.Fields.Where(f => !judged.Contains(f.Name)).Select(f => f.Name).ToList();
+        // A judgment rests on every other value the document holds: the observed ones, and judgments the person has
+        // already confirmed in it, which often say the most about the rest. A suggestion shown and not taken is no value.
+        // A document does not record the order its values came in, so the replay takes the judged ones as confirmed in
+        // the form's order: for one confirmed out of that order it counts on more than its suggestion had.
         var fields = template.Fields.Select(f => judged.Contains(f.Name)
             ? new FieldDefinition(f.Name, FieldRole.Judged)
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
-                DependsOn = observed,
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
                 Candidates = DomainOf(f),
@@ -268,11 +269,12 @@ public sealed class Suggestions
         if (request.Document is { } document && _rejected.Contains((document, request.Field)))
             return new Suggestion(null, SuggestionMode.Rejected, null, null);
 
-        // A judgment rests on the fields people fill in; the document's own saved version is never its evidence.
-        var observed = Texts(request.Values)
-            .Where(v => form.Fields.Any(f => f.Name == v.Key && f.Role == FieldRole.Observed))
+        // A judgment rests on the values the document holds now — filled in, or taken from a suggestion — other than its
+        // own; the document's saved version is never its evidence.
+        var held = Texts(request.Values)
+            .Where(v => v.Key != request.Field && form.Fields.Any(f => f.Name == v.Key))
             .ToDictionary(v => v.Key, v => v.Value, StringComparer.Ordinal);
-        var suggestion = (await _resolver.SuggestAsync(form, request.Document ?? Unsaved, observed, cancellationToken))
+        var suggestion = (await _resolver.SuggestAsync(form, request.Document ?? Unsaved, held, cancellationToken))
             .SingleOrDefault(s => s.Field == request.Field);
 
         // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
@@ -283,7 +285,7 @@ public sealed class Suggestions
 
     /// <summary>
     /// No value, with why: nothing confirmed yet, the values settled alongside not yet shown right often enough, or
-    /// none settled by this document's observed values.
+    /// none settled by this document's other values.
     /// </summary>
     private Suggestion Abstain(string template, string field)
     {
@@ -319,8 +321,8 @@ public sealed class Suggestions
 }
 
 /// <summary>
-/// A judgment field's key strength: <see cref="Choice"/> is the strength at which values settled alongside its observed
-/// values answer, as replaying its history chose it over the <see cref="SelectedAt"/> confirmed documents it had then
+/// A judgment field's key strength: <see cref="Choice"/> is the strength at which values settled alongside the
+/// document's other values answer, as replaying its history chose it over the <see cref="SelectedAt"/> confirmed documents it had then
 /// (null: not yet chosen, or none was right often enough); <see cref="Confirmed"/> is how many it has now.
 /// <see cref="Closest"/> is the strength that came closest to the target, chosen or not.
 /// </summary>

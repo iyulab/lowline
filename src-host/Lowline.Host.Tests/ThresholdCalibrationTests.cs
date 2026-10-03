@@ -81,4 +81,86 @@ public sealed class ThresholdCalibrationTests
             + $" · asked and confirmed in turn: right {right} wrong {wrong} abstained {abstained}"
             + $" ({(right + wrong == 0 ? 0 : 100.0 * right / (right + wrong)):F0}% right, promised {(promised.Count == 0 ? 0 : 100 * promised.Average()):F0}%)", ct);
     }
+
+    private static readonly TemplateSnapshot Approved = new("approved@1",
+    [
+        new TemplateField("부서", "select"),
+        new TemplateField("유형", "select"),
+        new TemplateField("담당", "select"),
+        new TemplateField("승인", "select"),
+    ], Suggest: ["담당", "승인"]);
+
+    /// <summary>
+    /// The requests of <see cref="Routed"/>, each also approved by someone who mostly goes with its owner: one judged
+    /// field that the other, once confirmed, says the most about.
+    /// </summary>
+    private static VaultSnapshot RoutedAndApproved(int count, int seed)
+    {
+        string[] approvers = ["장비 승인", "인사 승인", "재무 승인", "총무 승인"];
+        var routed = Routed(count, seed);
+        var random = new Random(seed + 1);
+        var documents = routed.Documents.Select(d =>
+        {
+            var owner = Array.IndexOf(["장비팀", "인사팀", "재무팀", "총무팀"], d.Values["담당"].GetString());
+            var approver = random.NextDouble() < 0.85 ? approvers[owner] : approvers[random.Next(approvers.Length)];
+            var values = new Dictionary<string, JsonElement>(d.Values)
+            {
+                ["승인"] = JsonSerializer.SerializeToElement(approver),
+            };
+            return d with { Template = "approved@1", Values = values };
+        });
+        return new VaultSnapshot([Approved], [.. documents], []);
+    }
+
+    /// <summary>
+    /// Both judged fields asked about as the form is filled in: the owner from the observed fields, the approver once
+    /// the owner is confirmed — the order the threshold replay takes when a document does not say which came first.
+    /// </summary>
+    [Theory]
+    [InlineData(50, 300)]
+    [InlineData(300, 300)]
+    public async Task Measures_a_judged_field_resting_on_another(int confirmed, int asked)
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
+        var ct = TestContext.Current.CancellationToken;
+        var all = RoutedAndApproved(confirmed + asked, seed: confirmed);
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(confirmed)]), ct);
+        await vault.ThresholdsSelected.WaitAsync(ct);
+
+        var tally = new Dictionary<string, (int Right, int Wrong, int Abstained, List<double> Promised)>
+        {
+            ["담당"] = (0, 0, 0, []),
+            ["승인"] = (0, 0, 0, []),
+        };
+        for (var i = confirmed; i < all.Documents.Count; i++)
+        {
+            var document = all.Documents[i];
+            foreach (var field in (string[])["담당", "승인"])
+            {
+                // What is filled in by the time the field is asked about: everything before it in the form.
+                var before = field == "담당" ? (string[])["부서", "유형"] : ["부서", "유형", "담당"];
+                var values = document.Values.Where(v => before.Contains(v.Key)).ToDictionary(v => v.Key, v => v.Value);
+                var suggestion = (await vault.SuggestAsync(new SuggestRequest("approved@1", field, values), ct))!;
+                var (right, wrong, abstained, promised) = tally[field];
+                if (suggestion.Value is null) abstained++;
+                else
+                {
+                    if (suggestion.Value == document.Values[field].GetString()) right++;
+                    else wrong++;
+                    if ((await vault.CurvesAsync(ct)).Single(c => c.Field == field).Replay?.Precision is { } precision)
+                        promised.Add(precision);
+                }
+                tally[field] = (right, wrong, abstained, promised);
+            }
+            await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);
+            await vault.ThresholdsSelected.WaitAsync(ct);
+        }
+
+        await Measurement.ReportAsync(
+            $"judged on judged · {confirmed} confirmed · {asked} asked · " + string.Join(" · ", tally.Select(t =>
+                $"{t.Key}: right {t.Value.Right} wrong {t.Value.Wrong} abstained {t.Value.Abstained}"
+                + $" ({(t.Value.Right + t.Value.Wrong == 0 ? 0 : 100.0 * t.Value.Right / (t.Value.Right + t.Value.Wrong)):F0}% right,"
+                + $" promised {(t.Value.Promised.Count == 0 ? 0 : 100 * t.Value.Promised.Average()):F0}%)")), ct);
+    }
 }
