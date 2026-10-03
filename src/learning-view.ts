@@ -28,13 +28,13 @@ export class LlLearning extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-5, 24px);
+      gap: var(--dc-space-5);
       font-size: 13px;
     }
     section {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
     }
     h2 {
       margin: 0;
@@ -45,14 +45,14 @@ export class LlLearning extends LitElement {
       display: flex;
       flex-wrap: wrap;
       align-items: baseline;
-      gap: var(--dc-space-2, 8px) var(--dc-space-4, 16px);
+      gap: var(--dc-space-2) var(--dc-space-4);
     }
     .headline {
       font-size: 20px;
       font-variant-numeric: tabular-nums;
     }
     .secondary {
-      color: var(--dc-color-text-secondary, #5e5c57);
+      color: var(--dc-color-text-secondary);
       font-variant-numeric: tabular-nums;
     }
     p.replay {
@@ -65,12 +65,12 @@ export class LlLearning extends LitElement {
       overflow: visible;
     }
     .grid {
-      stroke: var(--dc-color-border, #e2ded5);
+      stroke: var(--dc-color-border);
       stroke-width: 1;
       vector-effect: non-scaling-stroke;
     }
     .axis {
-      fill: var(--dc-color-text-muted, #6b6964);
+      fill: var(--dc-color-text-muted);
       font-size: 11px;
     }
     .line {
@@ -83,11 +83,11 @@ export class LlLearning extends LitElement {
     }
     .end {
       fill: var(--ll-chart-line, #3c67a3);
-      stroke: var(--dc-color-bg, #f7f5f0);
+      stroke: var(--dc-color-bg);
       stroke-width: 2;
     }
     .value {
-      fill: var(--dc-color-text, #1a1a1a);
+      fill: var(--dc-color-text);
       font-size: 12px;
       font-variant-numeric: tabular-nums;
     }
@@ -105,26 +105,26 @@ export class LlLearning extends LitElement {
     details th,
     details td {
       text-align: right;
-      padding: 2px var(--dc-space-3, 12px) 2px 0;
+      padding: 2px var(--dc-space-3) 2px 0;
     }
     details.counts pre {
       max-height: 240px;
       overflow: auto;
       font-size: 12px;
-      background: var(--dc-color-surface, #fff);
-      border: 1px solid var(--dc-color-border, #e2ded5);
-      padding: var(--dc-space-2, 8px);
+      background: var(--dc-color-surface);
+      border: 1px solid var(--dc-color-border);
+      padding: var(--dc-space-2);
     }
     ul.legend {
       margin: 0;
       padding-left: 1.2em;
     }
     .message {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
       max-width: 60ch;
     }
     .error {
-      color: var(--dc-color-danger, #b00020);
+      color: var(--dc-color-danger);
     }
   `
 

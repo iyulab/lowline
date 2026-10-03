@@ -52,7 +52,7 @@ export class LlApp extends LitElement {
     .place {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-3, 12px);
+      gap: var(--dc-space-3);
       height: 100%;
       min-height: 0;
     }
@@ -62,18 +62,18 @@ export class LlApp extends LitElement {
       min-height: 0;
     }
     .error {
-      color: var(--dc-color-danger, #b00020);
+      color: var(--dc-color-danger);
     }
     .notice-bar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: var(--dc-space-2, 8px);
-      margin: 0 0 var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
+      margin: 0 0 var(--dc-space-2);
     }
     .notice {
-      margin: 0 0 var(--dc-space-2, 8px);
-      color: var(--dc-color-text-muted, #666);
+      margin: 0 0 var(--dc-space-2);
+      color: var(--dc-color-text-muted);
     }
     .welcome {
       min-height: 60vh;
@@ -81,16 +81,16 @@ export class LlApp extends LitElement {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: var(--dc-space-5, 24px);
+      gap: var(--dc-space-5);
       text-align: center;
     }
     .welcome p {
       margin: 0;
-      color: var(--dc-color-text-secondary, #5e5c57);
+      color: var(--dc-color-text-secondary);
     }
     .choices {
       display: flex;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
     }
     .tagline {
       font-size: 17px;

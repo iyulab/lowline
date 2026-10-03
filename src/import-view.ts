@@ -23,7 +23,7 @@ export class LlImport extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-3, 12px);
+      gap: var(--dc-space-3);
       font-size: 13px;
     }
     p {
@@ -36,11 +36,11 @@ export class LlImport extends LitElement {
     .bar {
       display: flex;
       align-items: center;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
     }
     select {
       font: inherit;
-      padding: var(--dc-space-1, 4px);
+      padding: var(--dc-space-1);
     }
     dc-paste-rows-zone {
       --dc-font-size-sm: 13px;
@@ -52,10 +52,10 @@ export class LlImport extends LitElement {
     th,
     td {
       text-align: left;
-      padding: var(--dc-space-1, 4px) var(--dc-space-3, 12px) var(--dc-space-1, 4px) 0;
+      padding: var(--dc-space-1) var(--dc-space-3) var(--dc-space-1) 0;
     }
     .unmatched {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     ul {
       margin: 0;
@@ -63,10 +63,10 @@ export class LlImport extends LitElement {
       font-size: 13px;
     }
     .message {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .error {
-      color: var(--dc-color-danger, #b00020);
+      color: var(--dc-color-danger);
     }
   `
 

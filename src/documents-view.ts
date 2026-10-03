@@ -69,11 +69,11 @@ export class LlDocuments extends LitElement {
     nav {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-1, 4px);
-      padding-inline-end: var(--dc-space-2, 8px);
+      gap: var(--dc-space-1);
+      padding-inline-end: var(--dc-space-2);
     }
     section {
-      padding-inline-start: var(--dc-space-4, 16px);
+      padding-inline-start: var(--dc-space-4);
     }
     /* The way back to the list is needed only where the list is not beside the document. */
     /* So is what became of a document that closed — deleted, say — said where the list is. */
@@ -85,29 +85,29 @@ export class LlDocuments extends LitElement {
     }
     nav button {
       text-align: left;
-      padding: var(--dc-space-2, 8px);
+      padding: var(--dc-space-2);
       border: 1px solid transparent;
-      border-radius: var(--dc-radius-md, 6px);
+      border-radius: var(--dc-radius-md);
       background: none;
       font: inherit;
       color: inherit;
       cursor: pointer;
     }
     nav button[aria-current='true'] {
-      border-color: var(--dc-color-border, #d0d0d0);
-      background: var(--dc-color-surface, #f4f4f4);
+      border-color: var(--dc-color-border);
+      background: var(--dc-color-surface);
     }
     nav button .note,
     .similar button .note {
       display: block;
       font-size: 0.85em;
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .referring h3,
     .referring h4 {
-      margin: var(--dc-space-2, 8px) 0 var(--dc-space-1, 4px);
+      margin: var(--dc-space-2) 0 var(--dc-space-1);
       font-size: 0.875em;
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .referring ul {
       list-style: none;
@@ -117,49 +117,49 @@ export class LlDocuments extends LitElement {
     .referring button {
       text-align: left;
       width: 100%;
-      padding: var(--dc-space-1, 4px) var(--dc-space-2, 8px);
+      padding: var(--dc-space-1) var(--dc-space-2);
       border: 1px solid transparent;
-      border-radius: var(--dc-radius-md, 6px);
+      border-radius: var(--dc-radius-md);
       background: none;
       font: inherit;
       color: inherit;
       cursor: pointer;
     }
     .referring button:hover {
-      background: var(--dc-color-surface, #f4f4f4);
+      background: var(--dc-color-surface);
     }
     .similar summary {
       cursor: pointer;
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .similar ul {
       list-style: none;
-      margin: var(--dc-space-1, 4px) 0 0;
+      margin: var(--dc-space-1) 0 0;
       padding: 0;
     }
     .similar button {
       text-align: left;
       width: 100%;
-      padding: var(--dc-space-2, 8px);
+      padding: var(--dc-space-2);
       border: 1px solid transparent;
-      border-radius: var(--dc-radius-md, 6px);
+      border-radius: var(--dc-radius-md);
       background: none;
       font: inherit;
       color: inherit;
       cursor: pointer;
     }
     .similar button:hover {
-      background: var(--dc-color-surface, #f4f4f4);
+      background: var(--dc-color-surface);
     }
     .new {
       display: flex;
-      gap: var(--dc-space-1, 4px);
-      margin-bottom: var(--dc-space-2, 8px);
+      gap: var(--dc-space-1);
+      margin-bottom: var(--dc-space-2);
     }
     section {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
       min-height: 100%;
       box-sizing: border-box;
     }
@@ -168,7 +168,7 @@ export class LlDocuments extends LitElement {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
     }
     .bar > * {
       white-space: nowrap;
@@ -178,10 +178,10 @@ export class LlDocuments extends LitElement {
       white-space: normal;
     }
     .message {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .error {
-      color: var(--dc-color-danger, #b00020);
+      color: var(--dc-color-danger);
     }
     p.judgment {
       margin: 0;

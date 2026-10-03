@@ -17,20 +17,20 @@ export class LlAbout extends LitElement {
       --dc-dialog-max-width: 560px;
     }
     h2 {
-      margin: 0 0 var(--dc-space-1, 4px);
+      margin: 0 0 var(--dc-space-1);
       font-size: 1.1em;
     }
     p {
-      margin: 0 0 var(--dc-space-3, 12px);
+      margin: 0 0 var(--dc-space-3);
     }
     .muted {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .source {
       user-select: text;
     }
     details {
-      margin-bottom: var(--dc-space-3, 12px);
+      margin-bottom: var(--dc-space-3);
     }
     summary {
       cursor: pointer;
@@ -38,17 +38,17 @@ export class LlAbout extends LitElement {
     pre {
       max-height: 40vh;
       overflow: auto;
-      margin: var(--dc-space-2, 8px) 0 0;
-      padding: var(--dc-space-2, 8px);
-      border: 1px solid var(--dc-color-border, #e2e2e4);
-      border-radius: var(--dc-radius-md, 6px);
+      margin: var(--dc-space-2) 0 0;
+      padding: var(--dc-space-2);
+      border: 1px solid var(--dc-color-border);
+      border-radius: var(--dc-radius-md);
       font-size: 0.85em;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       user-select: text;
     }
     .outbound {
-      margin: var(--dc-space-2, 8px) 0 0;
+      margin: var(--dc-space-2) 0 0;
     }
     .actions {
       display: flex;

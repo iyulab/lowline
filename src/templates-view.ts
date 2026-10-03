@@ -28,14 +28,14 @@ export class LlTemplates extends LitElement {
     :host {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: var(--dc-space-4, 16px);
+      gap: var(--dc-space-4);
       height: 100%;
       min-height: 0;
     }
     section {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
       min-height: 0;
     }
     /* The source is written here, so it is a plain text area (caret, selection, typing that undoes
@@ -44,32 +44,32 @@ export class LlTemplates extends LitElement {
       flex: 1;
       min-height: 20rem;
       box-sizing: border-box;
-      font-family: var(--dc-font-mono, ui-monospace, monospace);
+      font-family: var(--dc-font-mono);
       font-size: 13px;
-      padding: var(--dc-space-2, 8px);
-      border: 1px solid var(--dc-color-border, #e2e2e4);
-      border-radius: var(--dc-radius-sm, 4px);
-      background: var(--dc-color-bg, #ffffff);
-      color: var(--dc-color-text, #1a1a1e);
+      padding: var(--dc-space-2);
+      border: 1px solid var(--dc-color-border);
+      border-radius: var(--dc-radius-sm);
+      background: var(--dc-color-bg);
+      color: var(--dc-color-text);
       resize: none;
     }
     textarea:focus-visible {
-      outline: var(--dc-focus-ring-width, 2px) solid var(--dc-color-accent, #2563eb);
+      outline: var(--dc-focus-ring-width) solid var(--dc-color-accent);
       outline-offset: 1px;
     }
     .preview {
       flex: 1;
       overflow: auto;
-      border: 1px solid var(--dc-color-border, #d0d0d0);
-      border-radius: var(--dc-radius-md, 6px);
-      padding: var(--dc-space-3, 12px);
+      border: 1px solid var(--dc-color-border);
+      border-radius: var(--dc-radius-md);
+      padding: var(--dc-space-3);
     }
     /* When the column is narrow the status goes to a line of its own; a heading or a button never breaks. */
     .bar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
     }
     .bar > * {
       white-space: nowrap;
@@ -79,16 +79,16 @@ export class LlTemplates extends LitElement {
       white-space: normal;
     }
     .message {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .error {
-      color: var(--dc-color-danger, #b00020);
+      color: var(--dc-color-danger);
     }
     /* Said while typing, before a save: a warning, not a failure. */
     .problems {
-      margin: 0 0 var(--dc-space-2, 8px);
+      margin: 0 0 var(--dc-space-2);
       padding-inline-start: 1.25em;
-      color: var(--dc-color-warning-text, #8a5a00);
+      color: var(--dc-color-warning-text);
       font-size: 0.875em;
     }
     /* Each field on one row: its judgment checkbox (as wide as its label, so a click beside it does
@@ -98,7 +98,7 @@ export class LlTemplates extends LitElement {
       grid-template-columns: max-content max-content minmax(8rem, 1fr);
       align-items: center;
       justify-items: start;
-      gap: var(--dc-space-1, 4px) var(--dc-space-3, 12px);
+      gap: var(--dc-space-1) var(--dc-space-3);
     }
     .fields h3,
     .fields p {
@@ -108,7 +108,7 @@ export class LlTemplates extends LitElement {
       --ll-rename-width: 7rem;
       display: flex;
       align-items: center;
-      gap: var(--dc-space-1, 4px);
+      gap: var(--dc-space-1);
     }
     .fields p {
       margin: 0;

@@ -20,14 +20,14 @@ export class LlTable extends LitElement {
     :host {
       display: flex;
       flex-direction: column;
-      gap: var(--dc-space-3, 12px);
+      gap: var(--dc-space-3);
       min-height: 0;
     }
     .bar,
     .filters {
       display: flex;
       align-items: center;
-      gap: var(--dc-space-2, 8px);
+      gap: var(--dc-space-2);
     }
     /* One row of compact controls above the table, wrapping only when the window is narrow. */
     .filters {
@@ -41,16 +41,16 @@ export class LlTable extends LitElement {
       font-size: 13px;
     }
     .message {
-      color: var(--dc-color-text-muted, #666);
+      color: var(--dc-color-text-muted);
     }
     .error {
-      color: var(--dc-color-danger, #b00020);
+      color: var(--dc-color-danger);
     }
     .skipped summary {
       cursor: pointer;
     }
     .skipped ul {
-      margin: var(--dc-space-1, 4px) 0 0;
+      margin: var(--dc-space-1) 0 0;
       padding: 0;
       list-style: none;
     }

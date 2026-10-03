@@ -54,7 +54,7 @@ body {
 body {
   background: var(--dc-color-bg);
   color: var(--dc-color-text);
-  font-family: var(--dc-font-family, system-ui, sans-serif);
+  font-family: var(--dc-font-family);
 }
 
 ll-app {
