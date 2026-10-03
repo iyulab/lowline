@@ -2101,6 +2101,7 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
           .join(' · ')
       }
       const restartSteps = await syncSteps()
+      const restartBlocked = await longTasks(app)
       // Ten thousand new documents: the sidecar replays the fields' history for their thresholds meanwhile.
       const replaying = await sidecarCpuOver(5_000)
 
@@ -2126,13 +2127,34 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
       await app.cdp.waitFor(`__e2e.all('tbody tr').some((tr) => tr.textContent.includes('(고침)'))`, 'the table again', { timeoutMs: 300_000 })
       const unchanged = Date.now() - again
       const unchangedSteps = await syncSteps()
+      const unchangedBlocked = await longTasks(app)
       const idle = await sidecarCpuOver(5_000)
       console.log(
-        `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${restartSteps} ms) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
+        `    ${COUNT} documents · restart to table ${first} ms (window and vault ${opened} · ${restartSteps} ms · ${restartBlocked}) · one outside edit to table ${edit} ms · last sync ${Object.entries(steps).map(([k, v]) => `${k} ${v} ms`).join(' · ')}`,
       )
-      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms (window and vault ${reopened} · ${unchangedSteps} ms) · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}${settled ? '' : ' (the first launch never went quiet)'}`)
+      console.log(`    sidecar CPU over 5 s after that restart ${replaying} ms · unchanged restart to table ${unchanged} ms (window and vault ${reopened} · ${unchangedSteps} ms · ${unchangedBlocked}) · sidecar CPU over the next 5 s ${idle} ms${kept ? '' : ' (no thresholds were kept)'}${settled ? '' : ' (the first launch never went quiet)'}`)
     },
   }),
+}
+
+/**
+ * How long the window's main thread was held by tasks of 50 ms or more since the page loaded, as a phrase for a
+ * measurement line: work a restart does on the UI thread — listing, reading, rendering a large vault — blocks the
+ * window before it shows in the time to the table, as a list rendered row by row against the whole list once did.
+ */
+async function longTasks(app) {
+  const { count, total, longest } = await app.cdp.evaluate(`new Promise((resolve) => {
+    const done = (entries) => resolve({
+      count: entries.length,
+      total: Math.round(entries.reduce((sum, e) => sum + e.duration, 0)),
+      longest: Math.round(Math.max(0, ...entries.map((e) => e.duration))),
+    })
+    // The buffered entries come in one call; with none, there is no call.
+    const observer = new PerformanceObserver((list) => { observer.disconnect(); done(list.getEntries()) })
+    observer.observe({ type: 'longtask', buffered: true })
+    setTimeout(() => { observer.disconnect(); done([]) }, 1000)
+  })`)
+  return `main thread held ${total} ms in ${count} long tasks, longest ${longest}`
 }
 
 /** Waits until the sidecar has kept thresholds chosen after `since` beside the e2e app's caches; false if it never did. */
