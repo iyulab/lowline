@@ -1113,6 +1113,59 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '배정')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'suggests a judgment from another judgment once the person has settled it'(app, vault) {
+    // 승인 goes with 담당, and nothing observed says which 담당 a request has: only a settled 담당 decides 승인.
+    const APPROVE = { name: '결재', ref: 'approve@1', path: '서식/결재.fd.md' }
+    const body = '# 결재\n\n요청: ___@요청\n\n@담당: [select options="장비,인사,총무"]\n\n@승인: [select options="김,이,박"]\n'
+    const template = join(vault, APPROVE.path)
+    await writeFile(template, `---\nid: approve\nversion: 1\nlowline:\n  suggest: [담당, 승인]\n---\n${body}`)
+    const owners = ['장비', '인사', '총무']
+    const approvers = { 장비: '김', 인사: '이', 총무: '박' }
+    const files = Array.from({ length: 15 }, (_, i) => join(vault, '문서', `결재-${i + 1}.md`))
+    for (const [i, file] of files.entries()) {
+      const owner = owners[i % 3]
+      await writeFile(file, `---\ntemplate: approve@1\n요청: 서로 다른 요청 ${i + 1}\n담당: ${owner}\n승인: ${approvers[owner]}\n---\n${body}`)
+    }
+
+    // Once the replay has shown that a settled 담당 decides 승인, the learning view says how often it was right.
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '결재 · 승인'); return h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim() })()`
+    let said = ''
+    for (const until = Date.now() + 30_000; Date.now() < until && !said.includes('맞음'); ) {
+      await app.sidebar(APPROVE.name, { timeoutMs: 30_000 })
+      await app.learning()
+      said = (await app.cdp.waitFor(replay, 'the replay line of 결재 · 승인', { timeoutMs: 30_000 })) ?? ''
+    }
+    assert.match(said, /^저장된 \d+건을 순서대로 다시 물으면 \d+%에 제안, 그중 \d+% 맞음/)
+
+    await app.newDocument(APPROVE)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.fill('[data-field-name="요청"]', '처음 보는 요청')
+    // Nothing settled yet says who approves: no suggestion for 승인.
+    await app.cdp.waitFor(
+      `__e2e.all('[data-formdown-note="승인"]').some((el) => el.textContent.trim().length > 0)`,
+      'a note beside 승인',
+      { timeoutMs: 15_000 },
+    )
+    assert.equal(await app.cdp.evaluate(`__e2e.all('[data-formdown-note="승인"] .formdown-suggestion').length`), 0)
+
+    // The person settles 담당; 승인 is now suggested from it.
+    await app.choose('select[name="담당"]', '인사')
+    const note = await app.cdp.waitFor(
+      `__e2e.all('[data-formdown-note="승인"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      'a suggestion for 승인',
+      { timeoutMs: 15_000 },
+    )
+    assert.match(note, /^제안 · 함께 확정된 값: 담당: 인사/)
+    assert.equal(await app.cdp.evaluate(`__e2e.one('[data-formdown-note="승인"] .formdown-suggestion')?.textContent`), '이')
+    await app.noAlert()
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await Promise.all([template, ...files].map((f) => rm(f)))
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '결재')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'shows a sync conflict copy beside its original, and learns from neither until one is kept'(app, vault) {
     // A sync client kept another device's edit of 접수-1 as a copy.
     const copy = join(vault, '문서', '접수-1 (다른 기기의 충돌된 사본 2026-09-29).md')
