@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Written by the UI's snapshot contract test. -->
+    <None Include="ui-snapshot.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Lowline.Host\Lowline.Host.csproj" />
   </ItemGroup>
 

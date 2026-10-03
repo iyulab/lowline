@@ -1,0 +1,95 @@
+{
+  "templates": [
+    {
+      "ref": "intake@2",
+      "fields": [
+        {
+          "name": "요청",
+          "label": "요청",
+          "type": "textarea",
+          "multiple": false,
+          "options": []
+        },
+        {
+          "name": "부서",
+          "label": "부서",
+          "type": "select",
+          "multiple": false,
+          "options": [
+            "영업",
+            "개발"
+          ]
+        },
+        {
+          "name": "담당",
+          "label": "담당",
+          "type": "radio",
+          "multiple": false,
+          "options": [
+            "장비",
+            "총무"
+          ]
+        },
+        {
+          "name": "태그",
+          "label": "태그",
+          "type": "checkbox",
+          "multiple": true,
+          "options": [
+            "급함",
+            "반복"
+          ]
+        },
+        {
+          "name": "고객",
+          "label": "고객",
+          "type": "select",
+          "multiple": false,
+          "options": [],
+          "reference": "customer"
+        }
+      ],
+      "suggest": [
+        "담당"
+      ]
+    }
+  ],
+  "documents": [
+    {
+      "path": "문서/2026-10-03-모니터.md",
+      "id": "doc-1",
+      "template": "intake@2",
+      "values": {
+        "요청": "모니터가 깜빡여요",
+        "부서": "영업",
+        "담당": "장비",
+        "태그": [
+          "급함"
+        ],
+        "고객": "customer-1"
+      },
+      "modified": 1790000000000,
+      "conflicted": true
+    }
+  ],
+  "events": [
+    {
+      "at": "2026-10-03T00:00:10.000Z",
+      "doc": "doc-1",
+      "template": "intake@2",
+      "field": "담당",
+      "kind": "accept",
+      "suggested": "장비",
+      "value": "장비",
+      "source": "key",
+      "recall": "부서: 영업",
+      "similarity": null,
+      "filled": [
+        "요청",
+        "부서"
+      ],
+      "shownAt": "2026-10-03T00:00:00.000Z",
+      "decidedAt": "2026-10-03T00:00:05.000Z"
+    }
+  ]
+}
