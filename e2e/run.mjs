@@ -6,8 +6,9 @@
 //                       E2E_COLOR_SCHEME=dark runs it in the dark scheme;
 //                       E2E_VAULT_UNC=1 opens the vault through this PC's administrative share,
 //                       \\localhost\C$\..., so every file operation goes over SMB — Windows only;
-//                       E2E_ONLY=<text> runs the scenarios whose names hold the text;
-//                       E2E_REPEAT=<n> runs them n times, each on a fresh vault in a fresh window)
+//                       `-- --only <text>` runs the scenarios whose names hold the text, `-- --through
+//                       <text>` those up to the first such, `-- --repeat <n>` n times, each on a fresh
+//                       vault in a fresh window; a failure's picture is kept in the temp folder)
 //
 // The window itself — launching, clicking, typing, quitting — is app.mjs, for one-off scripts too.
 //
@@ -21,7 +22,8 @@ import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { parseFormdown } from '@formdown/core'
-import { App, EXPORTS, IDENTIFIER, SETTINGS, exe, q, screenshot, sidecarsRunning, updates } from './app.mjs'
+import { runScenarios } from '@iyulab/tauri-kit-dev/app'
+import { App, EXPORTS, IDENTIFIER, SETTINGS, exe, q, sidecarsRunning, updates } from './app.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = '서식/버그 리포트.fd.md'
@@ -2188,38 +2190,28 @@ async function sidecarCpuOver(ms) {
 }
 
 /**
- * What a failed scenario leaves behind, so an intermittent failure can be read afterwards: a
- * picture of the window and what the page was saying (alerts and status lines). In E2E_SCREENSHOTS
- * when set, otherwise in the system temp folder.
+ * What the app was saying when a scenario failed, for the runner to print beside the failure and its
+ * picture: the page's open dialog, alerts and status lines, what the sidecar answers — a failure there is
+ * kept off the screen, suggestions being optional — and the last error reports.
  */
-async function failureEvidence(app, name) {
-  try {
-    const dir =
-      process.env.E2E_SCREENSHOTS ?? join(tmpdir(), 'lowline-e2e-failures', new Date().toISOString().replace(/[:.]/g, '-'))
-    await screenshot(app.cdp, dir, `FAILED ${name}`)
-    const said = await app.cdp.evaluate(
-      `[
-        ...__e2e.all('dc-confirm-dialog').filter((d) => d.open).map((d) => 'dialog: ' + d.heading),
-        ...__e2e.all('[role=alert], [role=status]').map((el) => el.getAttribute('role') + ': ' + el.textContent.trim()),
-      ].filter((t) => !t.endsWith(': '))`,
-    )
-    // What the sidecar says: a failure there is kept off the screen (suggestions are optional).
-    const sidecar = await app.cdp.evaluate(
-      `(async () => { const T = window.__TAURI_INTERNALS__; const out = {}
-        for (const cmd of ['host_status', 'host_curves']) {
-          try { out[cmd] = JSON.stringify(await T.invoke(cmd)).slice(0, 300) } catch (e) { out[cmd] = 'error: ' + JSON.stringify(e) }
-        }
-        return out })()`,
-    )
-    // The error reports hold a failure's kind and frames only, nothing of the page: safe to print.
-    const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
-    const reported = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).slice(-3) : []
-    console.log(
-      `    page: ${JSON.stringify(said)}\n    sidecar: ${JSON.stringify(sidecar)}\n    reports: ${reported.join('\n             ')}\n    evidence: ${dir}`,
-    )
-  } catch (e) {
-    console.log(`    (no evidence: ${e.message})`)
-  }
+async function shown(app) {
+  const said = await app.cdp.evaluate(
+    `[
+      ...__e2e.all('dc-confirm-dialog').filter((d) => d.open).map((d) => 'dialog: ' + d.heading),
+      ...__e2e.all('[role=alert], [role=status]').map((el) => el.getAttribute('role') + ': ' + el.textContent.trim()),
+    ].filter((t) => !t.endsWith(': '))`,
+  )
+  const sidecar = await app.cdp.evaluate(
+    `(async () => { const T = window.__TAURI_INTERNALS__; const out = {}
+      for (const cmd of ['host_status', 'host_curves']) {
+        try { out[cmd] = JSON.stringify(await T.invoke(cmd)).slice(0, 300) } catch (e) { out[cmd] = 'error: ' + JSON.stringify(e) }
+      }
+      return out })()`,
+  )
+  // The error reports hold a failure's kind and frames only, nothing of the page: safe to print.
+  const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
+  const reported = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).slice(-3) : []
+  return `page: ${JSON.stringify(said)}\n    sidecar: ${JSON.stringify(sidecar)}\n    reports: ${reported.join('\n             ')}`
 }
 
 /** Over SMB (`E2E_VAULT_UNC`) the vault has no trash: the app asks again, and the answer is `button`. */
@@ -2268,75 +2260,39 @@ async function takeFromRecycleBin(folder) {
 }
 
 /**
- * The scenarios to run: all of them, or with E2E_ONLY=<text> those whose names hold the text. They keep
- * their order, and a scenario may rely on what the ones before it left — so a scenario run alone can need
- * its predecessors in the text too.
+ * A fresh start for one run: the fixture vault copied to a new folder — reached over SMB with
+ * E2E_VAULT_UNC — this device's settings as a fresh install's, and the app opened on the vault.
  */
-function chosen() {
-  const only = process.env.E2E_ONLY
-  return Object.entries(scenarios).filter(([name]) => !only || name.includes(only))
-}
-
-/** Runs the chosen scenarios E2E_REPEAT times (once by default), each time on a fresh vault in a fresh window. */
-async function main() {
-  if (!existsSync(exe)) throw new Error(`no e2e build at ${exe} — run \`npm run build:e2e\` first`)
-  const runs = chosen()
-  if (runs.length === 0) throw new Error(`no scenario's name holds "${process.env.E2E_ONLY}"`)
-  const times = Math.max(1, Number(process.env.E2E_REPEAT ?? 1) || 1)
-  let failed = 0
-  for (let time = 1; time <= times && failed === 0; time++) {
-    if (times > 1) console.log(`\nrun ${time} of ${times}`)
-    failed += await runOnce(runs)
-  }
-  const count = `${runs.length} scenario${runs.length === 1 ? '' : 's'}${times > 1 ? ` ×${times}` : ''}`
-  console.log(failed ? `\n${failed} scenario failed` : `\nall ${count} passed`)
-  process.exitCode = failed ? 1 : 0
-}
-
-/** Runs the scenarios once in order, stopping at the first failure; answers how many failed. */
-async function runOnce(runs) {
+async function start() {
   const local = await mkdtemp(join(tmpdir(), 'lowline-e2e-'))
   await cp(join(here, 'fixtures', 'vault'), local, { recursive: true })
   // A shared folder: the same files, reached over SMB. Needs the drive's administrative share.
   const vault = process.env.E2E_VAULT_UNC ? local.replace(/^([A-Za-z]):/, (_, drive) => '\\\\localhost\\' + drive.toUpperCase() + '$') : local
-  // Each run's vault is a new folder, so an earlier run's projection cache and record of suggestions
-  // shown would only pile up.
-  for (const dir of ['projections', 'presentations'])
-    await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, dir), { recursive: true, force: true })
-
-  // This device's settings start as a fresh install's, past the first launch's one-time line about what
-  // leaves the computer (its own scenario shows it).
-  await mkdir(dirname(SETTINGS), { recursive: true })
-  await writeFile(SETTINGS, JSON.stringify({ outboundToldOnce: true }))
-
-  let app
-  let failed = 0
+  const stop = () => rm(local, { recursive: true, force: true })
   try {
-    app = await App.launch()
+    // Each run's vault is a new folder, so an earlier run's projection cache and record of suggestions
+    // shown would only pile up.
+    for (const dir of ['projections', 'presentations'])
+      await rm(join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, dir), { recursive: true, force: true })
+    // This device's settings start as a fresh install's, past the first launch's one-time line about what
+    // leaves the computer (its own scenario shows it).
+    await mkdir(dirname(SETTINGS), { recursive: true })
+    await writeFile(SETTINGS, JSON.stringify({ outboundToldOnce: true }))
+    const app = await App.launch()
     await app.openVault(vault)
     // Scenarios run in order against one window: each builds on the files the last one left.
-    for (const [name, run] of runs) {
-      try {
-        await run(app, vault)
-        console.log(`  ✓ ${name}`)
-        if (process.env.E2E_SCREENSHOTS) await screenshot(app.cdp, process.env.E2E_SCREENSHOTS, name)
-      } catch (e) {
-        failed++
-        console.log(`  ✗ ${name}\n    ${e.message.replaceAll('\n', '\n    ')}`)
-        await failureEvidence(app, name)
-        break
-      }
-    }
-  } finally {
-    await app?.quit()
-    await rm(local, { recursive: true, force: true })
+    return { app, context: vault, stop }
+  } catch (e) {
+    await stop()
+    throw e
   }
-  // The sidecar lives in the app's job object: when the app is gone, so is the sidecar.
-  if (process.platform === 'win32' && (await sidecarsRunning()) > 0) {
-    failed++
-    console.log('  ✗ the sidecar outlived the app')
-  }
-  return failed
 }
 
-await main()
+if (!existsSync(exe)) throw new Error(`no e2e build at ${exe} — run \`npm run build:e2e\` first`)
+let code = await runScenarios(scenarios, { start, shown })
+// The sidecar lives in the app's job object: when the app is gone, so is the sidecar.
+if (process.platform === 'win32' && (await sidecarsRunning()) > 0) {
+  console.log('  ✗ the sidecar outlived the app')
+  code = 1
+}
+process.exitCode = code
