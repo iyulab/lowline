@@ -1,0 +1,31 @@
+{
+  "host_suggest": {
+    "template": "intake@2",
+    "field": "담당",
+    "values": {
+      "요청": "모니터가 깜빡여요",
+      "부서": "영업",
+      "태그": [
+        "급함"
+      ]
+    },
+    "document": "doc-1"
+  },
+  "host_search": {
+    "query": "모니터",
+    "template": "intake@2"
+  },
+  "host_similar": {
+    "path": "문서/2026-10-03-모니터.md"
+  },
+  "host_projection": {
+    "template": "intake@2",
+    "filters": [
+      {
+        "column": "부서",
+        "op": "contains",
+        "value": "영업"
+      }
+    ]
+  }
+}

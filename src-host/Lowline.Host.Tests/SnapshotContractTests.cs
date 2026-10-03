@@ -4,8 +4,9 @@ using System.Text.Json.Nodes;
 namespace Lowline.Host.Tests;
 
 /// <summary>
-/// The vault as the UI hands it over (<c>ui-snapshot.json</c>, which the UI's own test writes from its real
-/// functions): every field in it is either read here or left out on purpose, said below with why. A field
+/// The vault as the UI hands it over (<c>ui-snapshot.json</c>) and the questions it asks (<c>ui-requests.json</c>, the
+/// body of each, by the shell command that hands it on), both written by the UI's own test from its real functions:
+/// every field in them is either read here or left out on purpose, said below with why. A field
 /// the UI starts to send fails here until it is one or the other — the sidecar once read a choice field
 /// without its options, and so suggested values the template no longer offered.
 /// </summary>
@@ -30,8 +31,21 @@ public sealed class SnapshotContractTests
         },
     };
 
-    private static JsonObject Sent() =>
-        JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "ui-snapshot.json")))!.AsObject();
+    /// <summary>The body each shell command hands the sidecar, and what the sidecar reads it as.</summary>
+    private static readonly Dictionary<string, Type> Questions = new()
+    {
+        ["host_suggest"] = typeof(SuggestRequest),
+        ["host_search"] = typeof(CaseQuery),
+        ["host_similar"] = typeof(SimilarQuery),
+        ["host_projection"] = typeof(ProjectionQuery),
+    };
+
+    private static JsonObject Read(string file) =>
+        JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, file)))!.AsObject();
+
+    private static JsonObject Sent() => Read("ui-snapshot.json");
+
+    private static JsonObject Asked() => Read("ui-requests.json");
 
     [Fact]
     public void Every_field_the_UI_sends_is_read_or_left_out_on_purpose()
@@ -55,6 +69,16 @@ public sealed class SnapshotContractTests
         }
         foreach (var document in sent["documents"]!.AsArray()) Check(document, typeof(DocumentSnapshot), "document");
         foreach (var e in sent["events"]!.AsArray()) Check(e, typeof(SuggestionEvent), "event");
+
+        var asked = Asked();
+        Assert.Equal(Questions.Keys.Order(), asked.Select(q => q.Key).Order());
+        foreach (var (command, body) in asked)
+        {
+            Check(body, Questions[command], command);
+            // A suggestion's values are the document's, by field name: they are read whole.
+            if (body!["filters"] is JsonArray filters)
+                foreach (var filter in filters) Check(filter, typeof(ColumnFilter), $"{command}.filter");
+        }
 
         Assert.Empty(unread);
     }
@@ -84,5 +108,22 @@ public sealed class SnapshotContractTests
         Assert.Equal("영업", document.Values["부서"].GetString());
         var e = Assert.Single(vault.Events!);
         Assert.Equal(("doc-1", "담당", "accept", "장비", "intake@2", "key"), (e.Doc, e.Field, e.Kind, e.Suggested, e.Template, e.Source));
+    }
+
+    [Fact]
+    public void The_sidecar_reads_each_question_as_asked()
+    {
+        var asked = Asked();
+        T Body<T>(string command) => JsonSerializer.Deserialize<T>(asked[command]!.ToJsonString(), JsonSerializerOptions.Web)!;
+
+        var suggest = Body<SuggestRequest>("host_suggest");
+        // The saved document it is asked for: a suggestion turned down there is not offered again.
+        Assert.Equal(("intake@2", "담당", "doc-1"), (suggest.Template, suggest.Field, suggest.Document));
+        Assert.Equal("영업", suggest.Values["부서"].GetString());
+        Assert.Equal(("모니터", "intake@2"), (Body<CaseQuery>("host_search").Query, Body<CaseQuery>("host_search").Template));
+        Assert.Equal("문서/2026-10-03-모니터.md", Body<SimilarQuery>("host_similar").Path);
+        var projection = Body<ProjectionQuery>("host_projection");
+        Assert.Equal("intake@2", projection.Template);
+        Assert.Equal(new ColumnFilter("부서", "contains", "영업"), Assert.Single(projection.Filters!));
     }
 }

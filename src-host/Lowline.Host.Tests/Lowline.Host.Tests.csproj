@@ -20,6 +20,7 @@
   <ItemGroup>
     <!-- Written by the UI's snapshot contract test. -->
     <None Include="ui-snapshot.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ui-requests.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

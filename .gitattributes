@@ -2,5 +2,6 @@
 e2e/fixtures/** -text
 # Written by the UI's snapshot contract test and compared byte for byte, wherever it is checked out.
 src-host/Lowline.Host.Tests/ui-snapshot.json -text
+src-host/Lowline.Host.Tests/ui-requests.json -text
 # Written by the sidecar's response contract test and compared byte for byte, wherever it is checked out.
 src/__tests__/sidecar-responses.json -text
