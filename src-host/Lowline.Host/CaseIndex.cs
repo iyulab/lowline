@@ -151,24 +151,28 @@ internal sealed class CaseIndex : IAsyncDisposable
             .Select(c => (c.DocumentChunk.DocumentId, c.DocumentChunk.Content, (double)c.Score))];
     }
 
-    /// <summary>A document's values in template order, one per line; list values one per line too.</summary>
+    /// <summary>
+    /// A document's values in template order, one per line; list values one per line too. Lines end in <c>\n</c>
+    /// wherever the sidecar runs, so the text it answers with does not depend on the system.
+    /// </summary>
     internal static string TextOf(DocumentSnapshot document, TemplateSnapshot template)
     {
         var text = new StringBuilder();
+        void Line(string s) => text.Append(s).Append('\n');
         foreach (var field in template.Fields)
         {
             if (!document.Values.TryGetValue(field.Name, out var value)) continue;
             switch (value.ValueKind)
             {
                 case JsonValueKind.String when value.GetString() is { Length: > 0 } s:
-                    text.AppendLine(s.Trim());
+                    Line(s.Trim());
                     break;
                 case JsonValueKind.Number:
-                    text.AppendLine(value.GetRawText());
+                    Line(value.GetRawText());
                     break;
                 case JsonValueKind.Array:
                     foreach (var item in value.EnumerateArray())
-                        if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s) text.AppendLine(s.Trim());
+                        if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s) Line(s.Trim());
                     break;
             }
         }
