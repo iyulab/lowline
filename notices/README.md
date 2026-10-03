@@ -12,7 +12,7 @@ packages carry themselves — read from what is committed here, never fetched wh
 A package that moves to another version no longer matches its pin and has to be pinned again — its
 text may have changed.
 
-`npm run notices` writes the notices to `out/THIRD-PARTY-NOTICES.txt` (not committed), which the
+`npm run notices` writes the notices, as `config.mjs` here describes them, to `out/THIRD-PARTY-NOTICES.txt` (not committed), which the
 installer ships beside the app and the app shows under 정보 at the foot of its sidebar; `build:host` runs it. It fails on a pin that applies to no shipped
 package or whose file does not match its digest, and lists the packages still without a text. With
 `-- --strict` it fails on those too — a release that goes out to the public is built that way.
