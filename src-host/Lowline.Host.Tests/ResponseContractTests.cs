@@ -93,7 +93,7 @@ public sealed class ResponseContractTests
                 ["whyNoReplay"] = Words(typeof(NoReplay), Abstention.BelowTarget),
             },
         };
-        var written = Zeroed(responses).ToJsonString(Written).ReplaceLineEndings("\n") + "\n";
+        var written = Zeroed(responses)!.ToJsonString(Written).ReplaceLineEndings("\n") + "\n";
 
         // Written into the source tree; checked against the copy the build puts beside the tests.
         if (Environment.GetEnvironmentVariable("LOWLINE_UPDATE_CONTRACT") == "1")
