@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, referenceProblems, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
+import { fileName, fileNameFor, referenceProblems, setOptions, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
 import { readVault } from './vault-snapshot.js'
 import type { DocumentSnapshot } from './projection.js'
 import type { TemplateItem } from './template-scope.js'
@@ -315,18 +315,17 @@ export class LlTemplates extends LitElement {
   }
 
   /**
-   * Writes a field's options, as typed (split at commas), into its place in the source: an edit of the
-   * source like any other, kept by saving. A field is left with at least one option.
+   * Writes a field's options, as typed, into its place in the source (`setOptions`): an edit of the source
+   * like any other, kept by saving. A field is left with at least one option, and keeps its "other" choice.
    */
-  private setOptions(field: string, typed: string, input: HTMLInputElement & { value: string }) {
-    const current = this.fields().find((f) => f.name === field)?.options ?? []
-    const options = typed.split(',').map((o) => o.trim()).filter(Boolean)
-    if (options.length === 0 || options.join(',') === current.join(',')) {
-      input.value = current.join(', ') // nothing to write: show what the source holds
-      return
-    }
+  private writeOptions(field: string, typed: string, input: HTMLInputElement & { value: string }) {
     try {
-      this.source = setFieldAttribute(this.source, field, 'options', options.join(','))
+      const next = setOptions(this.source, field, typed)
+      if (next === undefined) {
+        input.value = (this.fields().find((f) => f.name === field)?.options ?? []).join(', ') // nothing to write: show what the source holds
+        return
+      }
+      this.source = next
       this.dirty = true
       this.message = ''
       this.error = ''
@@ -514,7 +513,7 @@ export class LlTemplates extends LitElement {
     const fields = this.fields()
     const commit = (field: string) => (e: Event) => {
       const input = e.currentTarget as HTMLInputElement
-      this.setOptions(field, input.value, input)
+      this.writeOptions(field, input.value, input)
     }
     return html`<div class="fields" role="group" aria-label=${strings.fieldsTitle}>
       <h3>${strings.fieldsTitle}</h3>

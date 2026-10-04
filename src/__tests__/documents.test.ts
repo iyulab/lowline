@@ -10,6 +10,7 @@ import {
   fieldValues,
   newDocument,
   setDocumentId,
+  setOptions,
   setSuggest,
   reviseDocument,
   referenceProblems,
@@ -176,6 +177,36 @@ describe('starterTemplate', () => {
   it('names new documents after its title field', () => {
     const source = starterTemplate('t1')
     expect(documentTitle(source, { 상태: '열림', 제목: '첫 기록' })).toBe('첫 기록')
+  })
+})
+
+describe('setOptions', () => {
+  const field = (source: string, name: string) => parseFormdown(source).forms.find((f) => f.name === name)!
+
+  it('writes the options typed into the field, and nothing else', () => {
+    const template = '# 접수\n\n@심각도: [select options="낮음,보통"]\n'
+    expect(setOptions(template, '심각도', '낮음, 보통, 긴급')).toBe('# 접수\n\n@심각도: [select options="낮음,보통,긴급"]\n')
+  })
+
+  it('writes nothing for no option, the same options, or a field the template does not have', () => {
+    const template = '@심각도: [select options="낮음,보통"]'
+    expect(setOptions(template, '심각도', ' , ')).toBeUndefined()
+    expect(setOptions(template, '심각도', '낮음,  보통')).toBeUndefined()
+    expect(setOptions(template, '없는칸', 'a')).toBeUndefined()
+  })
+
+  it('keeps an "other" choice written among the options', () => {
+    const inBrackets = setOptions('@경로: [radio options="전화,메일,*(직접 입력)"]', '경로', '전화, 메일, 방문')!
+    expect(inBrackets).toBe('@경로: [radio options="전화,메일,방문,*(직접 입력)"]')
+    expect(field(inBrackets, '경로')).toMatchObject({ options: ['전화', '메일', '방문'], allowOther: true, otherLabel: '직접 입력' })
+
+    const inBraces = setOptions('@경로{전화,메일,*}: r[]', '경로', '전화, 방문')!
+    expect(field(inBraces, '경로')).toMatchObject({ options: ['전화', '방문'], allowOther: true })
+  })
+
+  it('leaves an "other" choice written as its own attribute where it is', () => {
+    const template = '@경로: [radio options="전화,메일" allow-other other-label="직접 입력"]'
+    expect(setOptions(template, '경로', '전화, 방문')).toBe('@경로: [radio options="전화,방문" allow-other other-label="직접 입력"]')
   })
 })
 

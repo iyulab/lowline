@@ -3,7 +3,7 @@
 // which template it came from (`template: <id>@<version>`), its own id (`lowline.id`, see
 // `identity.ts`) and the value of each field. `template` and `lowline` are not field values.
 
-import { parseFormdown, readFrontMatter, updateFrontMatter } from '@formdown/core'
+import { parseFormdown, readFrontMatter, setFieldAttribute, updateFrontMatter } from '@formdown/core'
 import { templateId } from './template-revision.js'
 
 /** A field's value: text, a list of texts (checkbox group), or a boolean (single checkbox). */
@@ -183,6 +183,24 @@ export function setSuggest(templateSource: string, field: string, on: boolean): 
   const { suggest: _, ...rest } = lowline
   const next = suggest.length > 0 ? { ...rest, suggest } : rest
   return updateFrontMatter(templateSource, { lowline: Object.keys(next).length > 0 ? next : undefined })
+}
+
+/**
+ * Writes a choice field's options, as typed (split at commas), into its place in the source — or nothing
+ * (`undefined`) when there is nothing to write: no option typed (a field keeps at least one), the options it
+ * already has, or no such field. The options are shown without the field's "other" choice, so one written
+ * among them (`{a,b,*}`, `options="a,*(직접 입력)"`) is written back with them; one written as its own
+ * `allow-other` attribute is left where it is.
+ */
+export function setOptions(templateSource: string, field: string, typed: string): string | undefined {
+  const target = parseFormdown(templateSource).forms.find((f) => f.name === field)
+  if (!target) return undefined
+  const options = typed.split(',').map((o) => o.trim()).filter(Boolean)
+  if (options.length === 0 || options.join(',') === (target.options ?? []).join(',')) return undefined
+  const written = setFieldAttribute(templateSource, field, 'options', options.join(','))
+  if (!target.allowOther || parseFormdown(written).forms.find((f) => f.name === field)?.allowOther) return written
+  const other = target.otherLabel ? `*(${target.otherLabel})` : '*'
+  return setFieldAttribute(templateSource, field, 'options', [...options, other].join(','))
 }
 
 /** A name's place in the template; names it no longer has go last, in the order they were. */
