@@ -212,7 +212,7 @@ export class LlTable extends LitElement {
           size="sm"
           aria-label=${f.label}
           .value=${value(f.name, 'equal')}
-          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...f.options.map((o) => ({ value: o, label: o }))]}
+          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...f.options.map((o) => ({ value: o, label: f.optionLabels?.[o] ?? o }))]}
           @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
         ></dc-select>`,
       )}

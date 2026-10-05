@@ -10,6 +10,7 @@ import {
   fieldValues,
   newDocument,
   setDocumentId,
+  optionsText,
   setOptions,
   setSuggest,
   reviseDocument,
@@ -198,10 +199,18 @@ describe('setOptions', () => {
   it('keeps an "other" choice written among the options', () => {
     const inBrackets = setOptions('@경로: [radio options="전화,메일,*(직접 입력)"]', '경로', '전화, 메일, 방문')!
     expect(inBrackets).toBe('@경로: [radio options="전화,메일,방문,*(직접 입력)"]')
-    expect(field(inBrackets, '경로')).toMatchObject({ options: ['전화', '메일', '방문'], allowOther: true, otherLabel: '직접 입력' })
+    expect(field(inBrackets, '경로')).toMatchObject({ options: [{ value: '전화' }, { value: '메일' }, { value: '방문' }], allowOther: true, otherLabel: '직접 입력' })
 
     const inBraces = setOptions('@경로{전화,메일,*}: r[]', '경로', '전화, 방문')!
-    expect(field(inBraces, '경로')).toMatchObject({ options: ['전화', '방문'], allowOther: true })
+    expect(field(inBraces, '경로')).toMatchObject({ options: [{ value: '전화' }, { value: '방문' }], allowOther: true })
+  })
+
+  it('reads and writes values apart from the text shown for them', () => {
+    const template = '@분류: [select options="hw=하드웨어,sw=소프트웨어"]'
+    expect(optionsText(field(template, '분류').options!)).toBe('hw=하드웨어, sw=소프트웨어')
+    const next = setOptions(template, '분류', 'hw=장비, sw=소프트웨어, net=네트워크')!
+    expect(next).toBe('@분류: [select options="hw=장비,sw=소프트웨어,net=네트워크"]')
+    expect(setOptions(template, '분류', 'hw = 하드웨어,  sw=소프트웨어')).toBeUndefined()
   })
 
   it('leaves an "other" choice written as its own attribute where it is', () => {
@@ -237,6 +246,14 @@ describe('setSuggest', () => {
     expect(fileNameFor('고객 문의', '.fd.md')).toBe('고객 문의.fd.md')
     expect(fileName('서식/고객 문의.fd.md', '.fd.md')).toBe('고객 문의')
     expect(fileName('문서/접수-1.md', '.md')).toBe('접수-1')
+  })
+})
+
+describe('templateProblems from what the parser could not read', () => {
+  const head = '---\nid: t\nversion: 1\n---\n'
+  it('says a condition that is not one, and a line that looks like a field but is not one', () => {
+    expect(templateProblems(`${head}@부서: [select options="영업,개발"]\n@비고: [text visible-if="부서 == 영업"]\n`)).toContainEqual({ kind: 'invalid-condition', field: '비고' })
+    expect(templateProblems(`${head}@경로: r{전화,메일}[]\n`)).toContainEqual({ kind: 'unrecognized-field', name: '경로', line: 5 })
   })
 })
 

@@ -55,6 +55,12 @@ describe('templateSnapshot', () => {
     ])
   })
 
+  it('carries option values, and the text shown for those that have one', () => {
+    const { fields } = templateSnapshot('---\nid: t\nversion: 1\n---\n@분류: [select options="hw=하드웨어,sw=소프트웨어,기타"]\n@메모: [text]\n')
+    expect(fields[0]).toMatchObject({ options: ['hw', 'sw', '기타'], optionLabels: { hw: '하드웨어', sw: '소프트웨어' } })
+    expect(fields[1]).not.toHaveProperty('optionLabels')
+  })
+
   it('turns suggestions on only for fields the author names', () => {
     expect(templateSnapshot(template.replace(/lowline:\n  suggest: .*\n/, '')).suggest).toEqual([])
     expect(templateSnapshot(template.replace('suggest: [심각도, 없는칸]', 'suggest: 심각도')).suggest).toEqual([])

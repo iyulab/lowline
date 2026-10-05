@@ -15,8 +15,10 @@ export interface TemplateField {
   type: string
   /** A checkbox with options: its value is a list. */
   multiple: boolean
-  /** A choice field's options (select, radio, checkbox group); empty for any other field. */
+  /** A choice field's option values (select, radio, checkbox group) — what a document holds; empty for any other field. */
   options: string[]
+  /** What the form shows for an option whose text differs from its value (`value=Label`), by value. */
+  optionLabels?: Record<string, string>
   /**
    * The id of the template whose documents the field's value names (`@고객 -> customer: [select]`): its value
    * is one of those documents' ids. Absent for a field that refers to none.
@@ -61,15 +63,20 @@ export function templateSnapshot(source: string): TemplateSnapshot {
   // first appears. The template page says the name is used twice; the projection and suggestions go on.
   const seen = new Set<string>()
   const unique = parsed.forms.filter((f) => !seen.has(f.name) && seen.add(f.name))
-  const fields = unique.map((f) => ({
+  const fields = unique.map((f) => {
+    const choices = ['select', 'radio', 'checkbox'].includes(f.type) ? (f.options ?? []) : []
+    const labelled = choices.filter((o) => o.label !== undefined)
+    return {
     name: f.name,
     label: f.label ?? f.name,
     type: f.type,
-    multiple: f.type === 'checkbox' && Array.isArray(f.options) && f.options.length > 0,
-    options: ['select', 'radio', 'checkbox'].includes(f.type) && Array.isArray(f.options) ? f.options.map(String) : [],
+    multiple: f.type === 'checkbox' && choices.length > 0,
+    options: choices.map((o) => o.value),
+    ...(labelled.length > 0 ? { optionLabels: Object.fromEntries(labelled.map((o) => [o.value, o.label!])) } : {}),
     // One document of another template (`->`); many to many (`<->`) is not read yet.
     ...(f.relation?.type === 'fk' ? { reference: f.relation.target } : {}),
-  }))
+    }
+  })
   return { ref, fields, suggest: suggestFields(parsed.frontMatter?.data, fields) }
 }
 

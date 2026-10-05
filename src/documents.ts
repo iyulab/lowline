@@ -3,7 +3,7 @@
 // which template it came from (`template: <id>@<version>`), its own id (`lowline.id`, see
 // `identity.ts`) and the value of each field. `template` and `lowline` are not field values.
 
-import { parseFormdown, readFrontMatter, setFieldAttribute, updateFrontMatter } from '@formdown/core'
+import { formatOptions, parseFormdown, parseOptionList, readFrontMatter, setFieldAttribute, updateFrontMatter } from '@formdown/core'
 import { templateId } from './template-revision.js'
 
 /** A field's value: text, a list of texts (checkbox group), or a boolean (single checkbox). */
@@ -185,22 +185,28 @@ export function setSuggest(templateSource: string, field: string, on: boolean): 
   return updateFrontMatter(templateSource, { lowline: Object.keys(next).length > 0 ? next : undefined })
 }
 
+/** A choice field's options as the options box shows them and reads them back: `value=Label`, comma-separated. */
+export function optionsText(options: readonly { value: string; label?: string }[]): string {
+  return formatOptions(options).replace(/(?<!\\),/g, ', ')
+}
+
 /**
- * Writes a choice field's options, as typed (split at commas), into its place in the source — or nothing
- * (`undefined`) when there is nothing to write: no option typed (a field keeps at least one), the options it
- * already has, or no such field. The options are shown without the field's "other" choice, so one written
- * among them (`{a,b,*}`, `options="a,*(직접 입력)"`) is written back with them; one written as its own
- * `allow-other` attribute is left where it is.
+ * Writes a choice field's options, as typed (`value=Label` or a value, comma-separated — Formdown's option
+ * list), into its place in the source — or nothing (`undefined`) when there is nothing to write: no option
+ * typed (a field keeps at least one), the options it already has, or no such field. The options are shown
+ * without the field's "other" choice, so one written among them (`{a,b,*}`, `options="a,*(직접 입력)"`) is
+ * written back with them; one written as its own `allow-other` attribute is left where it is.
  */
 export function setOptions(templateSource: string, field: string, typed: string): string | undefined {
   const target = parseFormdown(templateSource).forms.find((f) => f.name === field)
   if (!target) return undefined
-  const options = typed.split(',').map((o) => o.trim()).filter(Boolean)
-  if (options.length === 0 || options.join(',') === (target.options ?? []).join(',')) return undefined
-  const written = setFieldAttribute(templateSource, field, 'options', options.join(','))
-  if (!target.allowOther || parseFormdown(written).forms.find((f) => f.name === field)?.allowOther) return written
+  const options = parseOptionList(typed).options
+  const written = formatOptions(options)
+  if (options.length === 0 || written === formatOptions(target.options ?? [])) return undefined
+  const next = setFieldAttribute(templateSource, field, 'options', written)
+  if (!target.allowOther || parseFormdown(next).forms.find((f) => f.name === field)?.allowOther) return next
   const other = target.otherLabel ? `*(${target.otherLabel})` : '*'
-  return setFieldAttribute(templateSource, field, 'options', [...options, other].join(','))
+  return setFieldAttribute(templateSource, field, 'options', `${written},${other}`)
 }
 
 /** A name's place in the template; names it no longer has go last, in the order they were. */
@@ -220,6 +226,8 @@ export type TemplateProblem =
   | { kind: 'front-matter'; detail: string }
   | { kind: 'duplicate-field'; name: string; lines: number[] }
   | { kind: 'unknown-condition'; field: string; name: string }
+  | { kind: 'invalid-condition'; field: string }
+  | { kind: 'unrecognized-field'; name: string; line?: number }
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
   | { kind: 'shared-id'; id: string; names: string[] }
@@ -306,9 +314,14 @@ export function templateProblems(source: string): TemplateProblem[] {
     repeats.set(d.field, [...(repeats.get(d.field) ?? []), ...(d.span ? [d.span.line] : [])])
   }
   for (const [name, lines] of repeats) problems.push({ kind: 'duplicate-field', name, lines })
-  for (const field of parsed.forms) {
-    const named = new Set(Object.values(field.conditions ?? {}).map((c) => c?.field).filter((n): n is string => !!n))
-    for (const name of named) if (!names.includes(name)) problems.push({ kind: 'unknown-condition', field: field.name, name })
+  // What the parser could not read or resolve: a condition naming no field of the form, a condition that is not
+  // one, a line shaped like a field that is not.
+  for (const d of parsed.diagnostics ?? []) {
+    if (d.code === 'condition-unknown-field' && d.field !== undefined && d.related !== undefined) {
+      problems.push({ kind: 'unknown-condition', field: d.field, name: d.related })
+    }
+    if (d.code === 'invalid-condition' && d.field !== undefined) problems.push({ kind: 'invalid-condition', field: d.field })
+    if (d.code === 'unrecognized-field' && d.field !== undefined) problems.push({ kind: 'unrecognized-field', name: d.field, line: d.span?.line })
   }
   const lowline = parsed.frontMatter?.data.lowline
   const suggest = typeof lowline === 'object' && lowline !== null ? (lowline as { suggest?: unknown }).suggest : undefined

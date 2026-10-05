@@ -18,6 +18,7 @@ public sealed class SnapshotContractTests
         [typeof(TemplateField)] = new()
         {
             ["label"] = "what the form shows; the table and suggestions go by the field's name",
+            ["optionLabels"] = "what the form shows for an option; suggestions go by the option's value",
             ["reference"] = "the UI resolves a reference to a name; the sidecar keeps the id it is given",
         },
         [typeof(SuggestionEvent)] = new()
@@ -105,7 +106,7 @@ public sealed class SnapshotContractTests
         Assert.True(template.Fields.Single(f => f.Name == "태그").Multiple);
         var document = Assert.Single(vault.Documents);
         Assert.Equal(("doc-1", "intake@2", 1_790_000_000_000L, true), (document.Identity, document.Template, document.Modified, document.Conflicted));
-        Assert.Equal("영업", document.Values["부서"].GetString());
+        Assert.Equal("sales", document.Values["부서"].GetString());
         var e = Assert.Single(vault.Events!);
         Assert.Equal(("doc-1", "담당", "accept", "장비", "intake@2", "key"), (e.Doc, e.Field, e.Kind, e.Suggested, e.Template, e.Source));
     }
@@ -119,11 +120,11 @@ public sealed class SnapshotContractTests
         var suggest = Body<SuggestRequest>("host_suggest");
         // The saved document it is asked for: a suggestion turned down there is not offered again.
         Assert.Equal(("intake@2", "담당", "doc-1"), (suggest.Template, suggest.Field, suggest.Document));
-        Assert.Equal("영업", suggest.Values["부서"].GetString());
+        Assert.Equal("sales", suggest.Values["부서"].GetString());
         Assert.Equal(("모니터", "intake@2"), (Body<CaseQuery>("host_search").Query, Body<CaseQuery>("host_search").Template));
         Assert.Equal("문서/2026-10-03-모니터.md", Body<SimilarQuery>("host_similar").Path);
         var projection = Body<ProjectionQuery>("host_projection");
         Assert.Equal("intake@2", projection.Template);
-        Assert.Equal(new ColumnFilter("부서", "contains", "영업"), Assert.Single(projection.Filters!));
+        Assert.Equal(new ColumnFilter("부서", "contains", "sales"), Assert.Single(projection.Filters!));
     }
 }

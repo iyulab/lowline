@@ -11,6 +11,8 @@ export interface ImportField {
   type: string
   /** A checkbox with options: its value is a list. */
   multiple: boolean
+  /** The value an option's shown text stands for (`value=Label`), so a cell may hold either. */
+  valueOf?: Record<string, string>
   options: string[]
 }
 
@@ -56,13 +58,15 @@ export interface ImportPlan {
 /** The fields of a template, as an import can fill them. */
 export function importFields(templateSource: string): ImportField[] {
   return parseFormdown(templateSource).forms.map((f) => {
-    const options = Array.isArray(f.options) ? f.options.map(String) : []
+    const options = (f.options ?? []).map((o) => o.value)
+    const labelled = (f.options ?? []).filter((o) => o.label !== undefined)
     return {
       name: f.name,
       label: f.label ?? f.name,
       type: f.type,
       multiple: f.type === 'checkbox' && options.length > 0,
       options,
+      ...(labelled.length > 0 ? { valueOf: Object.fromEntries(labelled.map((o) => [o.label!, o.value])) } : {}),
     }
   })
 }
@@ -106,9 +110,13 @@ export function cellValue(field: ImportField, text: string): { value?: FieldValu
       .split(/[,;\n]/)
       .map((c) => c.trim())
       .filter(Boolean)
-    return { value: chosen, fits: chosen.every((c) => field.options.includes(c)) }
+    const values = chosen.map((c) => field.valueOf?.[c] ?? c)
+    return { value: values, fits: values.every((c) => field.options.includes(c)) }
   }
-  if (field.options.length > 0) return { value: cell, fits: field.options.includes(cell) }
+  if (field.options.length > 0) {
+    const value = field.valueOf?.[cell] ?? cell
+    return { value, fits: field.options.includes(value) }
+  }
   return { value: cell, fits: true }
 }
 

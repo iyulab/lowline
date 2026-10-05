@@ -74,7 +74,7 @@ export const strings = {
   preview: '미리보기',
   optionsOf: (label: string) => `${label} 선택지`,
   fieldsTitle: '칸',
-  fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다. "이름 바꾸기"는 칸이 보이는 이름(label)만 바꿉니다 — 문서의 값과 배운 것은 칸 이름에 붙어 있어 그대로 이어집니다.',
+  fieldsHelp: '체크한 칸은 판단 칸 — 확정한 문서에서 배워 값을 제안받습니다(서식 앞부분 lowline.suggest에 적힘). 선택지는 쉼표로 나눠 적으면 원문의 그 칸에 그대로 적힙니다 — "값=보이는 이름"으로 적으면 문서에는 값이 저장되고 화면에는 이름이 보여, 이름을 바꿔도 저장된 값과 배운 것이 이어집니다. "이름 바꾸기"는 칸이 보이는 이름(label)만 바꿉니다 — 문서의 값과 배운 것은 칸 이름에 붙어 있어 그대로 이어집니다.',
   fieldsNone: '이 서식에는 칸이 없습니다.',
   templateProblemsTitle: '서식 원문의 문제',
   templateProblem: (p: TemplateProblem) =>
@@ -84,6 +84,10 @@ export const strings = {
         ? `칸 이름 "${p.name}"이(가) 두 번 이상 쓰였습니다${p.lines.length ? `(다시 쓰인 줄: ${p.lines.join(', ')})` : ''}. 문서에는 이 이름으로 값이 하나만 남아 두 칸이 같은 값을 가집니다.`
         : p.kind === 'unknown-condition'
           ? `칸 "${p.field}"의 조건이 이 서식에 없는 칸 "${p.name}"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.`
+          : p.kind === 'invalid-condition'
+            ? `칸 "${p.field}"의 조건을 읽을 수 없어 조건 없이 늘 보입니다. 조건은 "칸 이름=값" 꼴로 적습니다(예: visible-if="부서=영업").`
+          : p.kind === 'unrecognized-field'
+            ? `${p.line ? `${p.line}번째 줄은 ` : ''}칸 "${p.name}"처럼 보이지만 칸으로 읽히지 않아 글자로 보입니다. 단축 표기라면 선택지 괄호는 이름 바로 뒤에 둡니다(예: @${p.name}{가,나}: r[]).`
           : p.kind === 'shared-id'
             ? `다른 서식 파일(${p.names.join(', ')})도 id "${p.id}"를 씁니다. 판이 달라도 같은 서식이라 볼트는 판이 높은 파일을 서식으로 읽고, 다른 파일은 서식으로 쓰지 않습니다 — 판은 파일 하나 안에서 올리세요.`
           : p.kind === 'unknown-reference'

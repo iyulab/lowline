@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, referenceProblems, setOptions, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
+import { fileName, fileNameFor, optionsText, referenceProblems, setOptions, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
 import { readVault } from './vault-snapshot.js'
 import type { DocumentSnapshot } from './projection.js'
 import type { TemplateItem } from './template-scope.js'
@@ -266,7 +266,7 @@ export class LlTemplates extends LitElement {
    * The source's fields: whether each is a judgment field, and a choice field's options (a select, or
    * a radio or checkbox group). Nothing while the source does not parse.
    */
-  private fields(): { name: string; label: string; judgment: boolean; options?: string[] }[] {
+  private fields(): { name: string; label: string; judgment: boolean; options?: string }[] {
     try {
       const lowline = readFrontMatter(this.source)?.frontMatter.data.lowline as { suggest?: unknown } | undefined
       const on = new Set(Array.isArray(lowline?.suggest) ? lowline.suggest : [])
@@ -276,7 +276,7 @@ export class LlTemplates extends LitElement {
         name: f.name,
         label: f.label ?? f.name,
         judgment: on.has(f.name),
-        options: ['select', 'radio', 'checkbox'].includes(f.type) && f.options?.length ? f.options : undefined,
+        options: ['select', 'radio', 'checkbox'].includes(f.type) && f.options?.length ? optionsText(f.options) : undefined,
       }))
     } catch {
       return []
@@ -322,7 +322,7 @@ export class LlTemplates extends LitElement {
     try {
       const next = setOptions(this.source, field, typed)
       if (next === undefined) {
-        input.value = (this.fields().find((f) => f.name === field)?.options ?? []).join(', ') // nothing to write: show what the source holds
+        input.value = this.fields().find((f) => f.name === field)?.options ?? '' // nothing to write: show what the source holds
         return
       }
       this.source = next
@@ -533,7 +533,7 @@ export class LlTemplates extends LitElement {
               ${f.options
                 ? html`<dc-input
                     aria-label=${strings.optionsOf(f.label)}
-                    .value=${f.options.join(', ')}
+                    .value=${f.options}
                     @focusout=${commit(f.name)}
                     @keydown=${(e: KeyboardEvent) => {
                       if (e.key === 'Enter') commit(f.name)(e)

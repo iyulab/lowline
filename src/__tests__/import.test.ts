@@ -50,6 +50,13 @@ describe('cellValue', () => {
     expect(cellValue(field('태그'), 'UI; 보안')).toEqual({ value: ['UI', '보안'], fits: false })
   })
 
+  it('takes an option by the text shown for it, and keeps its value', () => {
+    const [kind, kinds] = importFields('@분류: [select options="hw=하드웨어,sw=소프트웨어"]\n@분류들: [checkbox options="hw=하드웨어,sw=소프트웨어"]\n')
+    expect(cellValue(kind, '하드웨어')).toEqual({ value: 'hw', fits: true })
+    expect(cellValue(kind, 'sw')).toEqual({ value: 'sw', fits: true })
+    expect(cellValue(kinds, '하드웨어, sw')).toEqual({ value: ['hw', 'sw'], fits: true })
+  })
+
   it('fills nothing from an empty cell', () => {
     expect(cellValue(field('제목'), '  ')).toEqual({ fits: true })
   })
