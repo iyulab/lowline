@@ -163,4 +163,79 @@ public sealed class ThresholdCalibrationTests
                 + $" ({(t.Value.Right + t.Value.Wrong == 0 ? 0 : 100.0 * t.Value.Right / (t.Value.Right + t.Value.Wrong)):F0}% right,"
                 + $" promised {(t.Value.Promised.Count == 0 ? 0 : 100 * t.Value.Promised.Average()):F0}%)")), ct);
     }
+
+    private static readonly string[] Noise = ["부서", "공정", "교대", "라인", "등급", "지역", "유형"];
+
+    private static readonly TemplateSnapshot Faults = new("faults@1",
+    [
+        .. Noise.Select(n => new TemplateField(n, "select")),
+        new TemplateField("설비", "select"),
+        new TemplateField("고장", "text"),
+    ], Suggest: ["고장"]);
+
+    /// <summary>
+    /// Fault reports whose code — one of a few hundred — the machine, one of a hundred, decides nine times in ten; seven
+    /// more observed fields say nothing about it. A field of many values decided by one of many fields: where every
+    /// observed field adding to each value's score blurs the one that decides it.
+    /// </summary>
+    private static VaultSnapshot Faulted(int count, int seed)
+    {
+        int[] noiseValues = [4, 10, 3, 12, 5, 8, 4];
+        var random = new Random(seed);
+        var documents = new List<DocumentSnapshot>(count);
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i < count; i++)
+        {
+            var values = new Dictionary<string, object>();
+            for (var n = 0; n < Noise.Length; n++) values[Noise[n]] = $"{Noise[n]}{random.Next(noiseValues[n])}";
+            var machine = random.Next(100);
+            values["설비"] = $"설비{machine}";
+            values["고장"] = random.NextDouble() < 0.9 ? $"F{machine:D3}" : $"F{random.Next(300):D3}";
+            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(values))!;
+            documents.Add(new DocumentSnapshot($"문서/{i:D6}.md", "faults@1", json, start.AddMinutes(i * 37).ToUnixTimeMilliseconds()));
+        }
+        return new VaultSnapshot([Faults], documents, []);
+    }
+
+    [Theory]
+    [InlineData(300, 300)]
+    [InlineData(1000, 300)]
+    public async Task Measures_a_field_of_many_values_decided_by_a_few_fields(int confirmed, int asked)
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
+        var ct = TestContext.Current.CancellationToken;
+        var all = Faulted(confirmed + asked, seed: confirmed);
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(confirmed)]), ct);
+        await vault.ThresholdsSelected.WaitAsync(ct);
+        var replay = (await vault.CurvesAsync(ct)).Single();
+
+        int right = 0, wrong = 0, abstained = 0;
+        var promised = new List<double>();
+        var selecting = System.Diagnostics.Stopwatch.StartNew();
+        var selectingTime = TimeSpan.Zero;
+        for (var i = confirmed; i < all.Documents.Count; i++)
+        {
+            var document = all.Documents[i];
+            var values = document.Values.Where(v => v.Key != "고장").ToDictionary(v => v.Key, v => v.Value);
+            var suggestion = (await vault.SuggestAsync(new SuggestRequest("faults@1", "고장", values), ct))!;
+            if (suggestion.Value is null) abstained++;
+            else
+            {
+                if (suggestion.Value == document.Values["고장"].GetString()) right++;
+                else wrong++;
+                if ((await vault.CurvesAsync(ct)).Single().Replay?.Precision is { } precision) promised.Add(precision);
+            }
+            await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);
+            selecting.Restart();
+            await vault.ThresholdsSelected.WaitAsync(ct);
+            selectingTime += selecting.Elapsed;
+        }
+
+        await Measurement.ReportAsync(
+            $"many values · {confirmed} confirmed · {asked} asked · {replay.WhyNoReplay ?? "replay"} threshold {replay.Replay?.Threshold:F4} precision {replay.Replay?.Precision:P0} answered {replay.Replay?.AnswerRate:P0}"
+            + $" · asked and confirmed in turn: right {right} wrong {wrong} abstained {abstained}"
+            + $" ({(right + wrong == 0 ? 0 : 100.0 * right / (right + wrong)):F0}% right, promised {(promised.Count == 0 ? 0 : 100 * promised.Average()):F0}%)"
+            + $" · waiting on selection {selectingTime.TotalSeconds:F1} s", ct);
+    }
 }

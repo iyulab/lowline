@@ -177,6 +177,50 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task A_kept_threshold_resting_on_a_field_the_template_no_longer_has_is_none()
+    {
+        var many = await Suggestions.BuildAsync(Many(15), Ct);
+        many.Apply(many.SelectThresholds(Ct));
+        var chosen = many.Thresholds[("intake@1", "담당")];
+        Assert.NotNull(chosen.Choice);
+
+        // Chosen resting on 부서: kept while the template has it.
+        var resting = new Dictionary<(string, string), FieldThreshold> { [("intake@1", "담당")] = chosen with { DependsOn = ["부서"] } };
+        var kept = await Suggestions.BuildAsync(Many(15), Ct, kept: resting);
+        Assert.False(kept.NeedsSelection);
+        Assert.Equal(["부서"], kept.Thresholds[("intake@1", "담당")].DependsOn);
+
+        // Resting on a field since taken out of the template: its strength was chosen on scores that field gave.
+        var gone = new Dictionary<(string, string), FieldThreshold> { [("intake@1", "담당")] = chosen with { DependsOn = ["접수처"] } };
+        var rebuilt = await Suggestions.BuildAsync(Many(15), Ct, kept: gone);
+        Assert.True(rebuilt.NeedsSelection);
+        Assert.Null(rebuilt.Choice("intake@1", "담당"));
+        Assert.Null(rebuilt.Thresholds[("intake@1", "담당")].DependsOn);
+    }
+
+    [Fact]
+    public void The_fields_a_threshold_rests_on_are_kept_with_it()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            var choice = new Gil.Forms.ThresholdChoice(0.5, 0.9, 0.5, 20, 40);
+            ThresholdStore.Save(file, new Dictionary<(string, string), FieldThreshold>
+            {
+                [("intake@1", "담당")] = new(choice, 40, 40, choice, null, ["부서"]),
+                [("intake@1", "승인")] = new(choice, 40, 40, choice),
+            });
+            var loaded = ThresholdStore.Load(file);
+            Assert.Equal(["부서"], loaded[("intake@1", "담당")].DependsOn);
+            Assert.Null(loaded[("intake@1", "승인")].DependsOn);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
     public async Task A_field_naming_another_document_decides_a_judgment_field_by_that_documents_id()
     {
         // 고객 names a customer document by its id; which customer it is decides 담당.

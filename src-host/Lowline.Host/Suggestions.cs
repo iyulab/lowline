@@ -141,8 +141,10 @@ public sealed class Suggestions
             {
                 var confirmed = settled[template.Ref].Count(d => d.Values.ContainsKey(field));
                 // A threshold chosen while the field had other choices is used until it is chosen again over these:
-                // the values it may be suggested are not the ones its replay counted.
+                // the values it may be suggested are not the ones its replay counted. One resting on a field the template
+                // no longer has is no threshold: its strength was chosen on scores those fields gave.
                 thresholds[(template.Ref, field)] = kept?.GetValueOrDefault((template.Ref, field)) is { } threshold
+                    && threshold.RestsWithin([.. template.Fields.Select(f => f.Name)])
                     ? threshold.ChosenOver(DomainOf(template, field))
                         ? threshold with { Confirmed = confirmed }
                         : threshold with { Confirmed = confirmed, SelectedAt = null }
@@ -179,10 +181,14 @@ public sealed class Suggestions
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
-            var key = ThresholdSelection.SelectKeyThreshold(
-                new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
+            // The fields the judgment rests on first — where a few decide a field of many values, the rest only add to
+            // every value's score — then the strength, replayed with them.
+            var resting = ThresholdSelection.SelectDependsOn(
+                () => new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
+            var key = resting.Chosen;
             chosen[(template, field)] = new FieldThreshold(
-                key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field));
+                key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
+                resting.DependsOn);
         }
         return chosen;
     }
@@ -238,6 +244,7 @@ public sealed class Suggestions
             ? new FieldDefinition(f.Name, FieldRole.Judged)
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
+                DependsOn = threshold(f.Name).DependsOn,
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
                 Candidates = DomainOf(f),
@@ -327,12 +334,19 @@ public sealed class Suggestions
 /// <see cref="Closest"/> is the strength that came closest to the target, chosen or not.
 /// </summary>
 /// <param name="Domain">The choices the field had when its threshold was chosen; null for a field whose value is open.</param>
+/// <param name="DependsOn">
+/// The fields the replay chose for the judgment to rest on, the strength chosen with them; null for every other field.
+/// </param>
 public sealed record FieldThreshold(
-    ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null)
+    ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
+    IReadOnlyList<string>? DependsOn = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>
         Domain is null ? domain is null : domain is not null && Domain.SequenceEqual(domain, StringComparer.Ordinal);
+
+    /// <summary>Whether every field it rests on is one of <paramref name="fields"/>.</summary>
+    public bool RestsWithin(IReadOnlyCollection<string> fields) => (DependsOn ?? []).All(fields.Contains);
 
     /// <summary>The strength the field's values settled alongside answer at; none — nothing is offered — until one has been chosen.</summary>
     public double? KeyThreshold => Choice?.Threshold;
