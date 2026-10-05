@@ -1,8 +1,8 @@
 # Lowline
 
-**Local-first forms that learn.**
+**Your forms, with an AI that learns from your decisions.**
 
-Lowline is a desktop app for structured notes. You write documents from forms; fields written inline become columns, many documents become tables and views, and the more a form is used, the better it gets at suggesting the fields that need judgment.
+Lowline is a desktop app for the forms you fill again and again — inspections, intake, defect reports. You write a form like a note; fields written inline become columns, many documents become tables and views, and the more a form is used, the better it gets at suggesting the fields that need judgment — learned from what people confirmed, on your own machine, with no model to download.
 
 - **Local-first** — documents are plain files on your machine. No account is required, and every feature works offline.
 - **Forms, not free notes** — a form's fields are part of the text itself. The same document reads as prose and queries as a row.

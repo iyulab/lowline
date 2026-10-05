@@ -13,6 +13,10 @@ Edits made there by other programs — another editor, a sync client, another de
 
 When a sync client keeps both devices' edits of a file as a copy beside it, the list shows the copy with its original and neither is read twice. Until the person keeps one of the two, the original stays in its table, but suggestions do not learn from it and the weekly counts leave it out.
 
+## Programs that write documents
+
+Another program may add documents to the vault — an automation that turns incoming mail into new records, for example. The app reads them like any other edit from outside. A value in a judgment field is taken as a person's decision: it is what suggestions learn the right answer from. So a program writing documents should fill in the observed fields and leave the judgment fields empty, for a person to confirm in the app with its suggestions. Judgment values a program fills in are learned from as if someone had decided them.
+
 ## Shared folders
 
 A vault may sit on a shared folder. Where a location has no trash — a network share, some removable drives — deleting never happens silently: the app says the file could not be moved to a trash, and deletes it for good only when the person chooses so.
