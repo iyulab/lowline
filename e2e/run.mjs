@@ -1196,8 +1196,10 @@ const scenarios = {
     )
     assert.equal(await app.cdp.evaluate(`__e2e.all('[data-formdown-note="담당자"] .formdown-suggestion').length`), 0)
 
-    // One character typed, and the person who begins with it is offered.
-    await app.fill('input[name="담당자"]', '박')
+    // One character typed — as a Korean input method types it, the syllable still being composed while the person
+    // pauses — and the person who begins with it is offered, without breaking the composition or taking the focus.
+    await app.cdp.evaluate(`__e2e.one('input[name="담당자"]').focus()`)
+    for (const text of ['ㅂ', '바', '박']) await app.cdp.send('Input.imeSetComposition', { text, selectionStart: 1, selectionEnd: 1 })
     const note = await app.cdp.waitFor(
       `__e2e.all('[data-formdown-note="담당자"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
       'a suggestion while typing 담당자',
@@ -1205,6 +1207,10 @@ const scenarios = {
     )
     assert.match(note, /^제안 · 함께 확정된 값: 팀: 가/)
     assert.equal(await app.cdp.evaluate(`__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')?.textContent`), '박영희')
+    const focused = `(() => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a?.getAttribute('name') })()`
+    assert.equal(await app.cdp.evaluate(focused), '담당자', 'the field still has the focus')
+    await app.cdp.send('Input.insertText', { text: '박' }) // the person goes on: the composed syllable is committed
+    assert.equal(await app.cdp.evaluate(`__e2e.one('input[name="담당자"]').value`), '박', 'one syllable, composed once')
     await app.click('[data-formdown-note="담당자"] .formdown-suggestion', '박영희')
     await app.cdp.waitFor(`__e2e.one('input[name="담당자"]')?.value === '박영희'`, 'the offered value taken')
     await app.cdp.waitFor(`!__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')`, 'nothing more offered once taken')
