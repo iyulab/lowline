@@ -43,6 +43,28 @@ public sealed class ResponseContractTests
             $$"""{"요청": "{{Requests.GetValueOrDefault(i, $"노트북 배터리 {i}")}}", "부서": "영업", "수량": {{(i == 1 ? "\"여러 개\"" : "1")}}, "담당": "장비", "긴급": "{{(i % 2 == 0 ? "높음" : "낮음")}}"}""")!,
         Modified: i);
 
+    // Fault codes the machine decides nine times in ten, with five fields that say nothing about them: the replay
+    // rests 고장 on 설비 alone, so a curve carries the fields its suggestions rest on.
+    private static readonly string[] Noise = ["교대", "라인", "등급", "지역", "공정"];
+
+    private static readonly TemplateSnapshot Faults = new("faults@1",
+        [.. Noise.Select(n => new TemplateField(n, "select")), new TemplateField("설비", "select"), new TemplateField("고장", "text")],
+        Suggest: ["고장"]);
+
+    private static IEnumerable<DocumentSnapshot> FaultReports()
+    {
+        var random = new Random(7);
+        for (var i = 0; i < 300; i++)
+        {
+            var values = Noise.ToDictionary(n => n, n => (object)$"{n}{random.Next(6)}");
+            var machine = random.Next(30);
+            values["설비"] = $"설비{machine}";
+            values["고장"] = random.NextDouble() < 0.9 ? $"F{machine:D2}" : $"F{random.Next(90):D2}";
+            yield return new DocumentSnapshot($"고장/{i:D3}.md", "faults@1",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(values))!, Modified: 100 + i);
+        }
+    }
+
     private static SuggestionEvent Event(int minute, string kind) =>
         new($"2026-10-03T10:{minute:00}:00.000Z", "문서/1.md", "담당", kind, "장비", "intake@1", "key");
 
@@ -67,8 +89,8 @@ public sealed class ResponseContractTests
         // Fifteen documents that settle 담당 by 부서 and split 긴급 evenly; one with a 수량 that is not a number, one
         // of a template the vault does not have, and a suggestion for 담당 turned down on the first document.
         var snapshot = new VaultSnapshot(
-            [Intake],
-            [.. Enumerable.Range(1, 15).Select(Document), new DocumentSnapshot("문서/옛.md", "gone@1", new Dictionary<string, JsonElement>())],
+            [Intake, Faults],
+            [.. Enumerable.Range(1, 15).Select(Document), .. FaultReports(), new DocumentSnapshot("문서/옛.md", "gone@1", new Dictionary<string, JsonElement>())],
             [Event(0, "accept"), Event(1, "correct"), Event(2, "reject")]);
         var ingest = await Post("/vault/ingest", snapshot);
         await factory.Services.GetRequiredService<VaultProjection>().ThresholdsSelected.WaitAsync(ct);

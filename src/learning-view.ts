@@ -171,6 +171,13 @@ export class LlLearning extends LitElement {
     }
   }
 
+  /** The fields the field's suggestions rest on, when its replay chose a few of them rather than every value filled in. */
+  private renderDependsOn(curve: FieldCurve) {
+    const fields = curve.replay?.dependsOn
+    if (!fields?.length) return nothing
+    return html`<p class="secondary depends-on">${strings.learningDependsOn(fields.map((f) => this.fieldLabel(curve.template, f)))}</p>`
+  }
+
   private label(curve: FieldCurve): string {
     const template = this.templates.find((t) => t.ref === curve.template)
     return template?.fields.find((f) => f.name === curve.field)?.label ?? curve.field
@@ -235,6 +242,7 @@ export class LlLearning extends LitElement {
             ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
             : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
         </p>
+        ${this.renderDependsOn(curve)}
       </section>`
     const last = points[points.length - 1]
     const recent = Math.min(points.length, WINDOW)
@@ -260,6 +268,7 @@ export class LlLearning extends LitElement {
           ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
           : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
       </p>
+      ${this.renderDependsOn(curve)}
       ${this.renderChart(curve, label)}
       <details>
         <summary>${strings.learningTable}</summary>

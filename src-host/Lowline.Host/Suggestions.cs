@@ -212,6 +212,10 @@ public sealed class Suggestions
     /// <summary>How a judgment field's key strength was chosen, and how it did on the replay; null until it has been.</summary>
     public ThresholdChoice? Choice(string template, string field) => _thresholds.GetValueOrDefault((template, field))?.Choice;
 
+    /// <summary>The fields the replay chose for a judgment field to rest on; null when every value filled in counts.</summary>
+    public IReadOnlyList<string>? DependsOn(string template, string field) =>
+        _thresholds.GetValueOrDefault((template, field))?.DependsOn;
+
     /// <summary>
     /// For a field whose replay chose no strength, the closest it came: the most precise strength that still gathered
     /// enough answers. Null when one was chosen, or when the replay found too few candidates to say.
@@ -236,8 +240,9 @@ public sealed class Suggestions
     {
         var judged = template.Suggest ?? [];
         if (!template.Fields.Any(f => judged.Contains(f.Name))) return null;
-        // A judgment rests on every other value the document holds: the observed ones, and judgments the person has
-        // already confirmed in it, which often say the most about the rest. A suggestion shown and not taken is no value.
+        // A judgment rests on the other values the document holds — the observed ones, and judgments the person has
+        // already confirmed in it, which often say the most about the rest — or on the few of them its replay chose
+        // (DependsOn). A suggestion shown and not taken is no value.
         // A document does not record the order its values came in, so the replay takes the judged ones as confirmed in
         // the form's order: for one confirmed out of that order it counts on more than its suggestion had.
         var fields = template.Fields.Select(f => judged.Contains(f.Name)

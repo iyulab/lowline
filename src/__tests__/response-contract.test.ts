@@ -38,7 +38,14 @@ const curve: Shape<FieldCurve> = {
   bySource: { presence: 'optional', inside: { source: 'required', decided: 'required', accepted: 'required' } },
   replay: {
     presence: 'optional',
-    inside: { threshold: 'required', precision: 'required', answerRate: 'required', answered: 'required', lookups: 'required' },
+    inside: {
+      threshold: 'required',
+      precision: 'required',
+      answerRate: 'required',
+      answered: 'required',
+      lookups: 'required',
+      dependsOn: 'optional',
+    },
   },
   whyNoReplay: 'optional',
   closest: {

@@ -24,3 +24,9 @@ describe('why a field has no replay', () => {
     expect(strings.learningNoReplay('few')).not.toContain('가르는 칸')
   })
 })
+
+describe('the fields a suggestion rests on', () => {
+  it('names them, in the order the replay chose them', () => {
+    expect(strings.learningDependsOn(['설비', '유형'])).toContain('설비 · 유형 칸의 값에 기댑니다')
+  })
+})

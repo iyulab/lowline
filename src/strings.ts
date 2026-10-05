@@ -247,6 +247,8 @@ export const strings = {
   // The replay also counts the fields memory left blank, which the curve does not.
   learningReplay: (answerRate: number, precision: number, lookups: number) =>
     `저장된 ${lookups}건을 순서대로 다시 물으면 ${Math.round(answerRate * 100)}%에 제안, 그중 ${Math.round(precision * 100)}% 맞음`,
+  learningDependsOn: (fields: string[]) =>
+    `제안은 ${fields.join(' · ')} 칸의 값에 기댑니다 — 다시 물어 보니 이 칸만 볼 때 같은 정확도로 더 자주 제안했습니다`,
   learningChart: (field: string) => `${field} — 제안이 나온 칸 중 맞은 비율, 결정 순서대로`,
   learningPoint: (n: number, rate: number) => `${n}번째 결정 뒤 ${Math.round(rate * 100)}%`,
   learningTable: '표로 보기',

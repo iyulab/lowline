@@ -3,7 +3,8 @@
     "appended": 0,
     "retired": 0,
     "projections": [
-      "intake@1"
+      "intake@1",
+      "faults@1"
     ],
     "skipped": [
       {
@@ -226,7 +227,8 @@
         "precision": 0,
         "answerRate": 0,
         "answered": 0,
-        "lookups": 0
+        "lookups": 0,
+        "dependsOn": null
       },
       "whyNoReplay": null,
       "closest": null,
@@ -254,6 +256,27 @@
         "lookups": 0,
         "target": 0
       },
+      "bySource": []
+    },
+    {
+      "template": "faults@1",
+      "field": "고장",
+      "accepted": 0,
+      "corrected": 0,
+      "rejected": 0,
+      "points": [],
+      "replay": {
+        "threshold": 0,
+        "precision": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0,
+        "dependsOn": [
+          "설비"
+        ]
+      },
+      "whyNoReplay": null,
+      "closest": null,
       "bySource": []
     }
   ],

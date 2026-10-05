@@ -375,7 +375,12 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         try
         {
             return [.. _curves.Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
-                ? c with { Replay = new FieldReplay(choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups) }
+                ? c with
+                {
+                    Replay = new FieldReplay(
+                        choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups,
+                        _suggestions.DependsOn(c.Template, c.Field)),
+                }
                 : c with
                 {
                     WhyNoReplay = _suggestions?.WhyNoReplay(c.Template, c.Field) ?? NoReplay.Pending,

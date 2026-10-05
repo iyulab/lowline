@@ -33,9 +33,12 @@ public sealed record FieldShortfall(double Precision, double AnswerRate, int Ans
 /// How a field's suggestions did when its saved documents were replayed in the order they were saved, each asked
 /// of the ones before it, at the strength the replay chose for values settled alongside the observed ones: <see cref="AnswerRate"/> of the lookups
 /// got a suggestion, and <see cref="Precision"/> of those were right. Unlike the curve, which counts only
-/// suggestions that were made, this says how often none was.
+/// suggestions that were made, this says how often none was. <see cref="DependsOn"/> names the fields the replay chose
+/// for the field's suggestions to rest on, when resting on them alone was suggested more often at the same precision;
+/// null when every value filled in counts.
 /// </summary>
-public sealed record FieldReplay(double Threshold, double Precision, double AnswerRate, int Answered, int Lookups);
+public sealed record FieldReplay(
+    double Threshold, double Precision, double AnswerRate, int Answered, int Lookups, IReadOnlyList<string>? DependsOn = null);
 
 /// <summary>
 /// Correction curves from the vault's event files — whether suggestions get better with use.

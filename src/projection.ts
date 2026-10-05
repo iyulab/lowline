@@ -174,8 +174,17 @@ export interface FieldCurve {
    * The field's saved documents replayed in the order they were saved, each asked of the ones before it for a
    * value settled alongside its observed values: the share of lookups that got a suggestion and the share of those
    * that were right, at the strength the replay chose. Absent until the history is long enough to choose one from.
+   * `dependsOn` names the fields the replay chose for the suggestions to rest on, when resting on them alone was
+   * suggested more often at the same precision; absent or null when every value filled in counts.
    */
-  replay?: { threshold: number; precision: number; answerRate: number; answered: number; lookups: number } | null
+  replay?: {
+    threshold: number
+    precision: number
+    answerRate: number
+    answered: number
+    lookups: number
+    dependsOn?: string[] | null
+  } | null
   /**
    * Why there is no replay: `few` confirmed documents to choose a strength from, the replay still `pending`, or
    * `below-target` — no strength was right often enough, so nothing is offered for the field.
