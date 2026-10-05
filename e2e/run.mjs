@@ -1082,14 +1082,11 @@ const scenarios = {
       await writeFile(file, `---\ntemplate: assign@1\n요청: 노트북 배터리 문제 ${i + 1}\n부서: 영업\n담당: ${i % 2 ? '장비' : '인사'}\n---\n${body}`)
     }
 
-    // The replay runs apart from reading the vault; the learning view says what it found once it is read again.
-    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '배정 · 담당'); return h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim() })()`
-    let said = ''
-    for (const until = Date.now() + 30_000; Date.now() < until && !said.includes('목표'); ) {
-      await app.sidebar(ASSIGN.name, { timeoutMs: 30_000 })
-      await app.learning()
-      said = (await app.cdp.waitFor(replay, 'the replay line of 배정 · 담당', { timeoutMs: 30_000 })) ?? ''
-    }
+    // The replay runs apart from reading the vault; the learning view, opened once, says what it found when it is done.
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '배정 · 담당'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); return t?.includes('목표') && t })()`
+    await app.sidebar(ASSIGN.name, { timeoutMs: 30_000 })
+    await app.learning()
+    const said = await app.cdp.waitFor(replay, 'the replay of 배정 · 담당, without opening the view again', { timeoutMs: 30_000 })
     // How far short it came: alternating owners, the value settled alongside 영업 is wrong each time.
     assert.match(said, /^저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 \d+건 중 \d+%만 맞혀 목표 80%에 못 미칩니다/)
 
@@ -1128,13 +1125,10 @@ const scenarios = {
     }
 
     // Once the replay has shown that a settled 담당 decides 승인, the learning view says how often it was right.
-    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '결재 · 승인'); return h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim() })()`
-    let said = ''
-    for (const until = Date.now() + 30_000; Date.now() < until && !said.includes('맞음'); ) {
-      await app.sidebar(APPROVE.name, { timeoutMs: 30_000 })
-      await app.learning()
-      said = (await app.cdp.waitFor(replay, 'the replay line of 결재 · 승인', { timeoutMs: 30_000 })) ?? ''
-    }
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '결재 · 승인'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); return t?.includes('맞음') && t })()`
+    await app.sidebar(APPROVE.name, { timeoutMs: 30_000 })
+    await app.learning()
+    const said = await app.cdp.waitFor(replay, 'the replay of 결재 · 승인, without opening the view again', { timeoutMs: 30_000 })
     assert.match(said, /^저장된 \d+건을 순서대로 다시 물으면 \d+%에 제안, 그중 \d+% 맞음/)
 
     await app.newDocument(APPROVE)
