@@ -30,3 +30,16 @@ describe('the fields a suggestion rests on', () => {
     expect(strings.learningDependsOn(['설비', '유형'])).toContain('설비 · 유형 칸의 값에 기댑니다')
   })
 })
+
+describe('how typing did on replay', () => {
+  const one = { characters: 1, threshold: 0.4, precision: 0.98, answerRate: 0.9, answered: 54, lookups: 60 }
+
+  it('says, for each number of characters, how often a suggestion came and was right', () => {
+    expect(strings.learningTyping([one])).toContain('1글자 뒤 60건 중 90%에 제안, 그중 98% 맞음')
+    expect(strings.learningTyping([one, { ...one, characters: 2, lookups: 6 }])).toContain(' · 2글자 뒤 6건 중')
+  })
+
+  it('says when no number of characters reached the target', () => {
+    expect(strings.learningTyping([])).toContain('치는 동안에도 제안하지 않습니다')
+  })
+})

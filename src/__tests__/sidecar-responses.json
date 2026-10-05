@@ -4,7 +4,8 @@
     "retired": 0,
     "projections": [
       "intake@1",
-      "faults@1"
+      "faults@1",
+      "handover@1"
     ],
     "skipped": [
       {
@@ -238,7 +239,8 @@
           "decided": 0,
           "accepted": 0
         }
-      ]
+      ],
+      "typing": null
     },
     {
       "template": "intake@1",
@@ -256,7 +258,8 @@
         "lookups": 0,
         "target": 0
       },
-      "bySource": []
+      "bySource": [],
+      "typing": null
     },
     {
       "template": "faults@1",
@@ -277,7 +280,36 @@
       },
       "whyNoReplay": null,
       "closest": null,
-      "bySource": []
+      "bySource": [],
+      "typing": []
+    },
+    {
+      "template": "handover@1",
+      "field": "담당자",
+      "accepted": 0,
+      "corrected": 0,
+      "rejected": 0,
+      "points": [],
+      "replay": null,
+      "whyNoReplay": "below-target",
+      "closest": {
+        "precision": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0,
+        "target": 0
+      },
+      "bySource": [],
+      "typing": [
+        {
+          "characters": 0,
+          "threshold": 0,
+          "precision": 0,
+          "answerRate": 0,
+          "answered": 0,
+          "lookups": 0
+        }
+      ]
     }
   ],
   "suggestions": [

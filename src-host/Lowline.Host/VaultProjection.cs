@@ -374,7 +374,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            return [.. _curves.Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
+            return [.. _curves.Select(Typing).Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
                 ? c with
                 {
                     Replay = new FieldReplay(
@@ -394,6 +394,17 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             _gate.Release();
         }
     }
+
+    /// <summary>A curve with how its field did on replay as typed from its start, when it is a field typed out.</summary>
+    private FieldCurve Typing(FieldCurve curve) => _suggestions?.Typed(curve.Template, curve.Field) is { } typed
+        ? curve with
+        {
+            Typing = [.. typed
+                .Select((choice, i) => choice is null ? null
+                    : new TypedReplay(i + 1, choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups))
+                .OfType<TypedReplay>()],
+        }
+        : curve;
 
     /// <summary>A suggestion for a judgment field, or null when the template has no such judgment field.</summary>
     public async Task<Suggestion?> SuggestAsync(SuggestRequest request, CancellationToken cancellationToken)

@@ -15,7 +15,7 @@ namespace Lowline.Host;
 public static class ThresholdStore
 {
     /// <summary>The shape of the file; one written in another is not read.</summary>
-    private const int Format = 4;
+    private const int Format = 5;
 
     /// <summary>The Gil whose scores the thresholds are on.</summary>
     public static readonly string Scorer =
@@ -25,7 +25,7 @@ public static class ThresholdStore
 
     private sealed record Entry(
         string Template, string Field, ThresholdChoice? Choice, int SelectedAt, ThresholdChoice? Closest, IReadOnlyList<string>? Domain,
-        IReadOnlyList<string>? DependsOn, IReadOnlyList<double?>? Typed);
+        IReadOnlyList<string>? DependsOn, IReadOnlyList<ThresholdChoice?>? Typed);
 
     private sealed record Stored(int Format, string? Scorer, IReadOnlyList<Entry> Fields);
 

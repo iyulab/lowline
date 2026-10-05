@@ -207,14 +207,14 @@ public sealed class SuggestionsTests
             var choice = new Gil.Forms.ThresholdChoice(0.5, 0.9, 0.5, 20, 40);
             ThresholdStore.Save(file, new Dictionary<(string, string), FieldThreshold>
             {
-                [("intake@1", "담당")] = new(choice, 40, 40, choice, null, ["부서"], [0.4, null, 0.2]),
+                [("intake@1", "담당")] = new(choice, 40, 40, choice, null, ["부서"], [choice, null]),
                 [("intake@1", "승인")] = new(choice, 40, 40, choice),
             });
             var loaded = ThresholdStore.Load(file);
             Assert.Equal(["부서"], loaded[("intake@1", "담당")].DependsOn);
             Assert.Null(loaded[("intake@1", "승인")].DependsOn);
             // And the strengths for typing into it.
-            Assert.Equal([0.4, null, 0.2], loaded[("intake@1", "담당")].Typed);
+            Assert.Equal([choice, null], loaded[("intake@1", "담당")].Typed);
             Assert.Null(loaded[("intake@1", "승인")].Typed);
         }
         finally
@@ -359,6 +359,21 @@ public sealed class SuggestionsTests
         Assert.Equal(new Suggestion("박영희", "key", "부서: 영업"), await suggestions.SuggestAsync(asked with { Typed = "박" }, Ct));
         // Nothing settled with 부서 begins with what is typed: nothing is offered.
         Assert.Null((await suggestions.SuggestAsync(asked with { Typed = "최" }, Ct))!.Value);
+    }
+
+    [Fact]
+    public async Task A_curve_says_how_typing_did_on_replay_where_no_strength_answers_without()
+    {
+        await using var vault = await Selected(TwoEach());
+        var curve = Assert.Single(await vault.CurvesAsync(Ct));
+        Assert.Null(curve.Replay); // nothing is suggested before typing
+        var first = Assert.Single(curve.Typing!, t => t.Characters == 1);
+        Assert.True(first.Precision >= Suggestions.TargetPrecision);
+        Assert.True(first.Answered >= Suggestions.MinimumAnswered);
+
+        // A field whose value is picked says nothing about typing.
+        await using var picked = await Selected(Many(15));
+        Assert.Null(Assert.Single(await picked.CurvesAsync(Ct)).Typing);
     }
 
     [Fact]

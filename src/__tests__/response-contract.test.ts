@@ -52,6 +52,17 @@ const curve: Shape<FieldCurve> = {
     presence: 'optional',
     inside: { precision: 'required', answerRate: 'required', answered: 'required', lookups: 'required', target: 'required' },
   },
+  typing: {
+    presence: 'optional',
+    inside: {
+      characters: 'required',
+      threshold: 'required',
+      precision: 'required',
+      answerRate: 'required',
+      answered: 'required',
+      lookups: 'required',
+    },
+  },
 }
 
 const suggestion: Shape<Suggestion> = { value: 'required', mode: 'required', source: 'required', reason: 'optional' }

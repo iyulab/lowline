@@ -65,6 +65,24 @@ public sealed class ResponseContractTests
         }
     }
 
+    // 팀 leaves two people each, and their first characters differ: nothing is suggested before typing, a first character
+    // typed is — so a curve carries how typing did.
+    private static readonly TemplateSnapshot Handover = new("handover@1",
+        [new TemplateField("요청", "textarea"), new TemplateField("팀", "select", Options: ["가", "나"]), new TemplateField("담당자", "text")],
+        Suggest: ["담당자"]);
+
+    private static IEnumerable<DocumentSnapshot> Handovers()
+    {
+        string[][] people = [["가", "김철수"], ["나", "이민수"], ["가", "박영희"], ["나", "최지은"]];
+        for (var i = 0; i < 60; i++)
+        {
+            var (team, person) = (people[i % 4][0], people[i % 4][1]);
+            yield return new DocumentSnapshot($"인계/{i:D3}.md", "handover@1",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"요청": "요청 {{i}}", "팀": "{{team}}", "담당자": "{{person}}"}""")!,
+                Modified: 1000 + i);
+        }
+    }
+
     private static SuggestionEvent Event(int minute, string kind) =>
         new($"2026-10-03T10:{minute:00}:00.000Z", "문서/1.md", "담당", kind, "장비", "intake@1", "key");
 
@@ -89,8 +107,8 @@ public sealed class ResponseContractTests
         // Fifteen documents that settle 담당 by 부서 and split 긴급 evenly; one with a 수량 that is not a number, one
         // of a template the vault does not have, and a suggestion for 담당 turned down on the first document.
         var snapshot = new VaultSnapshot(
-            [Intake, Faults],
-            [.. Enumerable.Range(1, 15).Select(Document), .. FaultReports(), new DocumentSnapshot("문서/옛.md", "gone@1", new Dictionary<string, JsonElement>())],
+            [Intake, Faults, Handover],
+            [.. Enumerable.Range(1, 15).Select(Document), .. FaultReports(), .. Handovers(), new DocumentSnapshot("문서/옛.md", "gone@1", new Dictionary<string, JsonElement>())],
             [Event(0, "accept"), Event(1, "correct"), Event(2, "reject")]);
         var ingest = await Post("/vault/ingest", snapshot);
         await factory.Services.GetRequiredService<VaultProjection>().ThresholdsSelected.WaitAsync(ct);

@@ -12,12 +12,21 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// Without a <see cref="Replay"/>, <see cref="WhyNoReplay"/> says why (see <see cref="Suggestions.WhyNoReplay"/>), and
 /// when the replay fell short of the target, <see cref="Closest"/> says by how much. <see cref="BySource"/> splits the
 /// decisions by where each suggestion came from: each source promises the target on its own replay, so each is
-/// read against it apart.
+/// read against it apart. <see cref="Typing"/>, for a field whose value is typed out, says how its replay did as typed
+/// from its start — whether or not <see cref="Replay"/> found a strength without typing.
 /// </summary>
 public sealed record FieldCurve(
     string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
     FieldReplay? Replay = null, string? WhyNoReplay = null, FieldShortfall? Closest = null,
-    IReadOnlyList<SourceCount>? BySource = null);
+    IReadOnlyList<SourceCount>? BySource = null, IReadOnlyList<TypedReplay>? Typing = null);
+
+/// <summary>
+/// How a field's saved documents did when typed from their start, with <see cref="Characters"/> typed, on the replay that
+/// chose the strength for that many: of the <see cref="Lookups"/> documents the suggestion before did not get right and
+/// long enough to type that far, <see cref="AnswerRate"/> got a suggestion, and <see cref="Precision"/> of those were
+/// right. Only the numbers of characters a strength was chosen for are listed.
+/// </summary>
+public sealed record TypedReplay(int Characters, double Threshold, double Precision, double AnswerRate, int Answered, int Lookups);
 
 /// <summary>Of a field's decisions about suggestions from one source, how many there were and how many were accepted.</summary>
 public sealed record SourceCount(string Source, int Decided, int Accepted);

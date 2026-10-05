@@ -1,6 +1,6 @@
 // Every user-facing string lives here, so a change of UI language touches one file.
 import type { TemplateProblem } from './documents.js'
-import type { Abstention, FieldCurve } from './projection.js'
+import type { Abstention, FieldCurve, TypedReplay } from './projection.js'
 export const strings = {
   appName: 'Lowline',
   navLabel: '탐색',
@@ -247,6 +247,12 @@ export const strings = {
   // The replay also counts the fields memory left blank, which the curve does not.
   learningReplay: (answerRate: number, precision: number, lookups: number) =>
     `저장된 ${lookups}건을 순서대로 다시 물으면 ${Math.round(answerRate * 100)}%에 제안, 그중 ${Math.round(precision * 100)}% 맞음`,
+  learningTyping: (typing: TypedReplay[]) =>
+    typing.length === 0
+      ? '칠 때: 앞 제안이 맞지 않은 기록을 앞에서부터 쳐 보아도 아직 목표만큼 맞히는 글자 수가 없어, 치는 동안에도 제안하지 않습니다.'
+      : `칠 때: 앞 제안이 맞지 않은 기록을 앞에서부터 쳐 보면 ${typing
+          .map((t) => `${t.characters}글자 뒤 ${t.lookups}건 중 ${Math.round(t.answerRate * 100)}%에 제안, 그중 ${Math.round(t.precision * 100)}% 맞음`)
+          .join(' · ')} — 이 칸은 치는 글자로 시작하는 값만 제안합니다.`,
   learningDependsOn: (fields: string[]) =>
     `제안은 ${fields.join(' · ')} 칸의 값에 기댑니다 — 다시 물어 보니 이 칸만 볼 때 같은 정확도로 더 자주 제안했습니다`,
   learningChart: (field: string) => `${field} — 제안이 나온 칸 중 맞은 비율, 결정 순서대로`,

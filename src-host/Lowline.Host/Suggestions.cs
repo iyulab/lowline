@@ -201,15 +201,15 @@ public sealed class Suggestions
     /// whether or not that strength was found: a field no strength answers on its own may be answered once its first
     /// character narrows it. Null for a field whose value is picked rather than typed.
     /// </summary>
-    private IReadOnlyList<double?>? TypedThresholds(
+    private IReadOnlyList<ThresholdChoice?>? TypedThresholds(
         string template, string field, ThresholdChoice? key, IReadOnlyList<string>? dependsOn)
     {
         if (!Typeable(_templates[template].Fields.First(f => f.Name == field))) return null;
         var asked = Form(_templates[template], f => f == field
             ? new FieldThreshold(key, 0, 0, DependsOn: dependsOn)
             : new FieldThreshold(null, 0, 0))!;
-        return ThresholdSelection.SelectTypedKeyThresholds(
-            new FieldMemory(), asked, field, _settled[template], TargetPrecision, MinimumAnswered).Thresholds;
+        return [.. ThresholdSelection.SelectTypedKeyThresholds(
+            new FieldMemory(), asked, field, _settled[template], TargetPrecision, MinimumAnswered).ByLength.Select(r => r.Chosen)];
     }
 
     /// <summary>The field types whose value a person types out, rather than picks, checks or enters as a number or date.</summary>
@@ -237,6 +237,13 @@ public sealed class Suggestions
 
     /// <summary>How a judgment field's key strength was chosen, and how it did on the replay; null until it has been.</summary>
     public ThresholdChoice? Choice(string template, string field) => _thresholds.GetValueOrDefault((template, field))?.Choice;
+
+    /// <summary>
+    /// For a field whose value is typed out, how each number of characters typed did on its replay — null where no strength
+    /// was right often enough; null for any other field, or until its replay has run.
+    /// </summary>
+    public IReadOnlyList<ThresholdChoice?>? Typed(string template, string field) =>
+        _thresholds.GetValueOrDefault((template, field)) is { SelectedAt: not null, Typed: { } typed } ? typed : null;
 
     /// <summary>The fields the replay chose for a judgment field to rest on; null when every value filled in counts.</summary>
     public IReadOnlyList<string>? DependsOn(string template, string field) =>
@@ -276,7 +283,7 @@ public sealed class Suggestions
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
                 DependsOn = threshold(f.Name).DependsOn,
-                TypedKeyThresholds = threshold(f.Name).Typed,
+                TypedKeyThresholds = threshold(f.Name).Typed?.Select(c => c?.Threshold).ToList(),
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
                 Candidates = DomainOf(f),
@@ -379,12 +386,12 @@ public sealed class Suggestions
 /// The fields the replay chose for the judgment to rest on, the strength chosen with them; null for every other field.
 /// </param>
 /// <param name="Typed">
-/// The strengths for one, two, three characters typed into the field (null where none was right often enough); null for a
-/// field whose value is not typed, or not yet chosen.
+/// How the field's replay did with one, two, three characters typed, and the strength chosen for each (null where none was
+/// right often enough); null for a field whose value is not typed, or not yet chosen.
 /// </param>
 public sealed record FieldThreshold(
     ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
-    IReadOnlyList<string>? DependsOn = null, IReadOnlyList<double?>? Typed = null)
+    IReadOnlyList<string>? DependsOn = null, IReadOnlyList<ThresholdChoice?>? Typed = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>

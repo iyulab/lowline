@@ -196,6 +196,22 @@ export interface FieldCurve {
    * not be offered, when a band of answers within it falls short.
    */
   closest?: { precision: number; answerRate: number; answered: number; lookups: number; target: number } | null
+  /**
+   * For a field whose value is typed out, once its replay has run: its saved documents typed from their start, for
+   * each number of characters typed a strength was chosen for — of the documents the suggestion before did not get
+   * right and long enough to type that far, the share that got a suggestion and the share of those that were right.
+   * Empty when no number of characters reached the target; absent or null for a field whose value is picked.
+   */
+  typing?: TypedReplay[] | null
+}
+
+export interface TypedReplay {
+  characters: number
+  threshold: number
+  precision: number
+  answerRate: number
+  answered: number
+  lookups: number
 }
 
 /**

@@ -1178,6 +1178,11 @@ const scenarios = {
     await app.sidebar(HANDOVER.name, { timeoutMs: 30_000 })
     await app.learning()
     await app.cdp.waitFor(replay, 'the replay of 인계 · 담당자', { timeoutMs: 30_000 })
+    // Beneath it, how typing did: suggested from the first character typed.
+    const typing = await app.cdp.evaluate(
+      `__e2e.all('h2').find((el) => el.textContent.trim() === '인계 · 담당자')?.parentElement.querySelector('.typing')?.textContent.replace(/\\s+/g, ' ').trim()`,
+    )
+    assert.match(typing, /^칠 때: 앞 제안이 맞지 않은 기록을 앞에서부터 쳐 보면 1글자 뒤 \d+건 중 \d+%에 제안, 그중 \d+% 맞음/)
 
     await app.newDocument(HANDOVER)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
