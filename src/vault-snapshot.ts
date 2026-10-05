@@ -7,7 +7,8 @@ import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type Templat
 import { ReadCache } from './read-cache.js'
 import { SharedRun } from './shared-run.js'
 import type { TemplateItem } from './template-scope.js'
-import { host, onVaultChanged, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { host, onVaultChanged as onShellChange, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -24,12 +25,35 @@ const documentReads = new ReadCache((entry, source) => documentSnapshot(entry.pa
 const eventReads = new ReadCache((_entry, source) => parseEvents(source))
 const reads = [templateReads, documentReads, eventReads]
 
-let watching: Promise<unknown> | undefined
+const listeners = new Set<(change: VaultChanged) => void>()
+let watching: Promise<UnlistenFn> | undefined
+
+/**
+ * Hears changes outside the app from the shell — once, for everyone: what was read of a change is
+ * forgotten before anyone is told of it, which the shell's own order of handlers would not promise.
+ */
+function watch(): Promise<UnlistenFn> {
+  return (watching ??= onShellChange((change) => {
+    forget(change)
+    for (const listener of [...listeners]) listener(change)
+  }))
+}
 
 /** Drops what the last reads know of files a change outside the app touched. */
 function forget(change: VaultChanged) {
   for (const cache of reads) cache.forget(change)
   shared.invalidate()
+}
+
+/**
+ * Calls `onChange` whenever something outside the app changes the vault, once what the reads knew of
+ * it is forgotten: a read started on hearing it — or one under way it would join — has the change.
+ * Resolves to the way to stop.
+ */
+export async function onVaultChanged(onChange: (change: VaultChanged) => void): Promise<UnlistenFn> {
+  listeners.add(onChange)
+  await watch()
+  return () => void listeners.delete(onChange)
 }
 
 /** Drops everything read: another vault, or the event files written. */
@@ -82,7 +106,7 @@ export interface ReadVault {
  * read under way is shared with them, unless something changed since it began.
  */
 export function readVault(): Promise<ReadVault> {
-  watching ??= onVaultChanged(forget)
+  void watch()
   return shared.call()
 }
 

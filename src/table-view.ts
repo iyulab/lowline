@@ -7,8 +7,8 @@ import { referenceChoices, withReferenceNames } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { tableCsv } from './export.js'
-import { host, onVaultChanged, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
-import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
+import { host, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
+import { SidecarUnavailable, syncVault, onVaultChanged } from './vault-snapshot.js'
 
 /** How long typing into a filter pauses before the table is asked for again. */
 const FILTER_DELAY_MS = 250

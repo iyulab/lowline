@@ -6,8 +6,8 @@ import type { FieldCurve, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { parsePresentations } from './events.js'
 import { currentRefs, revisedRef } from './template-revision.js'
-import { host, onVaultChanged, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
-import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
+import { host, vault, type VaultChanged, type VaultInfo } from './vault-client.js'
+import { SidecarUnavailable, syncVault, onVaultChanged } from './vault-snapshot.js'
 import { numberedForms, weeklyCounts, type WeeklyCounts } from './weekly-counts.js'
 
 /** The decisions each rate is taken over — the sidecar's window. */
