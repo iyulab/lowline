@@ -6,7 +6,7 @@ Lowline is a desktop app for the forms you fill again and again — inspections,
 
 - **Local-first** — documents are plain files on your machine. No account is required, and every feature works offline.
 - **Forms, not free notes** — a form's fields are part of the text itself. The same document reads as prose and queries as a row.
-- **Suggestions that learn from confirmation** — fill in the observed fields and candidate values are suggested for the judgment fields. People confirm; confirmations become the basis for later suggestions.
+- **Suggestions that learn from confirmation** — fill in the observed fields and candidate values are suggested for the judgment fields; start typing into one and it narrows to values that begin with what you typed. People confirm; confirmations become the basis for later suggestions.
 
 > Status: early development. Windows builds are published on [lowline-releases](https://github.com/iyulab/lowline-releases/releases/latest).
 
