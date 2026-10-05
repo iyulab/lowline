@@ -12,6 +12,8 @@ import { numberedForms, weeklyCounts, type WeeklyCounts } from './weekly-counts.
 
 /** The decisions each rate is taken over — the sidecar's window. */
 const WINDOW = 10
+/** How often the view asks again while a replay is still choosing. */
+const FOLLOW_MS = 1000
 
 /** Plot area, in viewBox units. */
 const W = 600
@@ -139,6 +141,7 @@ export class LlLearning extends LitElement {
   @state() private error = ''
 
   private unlisten?: Promise<UnlistenFn>
+  private following?: ReturnType<typeof setTimeout>
 
   connectedCallback() {
     super.connectedCallback()
@@ -149,6 +152,7 @@ export class LlLearning extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     void this.unlisten?.then((stop) => stop())
+    clearTimeout(this.following)
   }
 
   private async load(change?: VaultChanged) {
@@ -164,11 +168,30 @@ export class LlLearning extends LitElement {
       this.copied = 'no'
       this.curves = await host.curves()
       this.error = ''
+      this.follow()
     } catch (e) {
       this.error = e instanceof SidecarUnavailable ? strings.hostFailed(e.message) : describeError(e)
     } finally {
       this.waiting = false
     }
+  }
+
+  /**
+   * While a field's replay is still choosing its strength, asks again until it has — what it chose shows up here
+   * when it is done, without the view having to be opened again.
+   */
+  private follow() {
+    clearTimeout(this.following)
+    if (!this.isConnected || !this.curves.some((c) => c.whyNoReplay === 'pending')) return
+    this.following = setTimeout(async () => {
+      try {
+        this.curves = await host.curves()
+      } catch (e) {
+        this.error = describeError(e)
+        return
+      }
+      this.follow()
+    }, FOLLOW_MS)
   }
 
   /** The fields the field's suggestions rest on, when its replay chose a few of them rather than every value filled in. */

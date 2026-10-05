@@ -229,7 +229,7 @@ export const strings = {
           : `저장된 기록을 순서대로 다시 물으면 가장 정확한 기준에서도 ${closest.answered}건 중 ${Math.round(closest.precision * 100)}%만 맞혀 목표 ${Math.round(closest.target * 100)}%에 못 미칩니다 — 이 칸은 아직 제안하지 않습니다. ${strings.learningWhatSuggests}`
       : why === 'below-target'
         ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 제안하지 않습니다. ' + strings.learningWhatSuggests
-        : '저장된 기록을 순서대로 다시 물어 제안 기준을 고르는 중입니다 — 끝나면 이 화면을 다시 열어 보세요.',
+        : '저장된 기록을 순서대로 다시 물어 제안 기준을 고르는 중입니다 — 끝나면 여기에 나타납니다.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
   learningRate: (rate: number, of: number) => `제안이 나온 최근 ${of}건 중 맞음 ${Math.round(rate * 100)}%`,
