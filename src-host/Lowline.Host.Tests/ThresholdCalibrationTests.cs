@@ -316,6 +316,41 @@ public sealed class ThresholdCalibrationTests
     }
 
     /// <summary>
+    /// What choosing the strengths for typing costs on a large vault: the same documents, their 담당자 once a field typed
+    /// out and once a choice, timed apart in one run so the machine's load weighs on both alike.
+    /// </summary>
+    [Theory]
+    [InlineData(10000)]
+    public async Task Measures_choosing_the_strengths_for_typing_on_a_large_vault(int confirmed)
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
+        var ct = TestContext.Current.CancellationToken;
+        var typed = Staffing(confirmed, seed: confirmed);
+        var picked = typed with
+        {
+            Templates = [Staffed with { Fields = [.. Staffed.Fields.Select(f => f.Name == "담당자" ? f with { Type = "select" } : f)] }],
+        };
+
+        async Task<(TimeSpan Wall, TimeSpan Cpu)> Choose(VaultSnapshot vault)
+        {
+            var suggestions = await Suggestions.BuildAsync(vault, ct);
+            var process = System.Diagnostics.Process.GetCurrentProcess();
+            var cpu = process.TotalProcessorTime;
+            var wall = System.Diagnostics.Stopwatch.StartNew();
+            suggestions.Apply(suggestions.SelectThresholds(ct));
+            process.Refresh();
+            return (wall.Elapsed, process.TotalProcessorTime - cpu);
+        }
+
+        await Choose(picked); // warm up
+        var asPicked = await Choose(picked);
+        var asTyped = await Choose(typed);
+        await Measurement.ReportAsync(
+            $"choosing strengths · {confirmed} confirmed · a choice: {asPicked.Wall.TotalMilliseconds:F0} ms ({asPicked.Cpu.TotalMilliseconds:F0} ms CPU)"
+            + $" · typed out: {asTyped.Wall.TotalMilliseconds:F0} ms ({asTyped.Cpu.TotalMilliseconds:F0} ms CPU)", ct);
+    }
+
+    /// <summary>
     /// What typing does for one field over the documents asked about: a person takes the value offered when it is the one
     /// settled, and otherwise types it from its start, asked again after each of the first three characters, taking the
     /// value offered once it is the one.
