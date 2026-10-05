@@ -38,7 +38,8 @@ public sealed class FormbaseContractTests
         {
             var body = new JsonObject { [VaultProjection.PathColumn] = path, ["요청"] = request };
             if (owner is not null) body["담당"] = owner;
-            await engine.AcceptAsync(type, DocumentBody.Parse(body.ToJsonString()), cancellationToken: Ct);
+            await engine.AcceptAsync(type, DocumentBody.Parse(body.ToJsonString()),
+                recordKey: RecordKey.Create(path), cancellationToken: Ct);
         }
         await engine.ProjectAsync(type, Ct);
         return (engine, type);
@@ -68,5 +69,38 @@ public sealed class FormbaseContractTests
             Filters: [new FieldFilter("요청", FilterOperator.Contains, "노트북")],
             OrderBy: [new OrderKey(VaultProjection.PathColumn, Descending: false)]), Ct);
         Assert.Equal(["문서/1.md", "문서/2.md"], result.Rows.Select(r => (string)r[VaultProjection.PathColumn]!));
+    }
+
+    [Fact]
+    public async Task Each_count_carries_the_documents_it_is_made_of_traced_to_their_vault_paths()
+    {
+        var (engine, type) = await Projected();
+        var result = await engine.AggregateAsync(type, new AggregateSpec(GroupBy: ["담당"], DocumentsPerGroup: 10), Ct);
+        // A document's record key never changes, so tracing ids read with the count stays true to that count.
+        var paths = new List<string?[]>();
+        foreach (var group in result.Groups)
+        {
+            var keys = new List<string?>();
+            foreach (var id in group.Documents!)
+                keys.Add((await engine.GetDocumentAsync(id, Ct))?.Key?.Value);
+            paths.Add([.. keys]);
+        }
+        Assert.Equal([["문서/3.md"], ["문서/1.md", "문서/2.md"]], paths);
+    }
+
+    [Fact]
+    public async Task A_capped_group_keeps_the_first_accepted_documents_and_reads_the_rest_by_its_key()
+    {
+        var (engine, type) = await Projected();
+        var spec = new AggregateSpec(GroupBy: ["담당"], DocumentsPerGroup: 1);
+        var result = await engine.AggregateAsync(type, spec, Ct);
+        var owned = result.Groups[1];
+        Assert.Equal((2L, 1), (owned.Count, owned.Documents!.Count));
+        Assert.Equal("문서/1.md", (await engine.GetDocumentAsync(owned.Documents[0], Ct))?.Key?.Value);
+
+        var all = await engine.QueryAsync(type, spec.RecordsOf(owned), Ct);
+        Assert.Equal(["문서/1.md", "문서/2.md"], all.Rows.Select(r => (string)r[VaultProjection.PathColumn]!));
+        var empty = await engine.QueryAsync(type, spec.RecordsOf(result.Groups[0]), Ct);
+        Assert.Equal(["문서/3.md"], empty.Rows.Select(r => (string)r[VaultProjection.PathColumn]!));
     }
 }

@@ -17,12 +17,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Formbase.Core" Version="0.17.2" />
-    <PackageReference Include="Formbase.Sqlite" Version="0.17.2" />
-    <PackageReference Include="Formbase.DependencyInjection" Version="0.17.2" />
+    <PackageReference Include="Formbase.Core" Version="0.18.0" />
+    <PackageReference Include="Formbase.Sqlite" Version="0.18.0" />
+    <PackageReference Include="Formbase.DependencyInjection" Version="0.18.0" />
     <PackageReference Include="Gil" Version="0.13.0" />
-    <PackageReference Include="FluxIndex.SDK" Version="0.74.0" />
-    <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.74.0" />
+    <PackageReference Include="FluxIndex.SDK" Version="0.74.1" />
+    <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.74.1" />
     <PackageReference Include="TauriKit.Sidecar.Loopback" Version="0.12.0" />
   </ItemGroup>
 
