@@ -55,7 +55,7 @@ describe('the vault the sidecar is handed', () => {
 
 describe('the questions the sidecar is asked', () => {
   it('are the bodies the sidecar reads', async () => {
-    await host.suggest('intake@2', '담당', { 요청: '모니터가 깜빡여요', 부서: 'sales', 태그: ['급함'] }, 'doc-1')
+    await host.suggest('intake@2', '담당', { 요청: '모니터가 깜빡여요', 부서: 'sales', 태그: ['급함'] }, 'doc-1', '장')
     await host.search('모니터', 'intake@2')
     await host.similar('문서/2026-10-03-모니터.md')
     await host.projection('intake@2', [{ column: '부서', op: 'contains', value: 'sales' }])

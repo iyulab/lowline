@@ -6,10 +6,11 @@ namespace Lowline.Host;
 
 /// <summary>
 /// What the UI asks: a value for one judgment field, given the document's other values.
-/// <see cref="Document"/> is the document's <see cref="DocumentSnapshot.Identity"/> once it has been saved.
+/// <see cref="Document"/> is the document's <see cref="DocumentSnapshot.Identity"/> once it has been saved. <see cref="Typed"/> is
+/// the text a person has typed into the field so far: the field stays open, and only a value that begins with it is offered.
 /// </summary>
 public sealed record SuggestRequest(
-    string Template, string Field, IReadOnlyDictionary<string, JsonElement> Values, string? Document = null);
+    string Template, string Field, IReadOnlyDictionary<string, JsonElement> Values, string? Document = null, string? Typed = null);
 
 /// <summary>
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
@@ -188,10 +189,35 @@ public sealed class Suggestions
             var key = resting.Chosen;
             chosen[(template, field)] = new FieldThreshold(
                 key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
-                resting.DependsOn);
+                resting.DependsOn, TypedThresholds(template, field, key.Chosen, resting.DependsOn));
         }
         return chosen;
     }
+
+    /// <summary>
+    /// For a field a person types its value into, the strengths at which values settled alongside answer with one, two and
+    /// three characters typed — replayed on the documents the strength chosen without any did not answer rightly, so each
+    /// keeps its promise where a person actually types. Chosen with the fields and strength the field is asked with, and
+    /// whether or not that strength was found: a field no strength answers on its own may be answered once its first
+    /// character narrows it. Null for a field whose value is picked rather than typed.
+    /// </summary>
+    private IReadOnlyList<double?>? TypedThresholds(
+        string template, string field, ThresholdChoice? key, IReadOnlyList<string>? dependsOn)
+    {
+        if (!Typeable(_templates[template].Fields.First(f => f.Name == field))) return null;
+        var asked = Form(_templates[template], f => f == field
+            ? new FieldThreshold(key, 0, 0, DependsOn: dependsOn)
+            : new FieldThreshold(null, 0, 0))!;
+        return ThresholdSelection.SelectTypedKeyThresholds(
+            new FieldMemory(), asked, field, _settled[template], TargetPrecision, MinimumAnswered).Thresholds;
+    }
+
+    /// <summary>The field types whose value a person types out, rather than picks, checks or enters as a number or date.</summary>
+    private static readonly HashSet<string> TypedTypes = new(StringComparer.Ordinal) { "text", "textarea", "email", "tel", "url", "search" };
+
+    /// <summary>Whether a person types a field's value out — one value, of a typed kind, with no choices to pick from.</summary>
+    private static bool Typeable(TemplateField field) =>
+        !field.Multiple && field.Options is not [_, ..] && TypedTypes.Contains(field.Type);
 
     /// <summary>Uses thresholds <see cref="SelectThresholdsAsync"/> chose.</summary>
     public void Apply(IReadOnlyDictionary<(string Template, string Field), FieldThreshold> chosen)
@@ -250,6 +276,7 @@ public sealed class Suggestions
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
                 DependsOn = threshold(f.Name).DependsOn,
+                TypedKeyThresholds = threshold(f.Name).Typed,
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
                 Candidates = DomainOf(f),
@@ -286,8 +313,17 @@ public sealed class Suggestions
         var held = Texts(request.Values)
             .Where(v => v.Key != request.Field && form.Fields.Any(f => f.Name == v.Key))
             .ToDictionary(v => v.Key, v => v.Value, StringComparer.Ordinal);
-        var suggestion = (await _resolver.SuggestAsync(form, request.Document ?? Unsaved, held, cancellationToken))
-            .SingleOrDefault(s => s.Field == request.Field);
+        // Text being typed keeps the field open: only values that begin with it, at the strength chosen for that many
+        // characters. Typing is only into a field whose value is typed out; anywhere else it is no question.
+        var typing = !string.IsNullOrEmpty(request.Typed);
+        if (typing && !Typeable(_templates[request.Template].Fields.First(f => f.Name == request.Field)))
+            return Abstain(request.Template, request.Field);
+        var asked = typing
+            ? await _resolver.SuggestAsync(
+                form, request.Document ?? Unsaved, held, new Dictionary<string, IReadOnlyList<string>>(),
+                new Dictionary<string, string> { [request.Field] = request.Typed! }, cancellationToken)
+            : await _resolver.SuggestAsync(form, request.Document ?? Unsaved, held, cancellationToken);
+        var suggestion = asked.SingleOrDefault(s => s.Field == request.Field);
 
         // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
         if (suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SettledFieldMemory } answer, ..] })
@@ -342,9 +378,13 @@ public sealed class Suggestions
 /// <param name="DependsOn">
 /// The fields the replay chose for the judgment to rest on, the strength chosen with them; null for every other field.
 /// </param>
+/// <param name="Typed">
+/// The strengths for one, two, three characters typed into the field (null where none was right often enough); null for a
+/// field whose value is not typed, or not yet chosen.
+/// </param>
 public sealed record FieldThreshold(
     ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
-    IReadOnlyList<string>? DependsOn = null)
+    IReadOnlyList<string>? DependsOn = null, IReadOnlyList<double?>? Typed = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>

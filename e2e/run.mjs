@@ -1160,6 +1160,58 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '결재')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'narrows a typed judgment to what the person has begun typing'(app, vault) {
+    // 팀 leaves two people each, taking turns: a value settled alongside it is right half the time, its first character every time.
+    const HANDOVER = { name: '인계', ref: 'handover@1', path: '서식/인계.fd.md' }
+    const body = '# 인계\n\n요청: ___@요청\n\n@팀: [select options="가,나"]\n\n@담당자: [text]\n'
+    const template = join(vault, HANDOVER.path)
+    await writeFile(template, `---\nid: handover\nversion: 1\nlowline:\n  suggest: [담당자]\n---\n${body}`)
+    const people = [['가', '김철수'], ['나', '이민수'], ['가', '박영희'], ['나', '최지은']]
+    const files = Array.from({ length: 30 }, (_, i) => join(vault, '문서', `인계-${i + 1}.md`))
+    for (const [i, file] of files.entries()) {
+      const [team, person] = people[i % 4]
+      await writeFile(file, `---\ntemplate: handover@1\n요청: 서로 다른 요청 ${i + 1}\n팀: ${team}\n담당자: ${person}\n---\n${body}`)
+    }
+
+    // The replay has run once the learning view says how it did.
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '인계 · 담당자'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); return t?.includes('목표') && t })()`
+    await app.sidebar(HANDOVER.name, { timeoutMs: 30_000 })
+    await app.learning()
+    await app.cdp.waitFor(replay, 'the replay of 인계 · 담당자', { timeoutMs: 30_000 })
+
+    await app.newDocument(HANDOVER)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.fill('[data-field-name="요청"]', '처음 보는 요청')
+    await app.choose('select[name="팀"]', '가')
+    // Nothing is offered for 담당자 before typing: 팀 alone does not decide it.
+    await app.cdp.waitFor(
+      `__e2e.all('[data-formdown-note="담당자"]').some((el) => el.textContent.trim().length > 0)`,
+      'a note beside 담당자',
+      { timeoutMs: 15_000 },
+    )
+    assert.equal(await app.cdp.evaluate(`__e2e.all('[data-formdown-note="담당자"] .formdown-suggestion').length`), 0)
+
+    // One character typed, and the person who begins with it is offered.
+    await app.fill('input[name="담당자"]', '박')
+    const note = await app.cdp.waitFor(
+      `__e2e.all('[data-formdown-note="담당자"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      'a suggestion while typing 담당자',
+      { timeoutMs: 15_000 },
+    )
+    assert.match(note, /^제안 · 함께 확정된 값: 팀: 가/)
+    assert.equal(await app.cdp.evaluate(`__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')?.textContent`), '박영희')
+    await app.click('[data-formdown-note="담당자"] .formdown-suggestion', '박영희')
+    await app.cdp.waitFor(`__e2e.one('input[name="담당자"]')?.value === '박영희'`, 'the offered value taken')
+    await app.cdp.waitFor(`!__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')`, 'nothing more offered once taken')
+    await app.noAlert()
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await Promise.all([template, ...files].map((f) => rm(f)))
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '인계')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'shows a sync conflict copy beside its original, and learns from neither until one is kept'(app, vault) {
     // A sync client kept another device's edit of 접수-1 as a copy.
     const copy = join(vault, '문서', '접수-1 (다른 기기의 충돌된 사본 2026-09-29).md')

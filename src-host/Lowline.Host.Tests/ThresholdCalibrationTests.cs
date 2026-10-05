@@ -212,6 +212,7 @@ public sealed class ThresholdCalibrationTests
 
         int right = 0, wrong = 0, abstained = 0;
         var promised = new List<double>();
+        var typing = new Typing();
         var selecting = System.Diagnostics.Stopwatch.StartNew();
         var selectingTime = TimeSpan.Zero;
         for (var i = confirmed; i < all.Documents.Count; i++)
@@ -226,6 +227,7 @@ public sealed class ThresholdCalibrationTests
                 else wrong++;
                 if ((await vault.CurvesAsync(ct)).Single().Replay?.Precision is { } precision) promised.Add(precision);
             }
+            await typing.TypeAsync(vault, new SuggestRequest("faults@1", "고장", values), suggestion, document.Values["고장"].GetString()!, ct);
             await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);
             selecting.Restart();
             await vault.ThresholdsSelected.WaitAsync(ct);
@@ -236,6 +238,118 @@ public sealed class ThresholdCalibrationTests
             $"many values · {confirmed} confirmed · {asked} asked · {replay.WhyNoReplay ?? "replay"} threshold {replay.Replay?.Threshold:F4} precision {replay.Replay?.Precision:P0} answered {replay.Replay?.AnswerRate:P0}"
             + $" · asked and confirmed in turn: right {right} wrong {wrong} abstained {abstained}"
             + $" ({(right + wrong == 0 ? 0 : 100.0 * right / (right + wrong)):F0}% right, promised {(promised.Count == 0 ? 0 : 100 * promised.Average()):F0}%)"
-            + $" · waiting on selection {selectingTime.TotalSeconds:F1} s", ct);
+            + $" · waiting on selection {selectingTime.TotalSeconds:F1} s · {typing}", ct);
+    }
+
+    private static readonly string[] Surnames = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황"];
+    private static readonly string[] Given = ["민준", "서연", "지호", "하은", "도윤", "수아", "예준", "지우", "시우", "서윤"];
+
+    private static readonly TemplateSnapshot Staffed = new("staffed@1",
+    [
+        .. Noise.Select(n => new TemplateField(n, "select")),
+        new TemplateField("팀", "select"),
+        new TemplateField("담당자", "text"),
+    ], Suggest: ["담당자"]);
+
+    /// <summary>
+    /// Requests each handled by someone of the asking team — one of forty teams of four — the team's first person half
+    /// the time, the other three otherwise; seven more observed fields say nothing. The team narrows the person to four,
+    /// whose names begin differently: what a value settled alongside it cannot decide, a first character typed can.
+    /// </summary>
+    private static VaultSnapshot Staffing(int count, int seed)
+    {
+        int[] noiseValues = [4, 10, 3, 12, 5, 8, 4];
+        var people = Enumerable.Range(0, 40).Select(t => Enumerable.Range(0, 4)
+            .Select(m => Surnames[(t * 4 + m) % Surnames.Length] + Given[(t * 7 + m * 3) % Given.Length]).ToArray()).ToArray();
+        var random = new Random(seed);
+        var documents = new List<DocumentSnapshot>(count);
+        var start = new DateTimeOffset(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        for (var i = 0; i < count; i++)
+        {
+            var values = new Dictionary<string, object>();
+            for (var n = 0; n < Noise.Length; n++) values[Noise[n]] = $"{Noise[n]}{random.Next(noiseValues[n])}";
+            var team = random.Next(people.Length);
+            values["팀"] = $"팀{team}";
+            values["담당자"] = random.NextDouble() < 0.5 ? people[team][0] : people[team][1 + random.Next(3)];
+            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(values))!;
+            documents.Add(new DocumentSnapshot($"문서/{i:D6}.md", "staffed@1", json, start.AddMinutes(i * 37).ToUnixTimeMilliseconds()));
+        }
+        return new VaultSnapshot([Staffed], documents, []);
+    }
+
+    /// <summary>
+    /// A field typed out whose values a key narrows but does not decide: as the app goes, a person who does not take the
+    /// value offered types it from its start, asked again with every character — how many characters they are spared, and
+    /// whether what is offered while they type is right as often as its replay promised.
+    /// </summary>
+    [Theory]
+    [InlineData(300, 300)]
+    [InlineData(1000, 300)]
+    public async Task Measures_typing_into_a_field_a_key_narrows(int confirmed, int asked)
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("LOWLINE_PERF") == "1", "set LOWLINE_PERF=1 to measure");
+        var ct = TestContext.Current.CancellationToken;
+        var all = Staffing(confirmed + asked, seed: confirmed);
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(confirmed)]), ct);
+        await vault.ThresholdsSelected.WaitAsync(ct);
+
+        int right = 0, wrong = 0, abstained = 0;
+        var typing = new Typing();
+        for (var i = confirmed; i < all.Documents.Count; i++)
+        {
+            var document = all.Documents[i];
+            var values = document.Values.Where(v => v.Key != "담당자").ToDictionary(v => v.Key, v => v.Value);
+            var asking = new SuggestRequest("staffed@1", "담당자", values);
+            var suggestion = (await vault.SuggestAsync(asking, ct))!;
+            var settled = document.Values["담당자"].GetString()!;
+            if (suggestion.Value is null) abstained++;
+            else if (suggestion.Value == settled) right++;
+            else wrong++;
+            await typing.TypeAsync(vault, asking, suggestion, settled, ct);
+            await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);
+            await vault.ThresholdsSelected.WaitAsync(ct);
+        }
+
+        await Measurement.ReportAsync(
+            $"typing · {confirmed} confirmed · {asked} asked · before typing: right {right} wrong {wrong} abstained {abstained} · {typing}", ct);
+    }
+
+    /// <summary>
+    /// What typing does for one field over the documents asked about: a person takes the value offered when it is the one
+    /// settled, and otherwise types it from its start, asked again after each of the first three characters, taking the
+    /// value offered once it is the one.
+    /// </summary>
+    private sealed class Typing
+    {
+        private int _characters, _spared, _right, _wrong, _taken;
+
+        public async Task TypeAsync(VaultProjection vault, SuggestRequest asked, Suggestion offered, string settled, CancellationToken ct)
+        {
+            _characters += settled.Length;
+            if (offered.Value == settled)
+            {
+                _spared += settled.Length;
+                return;
+            }
+            for (var length = 1; length <= Math.Min(3, settled.Length - 1); length++)
+            {
+                var typed = settled[..length];
+                if ((await vault.SuggestAsync(asked with { Typed = typed }, ct))?.Value is not { } value || value == typed) continue;
+                if (value != settled)
+                {
+                    _wrong++;
+                    continue;
+                }
+                _right++;
+                _taken++;
+                _spared += settled.Length - length;
+                return;
+            }
+        }
+
+        public override string ToString() =>
+            $"while typing: right {_right} wrong {_wrong} ({(_right + _wrong == 0 ? 0 : 100.0 * _right / (_right + _wrong)):F0}% right)"
+            + $" · characters spared {_spared} of {_characters} ({(_characters == 0 ? 0 : 100.0 * _spared / _characters):F0}%, {_taken} taken while typing)";
     }
 }

@@ -164,9 +164,12 @@ export const host = {
   /** A template's table: the rows that match every filter, all of them without. */
   projection: (template: string, filters: ColumnFilter[] = []) => invoke<ProjectionTable>('host_projection', { template, filters }),
   curves: () => invoke<FieldCurve[]>('host_curves'),
-  /** `document` is the draft's vault path once it has been saved; a rejection there is not offered again. */
-  suggest: (template: string, field: string, values: Record<string, unknown>, document?: string) =>
-    invoke<Suggestion>('host_suggest', { request: { template, field, values, document } }),
+  /**
+   * `document` is the draft's vault path once it has been saved; a rejection there is not offered again. `typed` is what
+   * the person has typed into the field so far: only a value that begins with it is offered.
+   */
+  suggest: (template: string, field: string, values: Record<string, unknown>, document?: string, typed?: string) =>
+    invoke<Suggestion>('host_suggest', { request: { template, field, values, document, typed } }),
   /** Documents whose values hold these words, best first — of one template when named. */
   search: (query: string, template?: string) => invoke<CaseHit[]>('host_search', { request: { query, template } }),
   /** The documents of the same template most like the one at `path`, best first. */

@@ -121,6 +121,8 @@ public sealed class SnapshotContractTests
         // The saved document it is asked for: a suggestion turned down there is not offered again.
         Assert.Equal(("intake@2", "담당", "doc-1"), (suggest.Template, suggest.Field, suggest.Document));
         Assert.Equal("sales", suggest.Values["부서"].GetString());
+        // What has been typed into the field so far: the field stays open, narrowed to values that begin with it.
+        Assert.Equal("장", suggest.Typed);
         Assert.Equal(("모니터", "intake@2"), (Body<CaseQuery>("host_search").Query, Body<CaseQuery>("host_search").Template));
         Assert.Equal("문서/2026-10-03-모니터.md", Body<SimilarQuery>("host_similar").Path);
         var projection = Body<ProjectionQuery>("host_projection");

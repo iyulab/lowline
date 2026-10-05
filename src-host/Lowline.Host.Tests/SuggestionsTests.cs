@@ -207,12 +207,15 @@ public sealed class SuggestionsTests
             var choice = new Gil.Forms.ThresholdChoice(0.5, 0.9, 0.5, 20, 40);
             ThresholdStore.Save(file, new Dictionary<(string, string), FieldThreshold>
             {
-                [("intake@1", "담당")] = new(choice, 40, 40, choice, null, ["부서"]),
+                [("intake@1", "담당")] = new(choice, 40, 40, choice, null, ["부서"], [0.4, null, 0.2]),
                 [("intake@1", "승인")] = new(choice, 40, 40, choice),
             });
             var loaded = ThresholdStore.Load(file);
             Assert.Equal(["부서"], loaded[("intake@1", "담당")].DependsOn);
             Assert.Null(loaded[("intake@1", "승인")].DependsOn);
+            // And the strengths for typing into it.
+            Assert.Equal([0.4, null, 0.2], loaded[("intake@1", "담당")].Typed);
+            Assert.Null(loaded[("intake@1", "승인")].Typed);
         }
         finally
         {
@@ -324,6 +327,49 @@ public sealed class SuggestionsTests
         many.Apply(many.SelectThresholds(Ct));
         Assert.Null(many.WhyNoReplay("intake@1", "담당"));
         Assert.Null(many.WhyNoReplay("intake@1", "부서")); // not a judgment field
+    }
+
+    /// <summary>
+    /// A template whose 담당자 is typed out, and sixty requests where 부서 says only which two people it may be — every
+    /// value settled alongside it is right half the time, its first character every time.
+    /// </summary>
+    private static readonly TemplateSnapshot Assigned = new("assigned@1",
+    [
+        new TemplateField("요청", "textarea"),
+        new TemplateField("부서", "text"),
+        new TemplateField("담당자", "text"),
+    ], Suggest: ["담당자"]);
+
+    private static VaultSnapshot TwoEach() => new([Assigned],
+        [.. Enumerable.Range(0, 60).Select(i => new DocumentSnapshot($"문서/{i}.md", "assigned@1",
+            Values($$"""{"요청": "{{Words[i % 10]}} {{i}}", "부서": "{{(i % 4 < 2 ? "영업" : "개발")}}", "담당자": "{{(i % 4) switch { 0 => "김철수", 1 => "박영희", 2 => "이민수", _ => "최지은" }}}"}"""),
+            Modified: i))]);
+
+    [Fact]
+    public async Task Typing_narrows_a_field_no_strength_answers_on_its_own()
+    {
+        var suggestions = await Suggestions.BuildAsync(TwoEach(), Ct);
+        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        var asked = new SuggestRequest("assigned@1", "담당자", Values("""{"요청": "전혀 다른 요청", "부서": "영업"}"""));
+
+        // 부서 leaves two people: a value it was settled with is right half the time, so none is offered.
+        Assert.Equal(new Suggestion(null, "abstain", null, Abstention.BelowTarget), await suggestions.SuggestAsync(asked, Ct));
+        // The first character typed tells them apart.
+        Assert.NotNull(Assert.Single(suggestions.Thresholds).Value.Typed?[0]);
+        Assert.Equal(new Suggestion("박영희", "key", "부서: 영업"), await suggestions.SuggestAsync(asked with { Typed = "박" }, Ct));
+        // Nothing settled with 부서 begins with what is typed: nothing is offered.
+        Assert.Null((await suggestions.SuggestAsync(asked with { Typed = "최" }, Ct))!.Value);
+    }
+
+    [Fact]
+    public async Task A_field_whose_value_is_picked_has_no_strengths_for_typing()
+    {
+        var suggestions = await Suggestions.BuildAsync(Many(15), Ct);
+        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        // 담당 is a select: there is no typing into it, and text said to be typed there asks nothing.
+        Assert.Null(suggestions.Thresholds[("intake@1", "담당")].Typed);
+        var typed = new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리 문제", "부서": "영업"}"""), Typed: "장");
+        Assert.Null((await suggestions.SuggestAsync(typed, Ct))!.Value);
     }
 
     private static VaultSnapshot Many(int count) => new([Intake],

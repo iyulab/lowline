@@ -42,6 +42,8 @@ import './keep-copy-control.js'
 
 /** How long typing pauses before suggestions are asked for again. */
 const SUGGEST_DELAY_MS = 300
+/** The field types whose value a person types out, rather than picks, checks or enters as a number or date. */
+const TYPED_TYPES = new Set(['text', 'textarea', 'email', 'tel', 'url', 'search'])
 /** How long typing in the list's filter pauses before the documents' values are looked in. */
 const SEARCH_DELAY_MS = 250
 
@@ -242,6 +244,11 @@ export class LlDocuments extends LitElement {
   private offered = new Map<string, Offer>()
   /** The draft's filled fields in the order they were filled (see `fillOrder`). */
   private filled: string[] = []
+  /**
+   * Judgment fields the person is typing a value into — typed by hand since the draft was opened or last saved, not
+   * taken from a suggestion. Such a field stays open: it is asked about with what has been typed so far.
+   */
+  private typing = new Set<string>()
   /** The field the person was last in, to go back to once a save has drawn the form again. */
   private lastField?: string
   /**
@@ -428,6 +435,7 @@ export class LlDocuments extends LitElement {
     this.unavailable = false
     this.offered = new Map()
     this.filled = []
+    this.typing = new Set()
     this.rejected = new Set()
     this.similar = undefined
   }
@@ -470,13 +478,20 @@ export class LlDocuments extends LitElement {
     const next = new Map<string, Suggestion>()
     const abstained = new Map<string, Abstention | null | 'unavailable'>()
     for (const field of template.suggest) {
-      if (!isEmpty(values[field])) continue
+      // A field being typed into is asked with what has been typed, as an open field; one holding a value otherwise
+      // is settled, and not asked about.
+      const typed = this.typing.has(field) && typeof values[field] === 'string' ? (values[field] as string) : undefined
+      if (!isEmpty(values[field]) && typed === undefined) continue
       try {
         const document = this.draft?.kind === 'existing' ? this.draft.id : undefined
-        const suggestion = await host.suggest(template.ref, field, values, document)
+        const { [field]: _, ...others } = values
+        const suggestion = await host.suggest(template.ref, field, typed === undefined ? values : others, document, typed)
         // Declined here, now or before it was last saved: not offered again, and nothing to explain.
         if (this.rejected.has(field) || suggestion.mode === 'rejected') continue
-        if (suggestion.value !== null) next.set(field, suggestion)
+        // While typing, only a value that adds to the text is worth showing, and no reason is given for there being none.
+        if (typed !== undefined) {
+          if (suggestion.value !== null && suggestion.value !== typed) next.set(field, suggestion)
+        } else if (suggestion.value !== null) next.set(field, suggestion)
         else abstained.set(field, suggestion.reason ?? null)
       } catch {
         abstained.set(field, 'unavailable')
@@ -504,6 +519,7 @@ export class LlDocuments extends LitElement {
   /** Puts a suggested value into the form. It is a value like any other until the document is saved. */
   private accept(field: string, value: string) {
     this.decided(field)
+    this.typing.delete(field)
     this.setValues({ ...this.values, [field]: value })
     this.initialValues = this.values
     this.applied++
@@ -696,6 +712,8 @@ export class LlDocuments extends LitElement {
       // one made again after it was removed outside, joins it.
       await this.refresh()
       if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.id)
+      // What was typed is confirmed now, no longer being typed.
+      this.typing = new Set()
       this.dirty = false
       this.changedOutside = false
       this.message = strings.saved
@@ -869,7 +887,13 @@ export class LlDocuments extends LitElement {
    */
   private onData(e: CustomEvent<{ formData: Record<string, unknown> }>, opened: number) {
     if (opened !== this.opened || !this.draft) return
-    this.setValues(fieldValues(e.detail.formData))
+    const values = fieldValues(e.detail.formData)
+    for (const field of this.template?.suggest ?? []) {
+      if (values[field] === this.values[field]) continue
+      if (isEmpty(values[field]) || !this.typeable(field)) this.typing.delete(field)
+      else this.typing.add(field)
+    }
+    this.setValues(values)
     this.dirty = true
     this.message = ''
     this.scheduleSuggest()
@@ -881,6 +905,12 @@ export class LlDocuments extends LitElement {
     const template = this.template
     if (!template) return nothing
     return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map((f) => this.label(f)))}</p>`
+  }
+
+  /** Whether a person types a field's value out — one value of a text kind, with no choices to pick from. */
+  private typeable(field: string): boolean {
+    const f = this.template?.fields.find((f) => f.name === field)
+    return !!f && !f.multiple && f.options.length === 0 && TYPED_TYPES.has(f.type)
   }
 
   private label(field: string): string {
