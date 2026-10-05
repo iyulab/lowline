@@ -357,7 +357,7 @@ public sealed class ThresholdCalibrationTests
     /// </summary>
     private sealed class Typing
     {
-        private int _characters, _spared, _right, _wrong, _taken;
+        private int _characters, _spared, _right, _wrong, _taken, _withdrawn;
 
         public async Task TypeAsync(VaultProjection vault, SuggestRequest asked, Suggestion offered, string settled, CancellationToken ct)
         {
@@ -379,12 +379,22 @@ public sealed class ThresholdCalibrationTests
                 _right++;
                 _taken++;
                 _spared += settled.Length - length;
+                // A person who goes on typing without looking: is the right value still offered with every character more?
+                for (var more = length + 1; more < settled.Length; more++)
+                {
+                    if ((await vault.SuggestAsync(asked with { Typed = settled[..more] }, ct))?.Value != settled)
+                    {
+                        _withdrawn++;
+                        break;
+                    }
+                }
                 return;
             }
         }
 
         public override string ToString() =>
             $"while typing: right {_right} wrong {_wrong} ({(_right + _wrong == 0 ? 0 : 100.0 * _right / (_right + _wrong)):F0}% right)"
-            + $" · characters spared {_spared} of {_characters} ({(_characters == 0 ? 0 : 100.0 * _spared / _characters):F0}%, {_taken} taken while typing)";
+            + $" · characters spared {_spared} of {_characters} ({(_characters == 0 ? 0 : 100.0 * _spared / _characters):F0}%, {_taken} taken while typing)"
+            + $" · withdrawn as typing went on {_withdrawn} of {_right}";
     }
 }
