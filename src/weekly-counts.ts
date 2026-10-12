@@ -9,7 +9,7 @@ export const WEEKLY_COUNTS_FORMAT = 'lowline-weekly-counts/1'
 
 /** One week of one judgment field. */
 export interface WeekCounts {
-  /** The Monday the week starts on (UTC), as `YYYY-MM-DD`. */
+  /** The Monday the week starts on, in this device's time, as `YYYY-MM-DD`. */
   week: string
   /** The form's number in this vault (see {@link WeeklyCounts.forms}); a new version is a new number. */
   form: number
@@ -54,24 +54,26 @@ export interface WeeklyCounts {
 
 const DAY = 24 * 60 * 60 * 1000
 
-/** The Monday (UTC) of the week `ms` falls in, as `YYYY-MM-DD`. */
+/**
+ * The Monday of the week `ms` falls in, in this device's time — the time a document's file is named by — as
+ * `YYYY-MM-DD`. A decision and the document it was made in are counted in the same week.
+ */
 export function weekOf(ms: number): string {
-  const day = new Date(ms).getUTCDay() // 0 = Sunday
-  const monday = ms - ((day + 6) % 7) * DAY
-  return new Date(monday).toISOString().slice(0, 10)
+  const at = new Date(ms)
+  const monday = new Date(at.getFullYear(), at.getMonth(), at.getDate() - ((at.getDay() + 6) % 7)) // getDay: 0 = Sunday
+  return [monday.getFullYear(), String(monday.getMonth() + 1).padStart(2, '0'), String(monday.getDate()).padStart(2, '0')].join('-')
 }
 
 /**
- * The day a document's file is named by (`2026-10-13-문의.md`, `2026-10-13 (1).md`), as midnight UTC of that
- * calendar day so its week is the one the name says; undefined for a name that starts with no day.
+ * The day a document's file is named by (`2026-10-13-문의.md`, `2026-10-13 (1).md`), as the start of that day in
+ * this device's time, as the app named it; undefined for a name that starts with no day.
  */
 export function namedDay(path: string): number | undefined {
   const match = /^(\d{4})-(\d{2})-(\d{2})(?=[-. ]|$)/.exec(path.slice(path.lastIndexOf('/') + 1))
   if (!match) return undefined
   const [year, month, day] = match.slice(1).map(Number)
-  const ms = Date.UTC(year, month - 1, day)
-  const date = new Date(ms)
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? ms : undefined
+  const date = new Date(year, month - 1, day)
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date.getTime() : undefined
 }
 
 function isFilled(value: unknown): boolean {

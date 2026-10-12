@@ -37,9 +37,11 @@ const doc = (path: string, tpl: string, values: Record<string, unknown>, modifie
 
 describe('weekOf', () => {
   it('is the Monday the week starts on', () => {
-    expect(weekOf(Date.parse('2026-09-28T00:00:00Z'))).toBe('2026-09-28') // a Monday
-    expect(weekOf(Date.parse('2026-10-04T23:59:59Z'))).toBe('2026-09-28') // the Sunday after
-    expect(weekOf(Date.parse('2026-10-05T00:00:00Z'))).toBe('2026-10-05')
+    // In this device's time, as a document's file is named.
+    expect(weekOf(new Date(2026, 8, 28, 0, 0, 0).getTime())).toBe('2026-09-28') // a Monday
+    expect(weekOf(new Date(2026, 9, 4, 23, 59, 59).getTime())).toBe('2026-09-28') // the Sunday after
+    expect(weekOf(new Date(2026, 9, 5, 0, 0, 0).getTime())).toBe('2026-10-05')
+    expect(weekOf(new Date(2026, 0, 1, 12).getTime())).toBe('2025-12-29') // across a year
   })
 })
 
@@ -94,7 +96,7 @@ describe('weeklyCounts', () => {
     // A year of records brought in at once, then two made in the app: the form gets one a week, not fifty-four.
     const importedAt = Date.parse('2026-10-05T08:00:00Z')
     const history = Array.from({ length: 52 }, (_, i) => {
-      const day = new Date(Date.UTC(2025, 9, 6) + i * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const day = weekOf(new Date(2025, 9, 6 + i * 7).getTime())
       return doc(`문서/${day}-접수.md`, 'intake@1', { 담당: '장비' }, importedAt + i)
     })
     const made = [
@@ -104,10 +106,21 @@ describe('weeklyCounts', () => {
     expect(weeklyCounts([intake], [...history, ...made], []).forms).toEqual([{ form: 1, confirmed: 54, weeks: 54, perWeek: 1 }])
   })
 
+  it('counts a decision in the week of the document it was saved with, early on a Monday too', () => {
+    const early = new Date(2026, 9, 5, 7, 30).getTime() // Monday morning here, which may still be Sunday elsewhere
+    const counted = weeklyCounts(
+      [intake],
+      [doc('문서/2026-10-05-접수.md', 'intake@1', { 담당: '장비' }, early)],
+      [event(new Date(early).toISOString(), '문서/2026-10-05-접수.md', '담당', 'accept', null, 'intake@1')],
+    )
+    expect(counted.counts.map((c) => c.week)).toEqual(['2026-10-05'])
+    expect(counted.forms).toEqual([{ form: 1, confirmed: 1, weeks: 1, perWeek: 1 }])
+  })
+
   it('reads the day a file is named by, if it is one', () => {
-    expect(namedDay('문서/2026-10-13-문의.md')).toBe(Date.UTC(2026, 9, 13))
-    expect(namedDay('2026-10-13.md')).toBe(Date.UTC(2026, 9, 13))
-    expect(namedDay('문서/2026-10-13 (1).md')).toBe(Date.UTC(2026, 9, 13))
+    expect(namedDay('문서/2026-10-13-문의.md')).toBe(new Date(2026, 9, 13).getTime())
+    expect(namedDay('2026-10-13.md')).toBe(new Date(2026, 9, 13).getTime())
+    expect(namedDay('문서/2026-10-13 (1).md')).toBe(new Date(2026, 9, 13).getTime())
     expect(namedDay('문서/2026-02-30-문의.md')).toBeUndefined() // no such day
     expect(namedDay('문서/20261013-문의.md')).toBeUndefined()
     expect(namedDay('문서/2026-10-130.md')).toBeUndefined()
