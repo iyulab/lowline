@@ -44,11 +44,12 @@ public sealed class ResponseContractTests
         Modified: i);
 
     // Fault codes the machine decides nine times in ten, with five fields that say nothing about them: the replay
-    // rests 고장 on 설비 alone, so a curve carries the fields its suggestions rest on.
+    // rests 고장 on 설비 alone, so a curve carries the fields its suggestions rest on. Picked, not typed: a field typed
+    // into is counted while typing too, where the prefix decides more than 설비 and every field is kept.
     private static readonly string[] Noise = ["교대", "라인", "등급", "지역", "공정"];
 
     private static readonly TemplateSnapshot Faults = new("faults@1",
-        [.. Noise.Select(n => new TemplateField(n, "select")), new TemplateField("설비", "select"), new TemplateField("고장", "text")],
+        [.. Noise.Select(n => new TemplateField(n, "select")), new TemplateField("설비", "select"), new TemplateField("고장", "select")],
         Suggest: ["고장"]);
 
     private static IEnumerable<DocumentSnapshot> FaultReports()

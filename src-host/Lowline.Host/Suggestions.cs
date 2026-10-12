@@ -183,34 +183,25 @@ public sealed class Suggestions
             cancellationToken.ThrowIfCancellationRequested();
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
             // The fields the judgment rests on first — where a few decide a field of many values, the rest only add to
-            // every value's score — then the strength, replayed with them.
+            // every value's score — then the strength, replayed with them. A field a person types into is asked again
+            // with each character, and the fields that decide it before typing may blur it once a prefix has narrowed its
+            // values: its set is counted by the answers before and while typing together, and the strengths for one, two
+            // and three characters typed come with it — replayed on the documents the strength before typing did not answer
+            // rightly, so each keeps its promise where a person actually types. Null for a field whose value is picked.
+            var typeable = Typeable(_templates[template].Fields.First(f => f.Name == field));
             var resting = ThresholdSelection.SelectDependsOn(
-                () => new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered);
+                () => new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered,
+                typedLongest: typeable ? TypedLongest : 0);
             var key = resting.Chosen;
             chosen[(template, field)] = new FieldThreshold(
                 key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
-                resting.DependsOn, TypedThresholds(template, field, key.Chosen, resting.DependsOn));
+                resting.DependsOn, resting.Typed?.ByLength.Select(r => r.Chosen).ToList());
         }
         return chosen;
     }
 
-    /// <summary>
-    /// For a field a person types its value into, the strengths at which values settled alongside answer with one, two and
-    /// three characters typed — replayed on the documents the strength chosen without any did not answer rightly, so each
-    /// keeps its promise where a person actually types. Chosen with the fields and strength the field is asked with, and
-    /// whether or not that strength was found: a field no strength answers on its own may be answered once its first
-    /// character narrows it. Null for a field whose value is picked rather than typed.
-    /// </summary>
-    private IReadOnlyList<ThresholdChoice?>? TypedThresholds(
-        string template, string field, ThresholdChoice? key, IReadOnlyList<string>? dependsOn)
-    {
-        if (!Typeable(_templates[template].Fields.First(f => f.Name == field))) return null;
-        var asked = Form(_templates[template], f => f == field
-            ? new FieldThreshold(key, 0, 0, DependsOn: dependsOn)
-            : new FieldThreshold(null, 0, 0))!;
-        return [.. ThresholdSelection.SelectTypedKeyThresholds(
-            new FieldMemory(), asked, field, _settled[template], TargetPrecision, MinimumAnswered).ByLength.Select(r => r.Chosen)];
-    }
+    /// <summary>The most characters typed into a field that suggestions are chosen a strength for.</summary>
+    private const int TypedLongest = 3;
 
     /// <summary>The field types whose value a person types out, rather than picks, checks or enters as a number or date.</summary>
     private static readonly HashSet<string> TypedTypes = new(StringComparer.Ordinal) { "text", "textarea", "email", "tel", "url", "search" };

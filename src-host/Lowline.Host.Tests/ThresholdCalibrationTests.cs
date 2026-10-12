@@ -283,6 +283,7 @@ public sealed class ThresholdCalibrationTests
     /// whether what is offered while they type is right as often as its replay promised.
     /// </summary>
     [Theory]
+    [InlineData(30, 300)]
     [InlineData(300, 300)]
     [InlineData(1000, 300)]
     public async Task Measures_typing_into_a_field_a_key_narrows(int confirmed, int asked)
@@ -367,13 +368,17 @@ public sealed class ThresholdCalibrationTests
                 _spared += settled.Length;
                 return;
             }
+            // A value offered again as typing goes on is the same suggestion, not a new one: each is counted once — and the
+            // one offered before typing was counted there.
+            var offeredWrong = new HashSet<string>(StringComparer.Ordinal);
+            if (offered.Value is { } before) offeredWrong.Add(before);
             for (var length = 1; length <= Math.Min(3, settled.Length - 1); length++)
             {
                 var typed = settled[..length];
                 if ((await vault.SuggestAsync(asked with { Typed = typed }, ct))?.Value is not { } value || value == typed) continue;
                 if (value != settled)
                 {
-                    _wrong++;
+                    if (offeredWrong.Add(value)) _wrong++;
                     continue;
                 }
                 _right++;
