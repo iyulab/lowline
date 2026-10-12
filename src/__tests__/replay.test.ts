@@ -34,6 +34,8 @@ interface Offered {
   field: string
   suggestion: Suggestion
   filled: string[]
+  /** What had been typed when it was shown; null before typing. */
+  typed: string | null
 }
 
 const DAY = 24 * 60 * 60 * 1000
@@ -96,7 +98,8 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       .split(/\r?\n/)
       .filter((line) => line.trim())
       .map((line) => JSON.parse(line))
-    expect(offered.length, 'every judgment field of every later record asked').toBe((documents.length - broughtIn) * template.suggest.length)
+    const before = offered.filter((o) => o.typed === null)
+    expect(before.length, 'every judgment field of every later record asked').toBe((documents.length - broughtIn) * template.suggest.length)
 
     // Each save records what became of what it was offered: taken when it was the value, changed otherwise.
     const byDoc = new Map<string, Offered[]>()
@@ -139,11 +142,11 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     const form = counts.forms[0]
     console.log(
       `replay · ${broughtIn} brought in · ${used} made · ${documents.length} over ${weeks} weeks (${(documents.length / weeks).toFixed(2)}/week)` +
-        ` · counted: ${form.confirmed} confirmed over ${form.weeks} weeks (${form.perWeek}/week) · ${events.length} decided of ${offered.length} asked`,
+        ` · counted: ${form.confirmed} confirmed over ${form.weeks} weeks (${form.perWeek}/week) · ${events.length} decided of ${before.length} asked · ${shown.length} shown`,
     )
     for (const field of template.suggest) {
       const quarters = new Map<number, { right: number; wrong: number; asked: number }>()
-      for (const o of offered.filter((o) => o.field === field)) {
+      for (const o of before.filter((o) => o.field === field)) {
         const i = Number(o.doc.slice('replay-'.length))
         const quarter = Math.floor((Date.parse(weekOf(made[i])) - Date.parse(weekOf(made[broughtIn]))) / (13 * 7 * DAY))
         const q = quarters.get(quarter) ?? { right: 0, wrong: 0, asked: 0 }
@@ -158,7 +161,14 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
         `  ${field}: ` +
           [...quarters.entries()]
             .map(([q, { right, wrong, asked }]) => `q${q + 1} offered ${right + wrong}/${asked}, right ${right + wrong ? Math.round((100 * right) / (right + wrong)) : 0}%`)
-            .join(' · '),
+            .join(' · ') +
+          // Taken while typing: the value shown last as it was typed was the one saved.
+          (offered.some((o) => o.field === field && o.typed !== null)
+            ? ` · while typing: shown ${offered.filter((o) => o.field === field && o.typed !== null).length}, taken ${
+                events.filter((e) => e.field === field && e.kind === 'accept').length -
+                before.filter((o) => o.field === field && o.suggestion.value !== null && o.suggestion.value === String(documents[Number(o.doc.slice('replay-'.length))].values[field])).length
+              }`
+            : ''),
       )
     }
     expect(form).toEqual({ form: 1, confirmed: documents.length, weeks, perWeek: Math.round((documents.length / weeks) * 100) / 100 })

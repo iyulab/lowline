@@ -6,8 +6,8 @@ namespace Lowline.Host.Tests;
 /// <summary>
 /// A vault's records played back through the sidecar the way the app meets them: the records brought in at the start
 /// ingested together, then each later record asked about field by field in its form's order — what is filled by then is
-/// what comes before it — and saved, the vault ingested again with it and its thresholds chosen again as they would be.
-/// What was offered for each field is written line by line, for the UI's side to turn into the events a save records
+/// what comes before it, and a value typed out asked again as it is typed — and saved, the vault ingested again with it
+/// and its thresholds chosen again as they would be. What was offered for each field is written line by line, for the UI's side to turn into the events a save records
 /// and count them (<c>src/__tests__/replay.test.ts</c>, which writes the snapshot and runs this). Runs only when
 /// <c>LOWLINE_REPLAY_SNAPSHOT</c> names a snapshot; writes the offers to <c>LOWLINE_REPLAY_OFFERS</c>.
 /// </summary>
@@ -21,8 +21,12 @@ public sealed class ReplayTests
     /// <summary>The snapshot as the UI's side wrote it: the vault, and how many of its first documents were brought in.</summary>
     private sealed record Played(IReadOnlyList<TemplateSnapshot> Templates, IReadOnlyList<DocumentSnapshot> Documents, int BroughtIn);
 
-    /// <summary>What was offered for one field of one document, with the fields filled when it was asked.</summary>
-    private sealed record Offered(string Doc, string Field, Suggestion Suggestion, IReadOnlyList<string> Filled);
+    /// <summary>
+    /// What was offered for one field of one document, with the fields filled when it was asked and, for a value being
+    /// typed out, what had been typed by then (null before typing). A field has one line before typing and one more for
+    /// each other value shown as its value is typed.
+    /// </summary>
+    private sealed record Offered(string Doc, string Field, Suggestion Suggestion, IReadOnlyList<string> Filled, string? Typed = null);
 
     [Fact]
     public async Task Replays_records_in_the_order_they_were_made()
@@ -51,7 +55,8 @@ public sealed class ReplayTests
                 var before = template.Fields.TakeWhile(f => f.Name != field).Select(f => f.Name)
                     .Where(name => document.Values.TryGetValue(name, out var value) && Filled(value)).ToList();
                 var values = before.ToDictionary(name => name, name => document.Values[name], StringComparer.Ordinal);
-                var suggestion = (await vault.SuggestAsync(new SuggestRequest(document.Template, field, values, document.Identity), ct))!;
+                var asked = new SuggestRequest(document.Template, field, values, document.Identity);
+                var suggestion = (await vault.SuggestAsync(asked, ct))!;
                 var settled = document.Values.TryGetValue(field, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
                 var (right, wrong, abstained) = tally.GetValueOrDefault(field);
                 if (suggestion.Value is null) abstained++;
@@ -59,6 +64,21 @@ public sealed class ReplayTests
                 else wrong++;
                 tally[field] = (right, wrong, abstained);
                 await offers.WriteLineAsync(JsonSerializer.Serialize(new Offered(document.Identity, field, suggestion, before), Json));
+
+                // A value typed out that was not offered: typed from its start, asked again with each of the first three
+                // characters, and taken once it is offered. While typing, only a value that adds to the text is shown.
+                if (settled is not { Length: > 1 } || suggestion.Value == settled || !Suggestions.Typeable(template.Fields.First(f => f.Name == field)))
+                    continue;
+                var shown = suggestion.Value;
+                for (var length = 1; length <= Math.Min(3, settled.Length - 1); length++)
+                {
+                    var typed = settled[..length];
+                    var whileTyping = (await vault.SuggestAsync(asked with { Typed = typed }, ct))!;
+                    if (whileTyping.Value is null || whileTyping.Value == typed || whileTyping.Value == shown) continue;
+                    shown = whileTyping.Value;
+                    await offers.WriteLineAsync(JsonSerializer.Serialize(new Offered(document.Identity, field, whileTyping, before, typed), Json));
+                    if (shown == settled) break;
+                }
             }
             await vault.IngestAsync(new VaultSnapshot(played.Templates, [.. played.Documents.Take(i + 1)]), ct);
             await vault.ThresholdsSelected.WaitAsync(ct);

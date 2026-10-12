@@ -207,7 +207,7 @@ public sealed class Suggestions
     private static readonly HashSet<string> TypedTypes = new(StringComparer.Ordinal) { "text", "textarea", "email", "tel", "url", "search" };
 
     /// <summary>Whether a person types a field's value out — one value, of a typed kind, with no choices to pick from.</summary>
-    private static bool Typeable(TemplateField field) =>
+    public static bool Typeable(TemplateField field) =>
         !field.Multiple && field.Options is not [_, ..] && TypedTypes.Contains(field.Type);
 
     /// <summary>Uses thresholds <see cref="SelectThresholdsAsync"/> chose.</summary>
