@@ -36,6 +36,8 @@ interface Offered {
   filled: string[]
   /** What had been typed when it was shown; null before typing. */
   typed: string | null
+  /** The precision the field's replay promised for it; null when nothing was offered or nothing was promised. */
+  promised: number | null
 }
 
 const DAY = 24 * 60 * 60 * 1000
@@ -144,32 +146,33 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       `replay · ${broughtIn} brought in · ${used} made · ${documents.length} over ${weeks} weeks (${(documents.length / weeks).toFixed(2)}/week)` +
         ` · counted: ${form.confirmed} confirmed over ${form.weeks} weeks (${form.perWeek}/week) · ${events.length} decided of ${before.length} asked · ${shown.length} shown`,
     )
-    for (const field of template.suggest) {
-      const quarters = new Map<number, { right: number; wrong: number; asked: number }>()
-      for (const o of before.filter((o) => o.field === field)) {
-        const i = Number(o.doc.slice('replay-'.length))
-        const quarter = Math.floor((Date.parse(weekOf(made[i])) - Date.parse(weekOf(made[broughtIn]))) / (13 * 7 * DAY))
-        const q = quarters.get(quarter) ?? { right: 0, wrong: 0, asked: 0 }
-        q.asked++
-        if (o.suggestion.value !== null) {
-          if (o.suggestion.value === String(documents[i].values[field])) q.right++
-          else q.wrong++
-        }
-        quarters.set(quarter, q)
+    // Quarter by quarter, for each field: how often a value was offered before typing and while typing, how often it
+    // was the one saved, and what its replay promised when it was offered — what the app shows under the field's curve.
+    const tally = () => ({ asked: 0, offered: 0, right: 0, promised: 0, promises: 0 })
+    const summary: Record<string, Record<string, { before: ReturnType<typeof tally>; typing: ReturnType<typeof tally> }>> = {}
+    const start = Date.parse(weekOf(made[broughtIn]))
+    for (const o of offered) {
+      const i = Number(o.doc.slice('replay-'.length))
+      const quarter = `q${Math.floor((Date.parse(weekOf(made[i])) - start) / (13 * 7 * DAY)) + 1}`
+      const cell = ((summary[o.field] ??= {})[quarter] ??= { before: tally(), typing: tally() })[o.typed === null ? 'before' : 'typing']
+      if (o.typed === null) cell.asked++
+      if (o.suggestion.value === null) continue
+      cell.offered++
+      if (o.suggestion.value === String(documents[i].values[o.field])) cell.right++
+      if (o.promised !== null) {
+        cell.promised += o.promised
+        cell.promises++
       }
-      console.log(
-        `  ${field}: ` +
-          [...quarters.entries()]
-            .map(([q, { right, wrong, asked }]) => `q${q + 1} offered ${right + wrong}/${asked}, right ${right + wrong ? Math.round((100 * right) / (right + wrong)) : 0}%`)
-            .join(' · ') +
-          // Taken while typing: the value shown last as it was typed was the one saved.
-          (offered.some((o) => o.field === field && o.typed !== null)
-            ? ` · while typing: shown ${offered.filter((o) => o.field === field && o.typed !== null).length}, taken ${
-                events.filter((e) => e.field === field && e.kind === 'accept').length -
-                before.filter((o) => o.field === field && o.suggestion.value !== null && o.suggestion.value === String(documents[Number(o.doc.slice('replay-'.length))].values[field])).length
-              }`
-            : ''),
-      )
+    }
+    fs.writeFileSync(`${out}/summary.json`, JSON.stringify(summary, null, 2) + '\n')
+    const read = (t: ReturnType<typeof tally>) =>
+      `${t.offered}${t.asked ? `/${t.asked}` : ''} right ${t.offered ? Math.round((100 * t.right) / t.offered) : 0}%` +
+      (t.promises ? ` (promised ${Math.round((100 * t.promised) / t.promises)}%)` : '')
+    for (const field of template.suggest) {
+      const quarters = Object.entries(summary[field] ?? {})
+      console.log(`  ${field}: ` + quarters.map(([q, { before }]) => `${q} ${read(before)}`).join(' · '))
+      if (quarters.some(([, { typing }]) => typing.offered > 0))
+        console.log(`  ${field} while typing: ` + quarters.map(([q, { typing }]) => `${q} ${read(typing)}`).join(' · '))
     }
     expect(form).toEqual({ form: 1, confirmed: documents.length, weeks, perWeek: Math.round((documents.length / weeks) * 100) / 100 })
   })

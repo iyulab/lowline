@@ -24,9 +24,12 @@ public sealed class ReplayTests
     /// <summary>
     /// What was offered for one field of one document, with the fields filled when it was asked and, for a value being
     /// typed out, what had been typed by then (null before typing). A field has one line before typing and one more for
-    /// each other value shown as its value is typed.
+    /// each other value shown as its value is typed. <see cref="Promised"/> is the precision the field's replay promised
+    /// when the value was offered — what the app shows under the field's curve — or, while typing, the one for the
+    /// characters typed; null when nothing was offered.
     /// </summary>
-    private sealed record Offered(string Doc, string Field, Suggestion Suggestion, IReadOnlyList<string> Filled, string? Typed = null);
+    private sealed record Offered(
+        string Doc, string Field, Suggestion Suggestion, IReadOnlyList<string> Filled, string? Typed = null, double? Promised = null);
 
     [Fact]
     public async Task Replays_records_in_the_order_they_were_made()
@@ -63,7 +66,8 @@ public sealed class ReplayTests
                 else if (suggestion.Value == settled) right++;
                 else wrong++;
                 tally[field] = (right, wrong, abstained);
-                await offers.WriteLineAsync(JsonSerializer.Serialize(new Offered(document.Identity, field, suggestion, before), Json));
+                await offers.WriteLineAsync(JsonSerializer.Serialize(
+                    new Offered(document.Identity, field, suggestion, before, Promised: await PromisedAsync(vault, document.Template, field, suggestion, null, ct)), Json));
 
                 // A value typed out that was not offered: typed from its start, asked again with each of the first three
                 // characters, and taken once it is offered. While typing, only a value that adds to the text is shown.
@@ -76,7 +80,8 @@ public sealed class ReplayTests
                     var whileTyping = (await vault.SuggestAsync(asked with { Typed = typed }, ct))!;
                     if (whileTyping.Value is null || whileTyping.Value == typed || whileTyping.Value == shown) continue;
                     shown = whileTyping.Value;
-                    await offers.WriteLineAsync(JsonSerializer.Serialize(new Offered(document.Identity, field, whileTyping, before, typed), Json));
+                    await offers.WriteLineAsync(JsonSerializer.Serialize(
+                        new Offered(document.Identity, field, whileTyping, before, typed, await PromisedAsync(vault, document.Template, field, whileTyping, typed, ct)), Json));
                     if (shown == settled) break;
                 }
             }
@@ -88,6 +93,17 @@ public sealed class ReplayTests
             $"replay · {played.BroughtIn} brought in · {played.Documents.Count - played.BroughtIn} asked · " + string.Join(" · ", tally.Select(t =>
                 $"{t.Key}: right {t.Value.Right} wrong {t.Value.Wrong} abstained {t.Value.Abstained}"
                 + $" ({(t.Value.Right + t.Value.Wrong == 0 ? 0 : 100.0 * t.Value.Right / (t.Value.Right + t.Value.Wrong)):F0}% right)")), ct);
+    }
+
+    /// <summary>The precision the field's curve promises for what was offered: its replay, or its replay at that many characters.</summary>
+    private static async Task<double?> PromisedAsync(
+        VaultProjection vault, string template, string field, Suggestion offered, string? typed, CancellationToken ct)
+    {
+        if (offered.Value is null) return null;
+        var curve = (await vault.CurvesAsync(ct)).Single(c => c.Template == template && c.Field == field);
+        return typed is null
+            ? curve.Replay?.Precision
+            : curve.Typing?.FirstOrDefault(t => t.Characters == typed.Length)?.Precision;
     }
 
     private static bool Filled(JsonElement value) => value.ValueKind switch
