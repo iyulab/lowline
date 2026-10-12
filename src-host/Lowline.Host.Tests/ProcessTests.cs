@@ -20,10 +20,12 @@ public sealed class ProcessTests
         return Process.Start(info)!;
     }
 
-    [Fact]
-    public async Task Refuses_to_start_without_a_token()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("t0ken")] // too short to be a secret
+    public async Task Refuses_to_start_without_a_token(string? token)
     {
-        using var host = Start(token: null);
+        using var host = Start(token);
         await host.WaitForExitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(2, host.ExitCode);
     }
@@ -31,7 +33,7 @@ public sealed class ProcessTests
     [Fact]
     public async Task Prints_its_port_listens_there_on_loopback_and_stops_on_request()
     {
-        using var host = Start("t0ken");
+        using var host = Start(HostTests.Token);
         try
         {
             string? line;
@@ -44,7 +46,7 @@ public sealed class ProcessTests
             var address = new Uri($"http://127.0.0.1:{port}");
 
             using var client = new HttpClient { BaseAddress = address };
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "t0ken");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", HostTests.Token);
             var health = await client.GetAsync("/health", TestContext.Current.CancellationToken);
             Assert.True(health.IsSuccessStatusCode);
 

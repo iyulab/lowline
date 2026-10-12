@@ -5,17 +5,17 @@
 //   node scripts/check-installer.mjs [<installer>]
 //
 // Without an argument it takes the installer of this version from the bundle folder (`tauri build`).
-// The installed app is the app itself, with its own identifier: run it where no one keeps their Lowline
-// (a build runner), or check an installer built with the e2e config.
+// The installed app is the app itself, with its own identifier, so it keeps its data where a person's own
+// Lowline does: that folder is set aside for the check and put back afterwards, with nothing the check wrote.
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { findInstaller, withInstalled } from '@iyulab/tauri-kit-dev/installer'
+import { findInstaller, withAppDataSetAside, withInstalled } from '@iyulab/tauri-kit-dev/installer'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const { productName, version } = JSON.parse(readFileSync(join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'))
+const { productName, version, identifier } = JSON.parse(readFileSync(join(root, 'src-tauri', 'tauri.conf.json'), 'utf8'))
 const EXE = `${productName}.exe`
 const SIDECAR = 'Lowline.Host.exe'
 
@@ -48,7 +48,7 @@ async function until(check, timeoutMs) {
 const installer = process.argv[2] ?? findInstaller(join(root, 'src-tauri', 'target', 'release', 'bundle', 'nsis'), { version, hint: 'run `npx tauri build --bundles nsis` first' })
 console.log(`installer: ${installer}`)
 
-await withInstalled(
+await withAppDataSetAside(join(process.env.LOCALAPPDATA, identifier), () => withInstalled(
   installer,
   async (target) => {
     const notices = join(target, 'THIRD-PARTY-NOTICES.txt')
@@ -80,5 +80,5 @@ await withInstalled(
     console.log(`  ✓ closing the app ends its sidecar`)
   },
   { exe: EXE, prefix: 'lowline-installed-' },
-)
-console.log(`  ✓ uninstalled`)
+))
+console.log(`  ✓ uninstalled, and the data folder is as it was`)

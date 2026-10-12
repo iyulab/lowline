@@ -9,10 +9,13 @@ namespace Lowline.Host.Tests;
 
 public sealed class HostTests : IClassFixture<HostTests.Factory>
 {
-    public const string Token = "test-token";
+    public const string Token = "test-token-of-the-length-a-launch-makes";
 
     public sealed class Factory : WebApplicationFactory<Program>
     {
+        // As the shell calls it: by this computer's address and the port the request comes in on (none in a test host).
+        public Factory() => ClientOptions.BaseAddress = new Uri("http://127.0.0.1:0");
+
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
             builder.UseSetting(HostAuth.TokenVariable, Token);
     }
@@ -147,7 +150,7 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
     [InlineData(null)]
     [InlineData("")]
     [InlineData("wrong")]
-    [InlineData("test-token-and-more")]
+    [InlineData("test-token-of-the-length-a-launch-makes-and-more")]
     public async Task Every_request_without_the_token_is_refused(string? token)
     {
         var response = await Client(token).GetAsync("/health", TestContext.Current.CancellationToken);
@@ -159,5 +162,16 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
     {
         var response = await Client(null).GetAsync("/nothing-here", TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_request_naming_another_host_is_refused_even_with_the_token()
+    {
+        // A web page whose own name was pointed at 127.0.0.1 reaches the port but sends its own name.
+        var client = Client(Token);
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/health");
+        request.Headers.Host = "pointed-here.example:0";
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }

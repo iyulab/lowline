@@ -3,13 +3,19 @@
 //
 // Started by the shell as a loopback sidecar (TauriKit.Sidecar.Loopback) with a per-launch token in
 // LOWLINE_HOST_TOKEN and the directory for projection caches in LOWLINE_HOST_CACHE. It listens on
-// 127.0.0.1, on a port the OS picks, and prints one ready line with it; every request must carry the token.
+// 127.0.0.1, on a port the OS picks, and prints one ready line with it; every request must carry the token
+// and name this computer as its host.
 using Lowline.Host;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using TauriKit.Sidecar.Loopback;
 
 var builder = LoopbackHost.CreateSlimBuilder(args);
+
+// Every route needs the launch's token; it is registered once the app's configuration — the environment, or a test
+// host's settings — has been read.
+var credentials = new LoopbackCredentials();
+builder.Services.AddLoopbackAuthentication(credentials);
 
 // Projection caches live where the shell says, outside any vault; without a place they last one run.
 builder.Services.AddSingleton<HostFailures>();
@@ -20,15 +26,18 @@ builder.Services.AddSingleton(services => new VaultProjection(
 var app = builder.Build();
 
 var token = app.Configuration[HostAuth.TokenVariable];
-if (string.IsNullOrEmpty(token))
+if (string.IsNullOrEmpty(token) || token.Length < LoopbackCredentials.MinimumLength)
 {
-    Console.Error.WriteLine($"{HostAuth.TokenVariable} is not set; refusing to start without a token.");
+    Console.Error.WriteLine(
+        $"{HostAuth.TokenVariable} ({LoopbackCredentials.MinimumLength}+ characters) is not set; refusing to start without a token.");
     return 2;
 }
+credentials.Register(token, "shell");
 
+// Only this computer's names are answered: a page whose own name was pointed at 127.0.0.1 is refused.
+app.UseLoopbackHostCheck();
 // A failed request says what failed, never with what: its type and the frames it passed through.
 app.UseFaults(new FaultOptions { OwnNamespaces = HostFailures.OwnNamespaces });
-app.UseBearerToken(token);
 
 app.MapGet("/health", (VaultProjection vault) => new Health("ok", VaultIndexed: vault.Indexed, MemoryReady: vault.MemoryReady));
 

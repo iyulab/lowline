@@ -1,8 +1,8 @@
 namespace Lowline.Host;
 
 /// <summary>
-/// Every request carries the token the shell generated for this launch (checked by
-/// <c>UseBearerToken</c>). The sidecar serves documents on a loopback port, and another process on
+/// Every request carries the token the shell generated for this launch (registered with
+/// <c>LoopbackCredentials</c> and checked by <c>AddLoopbackAuthentication</c>). The sidecar serves documents on a loopback port, and another process on
 /// the same machine must not read them.
 /// </summary>
 public static class HostAuth
