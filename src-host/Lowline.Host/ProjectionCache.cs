@@ -171,8 +171,8 @@ internal sealed class ProjectionCache : IAsyncDisposable
         var columns = template.Fields.Select(f => new ProjectionColumn(f.Name, f.Type)).ToList();
         var rows = result.Rows
             .Select(row => new ProjectionRow(
-                (string)row[VaultProjection.PathColumn]!,
-                template.Fields.ToDictionary(f => f.Name, f => row.TryGetValue(f.Name, out var v) ? AsWritten(f, v) : null)))
+                (string)row.Fields[VaultProjection.PathColumn]!,
+                template.Fields.ToDictionary(f => f.Name, f => row.Fields.TryGetValue(f.Name, out var v) ? AsWritten(f, v) : null)))
             .ToList();
         return new ProjectionTable(template.Ref, columns, rows);
     }
