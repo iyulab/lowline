@@ -37,7 +37,11 @@ export interface FormCounts {
   form: number
   /** Saved documents with a value in at least one judgment field, leaving out those not settled (`conflicted`). */
   confirmed: number
-  /** Weeks from the first such save to the last, both included. */
+  /**
+   * Weeks from the first such document's day to the last, both included. A document's day is the one its file is
+   * named by — the day it was made, or for a record brought in, its own day — or, for a file renamed without it, its
+   * last save. Records brought in all at once are counted in the weeks they were made, not the week they came in.
+   */
   weeks: number
   perWeek: number
 }
@@ -55,6 +59,19 @@ export function weekOf(ms: number): string {
   const day = new Date(ms).getUTCDay() // 0 = Sunday
   const monday = ms - ((day + 6) % 7) * DAY
   return new Date(monday).toISOString().slice(0, 10)
+}
+
+/**
+ * The day a document's file is named by (`2026-10-13-문의.md`, `2026-10-13 (1).md`), as midnight UTC of that
+ * calendar day so its week is the one the name says; undefined for a name that starts with no day.
+ */
+export function namedDay(path: string): number | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?=[-. ]|$)/.exec(path.slice(path.lastIndexOf('/') + 1))
+  if (!match) return undefined
+  const [year, month, day] = match.slice(1).map(Number)
+  const ms = Date.UTC(year, month - 1, day)
+  const date = new Date(ms)
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? ms : undefined
 }
 
 function isFilled(value: unknown): boolean {
@@ -122,7 +139,7 @@ export function weeklyCounts(
   const formCounts = forms.map((template, i): FormCounts => {
     const saved = documents
       .filter((d) => d.template === template.ref && !d.conflicted && template.suggest.some((f) => isFilled(d.values[f])))
-      .map((d) => d.modified)
+      .map((d) => namedDay(d.path) ?? d.modified)
     const times = saved.filter((m): m is number => m !== undefined && m > 0)
     // Folded rather than spread: a spread's arguments are limited, and a vault can hold more documents.
     const first = times.reduce((a, b) => Math.min(a, b), Infinity)

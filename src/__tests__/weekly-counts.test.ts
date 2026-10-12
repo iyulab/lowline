@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Presentation, SuggestionEvent } from '../events.js'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
-import { weekOf, weeklyCounts } from '../weekly-counts.js'
+import { namedDay, weekOf, weeklyCounts } from '../weekly-counts.js'
 
 const template = (ref: string, suggest: string[]): TemplateSnapshot => ({
   ref,
@@ -88,6 +88,30 @@ describe('weeklyCounts', () => {
   it('does not count a document with a conflict copy as confirmed', () => {
     const unsettled = documents.map((d) => (d.path === '문서/3.md' ? { ...d, conflicted: true } : d))
     expect(weeklyCounts([notes, intake, bug], unsettled, events).forms[1]).toEqual({ form: 2, confirmed: 1, weeks: 1, perWeek: 1 })
+  })
+
+  it('counts a document in the week of the day its file is named by, not when its file was last written', () => {
+    // A year of records brought in at once, then two made in the app: the form gets one a week, not fifty-four.
+    const importedAt = Date.parse('2026-10-05T08:00:00Z')
+    const history = Array.from({ length: 52 }, (_, i) => {
+      const day = new Date(Date.UTC(2025, 9, 6) + i * 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      return doc(`문서/${day}-접수.md`, 'intake@1', { 담당: '장비' }, importedAt + i)
+    })
+    const made = [
+      doc('문서/2026-10-05-접수.md', 'intake@1', { 담당: '장비' }, Date.parse('2026-10-05T10:00:00Z')),
+      doc('문서/2026-10-12-접수 (1).md', 'intake@1', { 담당: '장비' }, Date.parse('2026-10-12T10:00:00Z')),
+    ]
+    expect(weeklyCounts([intake], [...history, ...made], []).forms).toEqual([{ form: 1, confirmed: 54, weeks: 54, perWeek: 1 }])
+  })
+
+  it('reads the day a file is named by, if it is one', () => {
+    expect(namedDay('문서/2026-10-13-문의.md')).toBe(Date.UTC(2026, 9, 13))
+    expect(namedDay('2026-10-13.md')).toBe(Date.UTC(2026, 9, 13))
+    expect(namedDay('문서/2026-10-13 (1).md')).toBe(Date.UTC(2026, 9, 13))
+    expect(namedDay('문서/2026-02-30-문의.md')).toBeUndefined() // no such day
+    expect(namedDay('문서/20261013-문의.md')).toBeUndefined()
+    expect(namedDay('문서/2026-10-130.md')).toBeUndefined()
+    expect(namedDay('2026-10-13/문의.md')).toBeUndefined() // a folder's name is not the file's
   })
 
   it('carries no name, value or path', () => {
