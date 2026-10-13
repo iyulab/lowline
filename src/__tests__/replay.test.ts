@@ -114,7 +114,9 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       const offers = new Map<string, Offer>()
       for (const o of byDoc.get(document.id) ?? []) {
         if (o.suggestion.value === null) continue
-        const offer: Offer = { suggestion: o.suggestion, shown: at, filled: o.filled, typed: charactersTyped(o.typed ?? undefined), decided: at }
+        // Taken or changed the moment it showed, at what had been typed: a replay has no person to take time over it.
+        const typed = charactersTyped(o.typed ?? undefined)
+        const offer: Offer = { suggestion: o.suggestion, shown: at, filled: o.filled, typed, decided: at, decidedTyped: typed }
         offers.set(o.field, offer)
         shown.push(presentation(document.template, o.field, offer))
       }
@@ -135,6 +137,9 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     // Every decision and presentation here was recorded with what had been typed, so each falls in one slot.
     expect(counts.counts.reduce((n, c) => n + Object.values(c.byTyped).reduce((m, s) => m + s.decided, 0), 0)).toBe(decided)
     expect(counts.counts.reduce((n, c) => n + Object.values(c.byTyped).reduce((m, s) => m + s.presented, 0), 0)).toBe(presented)
+    // Each says when it was shown and decided, so each has a time — none at all, here.
+    const timed = counts.counts.flatMap((c) => Object.values(c.byTyped).flatMap((s) => (s.dwell ? [...s.dwell.accepted, ...s.dwell.other] : [])))
+    expect(timed.reduce((n, k) => n + k, 0)).toBe(decided)
 
     // Nothing that says what the records are about: no form or field name, no value.
     const values = new Set(documents.flatMap((d) => Object.values(d.values).map(String)).filter((v) => v.length >= 2))

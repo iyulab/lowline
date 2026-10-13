@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Presentation, SuggestionEvent } from '../events.js'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
-import { namedDay, weekOf, weeklyCounts } from '../weekly-counts.js'
+import { dwellSpan, namedDay, weekOf, weeklyCounts } from '../weekly-counts.js'
 
 const template = (ref: string, suggest: string[]): TemplateSnapshot => ({
   ref,
@@ -171,5 +171,48 @@ describe('weeklyCounts', () => {
       '3+': { presented: 2, decided: 2, accepted: 2 },
     })
     expect(counts.counts[0].byTyped).toEqual({}) // events from before the count was kept are in no slot
+  })
+
+  it('counts how long each decision took from showing to taking or rejecting, by span', () => {
+    const shownAt = '2026-10-20T09:00:00.000Z'
+    const after = (ms: number) => new Date(Date.parse(shownAt) + ms).toISOString()
+    const timed = (kind: SuggestionEvent['kind'], ms: number | undefined, typed: number, decidedTyped?: number): SuggestionEvent => ({
+      ...event(shownAt, '문서/c.md', '원인', kind, null, 'bug@2'),
+      typed,
+      shownAt,
+      ...(ms === undefined ? {} : { decidedAt: after(ms) }),
+      ...(decidedTyped === undefined ? {} : { decidedTyped }),
+    })
+    const counted = weeklyCounts(
+      [bug],
+      [],
+      [
+        timed('accept', 300, 0, 0), // read and taken: under 0.5 s
+        timed('accept', 2_500, 0, 2), // taken after two characters: 2 to 4 s
+        timed('accept', 40_000, 0), // from before what was in the field was kept: in `accepted` alone
+        timed('reject', 1_000, 0, 0), // exactly on an edge counts in the span it starts
+        timed('correct', undefined, 0), // changed by hand, never taken or rejected: no time
+        timed('accept', -5_000, 0, 0), // the clock moved back: no time
+        timed('accept', 600, 1, 1),
+      ],
+    )
+    expect(counted.dwellEdgesSec).toEqual([0.5, 1, 2, 4, 8, 16, 32])
+    const { byTyped } = counted.counts[0]
+    expect(byTyped['0'].dwell).toEqual({
+      accepted: [1, 0, 0, 1, 0, 0, 0, 1],
+      acceptedNoTyping: [1, 0, 0, 0, 0, 0, 0, 0],
+      acceptedAfterTyping: [0, 0, 0, 1, 0, 0, 0, 0],
+      other: [0, 0, 1, 0, 0, 0, 0, 0],
+    })
+    expect(byTyped['0'].decided).toBe(6) // the decisions without a time are still counted, outside `dwell`
+    expect(byTyped['1'].dwell?.acceptedNoTyping).toEqual([0, 1, 0, 0, 0, 0, 0, 0])
+  })
+
+  it('puts a time in the span whose edge it reached', () => {
+    expect([0, 0.49, 0.5, 1.99, 2, 31.9, 32, 3600].map(dwellSpan)).toEqual([0, 0, 1, 2, 3, 6, 7, 7])
+  })
+
+  it('has no times for decisions that never said them', () => {
+    expect(counts.counts.every((c) => Object.values(c.byTyped).every((slot) => slot.dwell === undefined))).toBe(true)
   })
 })

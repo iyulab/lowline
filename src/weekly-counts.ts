@@ -37,7 +37,40 @@ export interface WeekCounts {
    * each is read apart. Those recorded before the count was kept are in none, so the slots can add up to less than
    * `presented` and the decisions. Added within format 1 — a reader that does not know it can pass it by.
    */
-  byTyped: Record<string, { presented: number; decided: number; accepted: number }>
+  byTyped: Record<string, TypedCounts>
+}
+
+/** One `byTyped` slot. */
+export interface TypedCounts {
+  presented: number
+  decided: number
+  accepted: number
+  /**
+   * How long the decisions in this slot took from the suggestion first showing to being taken or rejected, as counts
+   * per span of {@link WeeklyCounts.dwellEdgesSec} — a span's count is at `i` when the time reached the edge before it
+   * and not its own. Only decisions that say both times are in it; absent when none of the slot's did. Added within
+   * format 1 — a reader that does not know it can pass it by.
+   */
+  dwell?: Dwell
+}
+
+export interface Dwell {
+  /** Taken. */
+  accepted: number[]
+  /** Of those taken, the ones that say what was in the field then: taken with as many characters in the field as when it was shown… */
+  acceptedNoTyping: number[]
+  /** …or taken after the field changed. These two can add up to less than `accepted`. */
+  acceptedAfterTyping: number[]
+  /** Corrected or rejected. */
+  other: number[]
+}
+
+/** The edges, in seconds, between the spans `dwell` is counted in: under 0.5 s, 0.5 to under 1 s, … 32 s and over. */
+export const DWELL_EDGES_SEC: readonly number[] = [0.5, 1, 2, 4, 8, 16, 32]
+
+/** The span of {@link DWELL_EDGES_SEC} a time in seconds falls in. */
+export function dwellSpan(seconds: number): number {
+  return DWELL_EDGES_SEC.filter((edge) => seconds >= edge).length
 }
 
 export interface FormCounts {
@@ -57,6 +90,8 @@ export interface WeeklyCounts {
   format: typeof WEEKLY_COUNTS_FORMAT
   counts: WeekCounts[]
   forms: FormCounts[]
+  /** See {@link DWELL_EDGES_SEC}; written so a reader need not know them. */
+  dwellEdgesSec: number[]
 }
 
 const DAY = 24 * 60 * 60 * 1000
@@ -149,6 +184,17 @@ export function weeklyCounts(
       const slot = typedOf(cell, event.typed)
       slot.decided++
       if (event.kind === 'accept') slot.accepted++
+      const dwell = event.shownAt && event.decidedAt ? (Date.parse(event.decidedAt) - Date.parse(event.shownAt)) / 1000 : NaN
+      // A time that runs backwards says the clock moved, not how long a person took.
+      if (dwell >= 0) {
+        const spans = (slot.dwell ??= { accepted: spansOf(), acceptedNoTyping: spansOf(), acceptedAfterTyping: spansOf(), other: spansOf() })
+        const span = dwellSpan(dwell)
+        if (event.kind === 'accept') {
+          spans.accepted[span]++
+          if (typeof event.decidedTyped === 'number')
+            (event.decidedTyped === event.typed ? spans.acceptedNoTyping : spans.acceptedAfterTyping)[span]++
+        } else spans.other[span]++
+      }
     }
     if (event.similarity !== null) {
       const bucket = (Math.floor(Math.min(event.similarity, 1) * 10) / 10).toFixed(1)
@@ -173,5 +219,9 @@ export function weeklyCounts(
   const counts = [...cells.values()].sort((a, b) =>
     a.week !== b.week ? (a.week < b.week ? -1 : 1) : a.form !== b.form ? a.form - b.form : a.field - b.field,
   )
-  return { format: WEEKLY_COUNTS_FORMAT, counts, forms: formCounts }
+  return { format: WEEKLY_COUNTS_FORMAT, counts, forms: formCounts, dwellEdgesSec: [...DWELL_EDGES_SEC] }
+}
+
+function spansOf(): number[] {
+  return new Array<number>(DWELL_EDGES_SEC.length + 1).fill(0)
 }
