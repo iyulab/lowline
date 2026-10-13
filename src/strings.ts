@@ -43,6 +43,7 @@ export const strings = {
     { combo: 'Ctrl+S', description: '저장' },
     { combo: 'Ctrl+N', description: '새 문서' },
     { combo: 'Ctrl+F', description: '문서 찾기' },
+    { combo: 'Ctrl+Enter', description: '저장하고 다음 미확정 문서' },
     { combo: '↑ ↓ Home End', description: '문서 목록에서 옮겨 가기' },
     { combo: 'Tab · Enter', description: '제안 값으로 가서 받기' },
     { combo: 'Esc', description: '서랍·대화상자 닫기' },
@@ -113,6 +114,9 @@ export const strings = {
   newDocument: '새 문서',
   noDocuments: '문서가 없습니다.',
   documentsFilter: '이름이나 칸 값으로 찾기',
+  documentsUnsettledOnly: (count: number) => `미확정만 (${count})`,
+  saveAndNext: '저장하고 다음',
+  noMoreUnsettled: '저장했습니다. 판단 칸이 빈 문서가 더 없습니다.',
   documentsNoMatch: '이름이나 칸 값이 맞는 문서가 없습니다.',
   /** While the sidecar looks through the documents' values (the first index of a large vault takes a while). */
   documentsSearching: '칸 값에서 찾는 중…',

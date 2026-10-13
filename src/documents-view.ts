@@ -74,6 +74,10 @@ export class LlDocuments extends LitElement {
       gap: var(--dc-space-1);
       padding-inline-end: var(--dc-space-2);
     }
+    /* As wide as its label: the space beside it is not part of what toggles it. */
+    nav .unsettled {
+      align-self: flex-start;
+    }
     section {
       padding-inline-start: var(--dc-space-4);
     }
@@ -209,6 +213,9 @@ export class LlDocuments extends LitElement {
   @state() private initialValues: FieldValues = {}
   /** Text the listed documents are narrowed to: in their names (ignoring case) or the words of their values. */
   @state() private nameFilter = ''
+  /** Only the documents with a judgment field still empty are listed — those a person has yet to settle. */
+  @state() private unsettledOnly = false
+  private unsettledOf?: { inputs: readonly unknown[]; paths: Set<string> }
   /** This template's documents whose values hold the words of the filter text, as the sidecar found them. */
   @state() private valueHits: CaseHit[] = []
   /** The sidecar is looking through the values; or it could not, and only names are looked in. */
@@ -943,9 +950,56 @@ export class LlDocuments extends LitElement {
     return strings.suggestionKey(namedEvidence(s.source, template, this.vaultTemplates, this.vaultDocuments, this.templateNames))
   }
 
-  /** The documents whose names or values hold the filter text: see `found`. */
-  private listed(): Found[] {
-    return found(this.documents, this.nameFilter, this.valueHits)
+  /** The documents whose names or values hold the filter text (see `found`), and only those unsettled if asked. */
+  private listed(unsettled = this.unsettled()): Found[] {
+    const listed = found(this.documents, this.nameFilter, this.valueHits)
+    return this.unsettledOnly ? listed.filter((l) => unsettled.has(l.entry.path)) : listed
+  }
+
+  /**
+   * The documents of this list with a judgment field of their template left empty: records another program wrote
+   * for a person to confirm, or ones saved before every judgment was made. Conflict copies are not among them —
+   * they are settled by keeping one of the two.
+   */
+  private unsettled(): Set<string> {
+    // Worked out again only when the list or what was read changed: the view draws often, a vault holds thousands.
+    const inputs = [this.documents, this.vaultDocuments, this.vaultTemplates, this.scope] as const
+    if (this.unsettledOf?.inputs.every((input, i) => input === inputs[i])) return this.unsettledOf.paths
+    const suggest = new Map(this.vaultTemplates.map((t) => [t.ref, t.suggest]))
+    const scoped = this.scope ? suggest.get(this.scope.ref) : undefined
+    const listed = new Set(this.documents.filter((d) => d.conflictOf === undefined).map((d) => d.path))
+    const unsettled = new Set<string>()
+    for (const d of this.vaultDocuments) {
+      if (!listed.has(d.path)) continue
+      const fields = suggest.get(d.template) ?? scoped ?? []
+      if (fields.some((f) => !holdsValue(typeof d.values[f] === 'string' ? (d.values[f] as string).trim() : d.values[f])))
+        unsettled.add(d.path)
+    }
+    this.unsettledOf = { inputs, paths: unsettled }
+    return unsettled
+  }
+
+  /**
+   * Saves the open document, then opens the next one with a judgment field still empty, in the list's order after
+   * it — round to the top; the app's Ctrl+Enter calls this. With none left, the document stays open and says so.
+   */
+  async saveAndNext() {
+    if (!this.draft) return
+    if (this.dirty) {
+      await this.save()
+      if (this.dirty) return // not saved: the error says why
+    }
+    const at = this.draft?.kind === 'existing' ? this.draft.path : undefined
+    const unsettled = this.unsettled()
+    const order = found(this.documents, this.nameFilter, this.valueHits).map((l) => l.entry.path)
+    const from = at === undefined ? -1 : order.indexOf(at)
+    const next = [...order.slice(from + 1), ...order.slice(0, from + 1)].find((p) => p !== at && unsettled.has(p))
+    if (next === undefined) {
+      this.message = strings.noMoreUnsettled
+      return
+    }
+    await this.open(next)
+    await this.focusForm()
   }
 
   /**
@@ -1019,7 +1073,8 @@ export class LlDocuments extends LitElement {
     const draft = this.draft
     const opened = this.opened
     // Worked out once for the list, not once per row: a vault holds thousands of documents.
-    const listed = this.listed()
+    const unsettled = this.unsettled()
+    const listed = this.listed(unsettled)
     const tabStop = this.tabStop(listed.map((l) => l.entry.path))
     const conflictLabel = conflictLabels(this.documents, '.md')
     return html`<dp-list-detail ?detail-open=${!!draft || this.importing}>
@@ -1044,6 +1099,11 @@ export class LlDocuments extends LitElement {
                 this.scheduleSearch()
               }}
             ></dc-input>`
+          : nothing}
+        ${unsettled.size > 0 || this.unsettledOnly
+          ? html`<dc-checkbox class="unsettled" .checked=${this.unsettledOnly} @change=${(e: Event) => (this.unsettledOnly = (e.target as HTMLInputElement).checked)}
+              >${strings.documentsUnsettledOnly(unsettled.size)}</dc-checkbox
+            >`
           : nothing}
         ${!draft && !this.importing && (this.error || this.message)
           ? html`<p class="closed ${this.error ? 'error' : 'message'}" role=${this.error ? 'alert' : 'status'}>
@@ -1090,6 +1150,11 @@ export class LlDocuments extends LitElement {
                   >${strings.backToList}</dc-button
                 >
                 <dc-button size="sm" ?disabled=${!this.dirty} @click=${this.save}>${strings.save}</dc-button>
+                ${unsettled.size > (draft.kind === 'existing' && unsettled.has(draft.path) ? 1 : 0)
+                  ? html`<dc-button size="sm" variant="secondary" title="Ctrl+Enter" @click=${() => void this.saveAndNext()}
+                      >${strings.saveAndNext}</dc-button
+                    >`
+                  : nothing}
                 ${draft.kind === 'existing'
                   ? html`<ll-rename
                       .name=${fileName(draft.path, '.md')}

@@ -856,6 +856,50 @@ const scenarios = {
     await app.noAlert()
   },
 
+  async 'lists only the documents with a judgment left empty, and saves one and opens the next with Ctrl+Enter'(app, vault) {
+    // Records another program wrote for a person to confirm: 담당 written empty, or not written at all.
+    const written = [1, 2, 3].map((i) => join(vault, '문서', `확인할 기록-${i}.md`))
+    // A document is a copy of its template's body, as the program writing it is told (`docs/vault.md`).
+    const body = '# 접수\n\n요청: ___@요청\n\n@부서: [select options="영업,개발,인사"]\n\n@담당: [select options="장비,인사,총무"]\n'
+    await writeFile(written[0], `---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 1\n부서: 영업\n담당: ""\n---\n${body}`)
+    await writeFile(written[1], `---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 2\n부서: 개발\n---\n${body}`)
+    await writeFile(written[2], `---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 3\n부서: 인사\n---\n${body}`)
+    const unsettledNow = async () => {
+      let n = 0
+      for (const name of (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md') && !n.includes('충돌'))) {
+        const values = await fileValues(join(vault, '문서', name))
+        if (values.template === 'intake@1' && !String(values.담당 ?? '').trim()) n++
+      }
+      return n
+    }
+    const unsettled = await unsettledNow()
+    assert.ok(unsettled >= 3)
+    const listedCount = `__e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button.document')]).length`
+    const openName = `__e2e.all('ll-documents').flatMap((d) => [...d.shadowRoot.querySelectorAll('nav button[aria-current="true"]')]).map((b) => b.textContent.replace(/\\s+/g, ' ').trim())[0]`
+
+    await app.documentsOf(INTAKE)
+    await app.click('dc-checkbox', `미확정만 (${unsettled})`)
+    await app.cdp.waitFor(`${listedCount} === ${unsettled}`, 'only the unsettled documents listed', { timeoutMs: 15_000 })
+
+    // One is settled and saved with Ctrl+Enter, and the next unsettled one opens.
+    await app.click('nav button.document', '확인할 기록-1')
+    await app.cdp.waitFor(`__e2e.one('select[name="담당"]')`, 'the form of 확인할 기록-1')
+    await app.choose('select[name="담당"]', '장비')
+    await app.cdp.press('Enter', { code: 'Enter', modifiers: 2, keyCode: 13 })
+    await app.cdp.waitFor(`${openName} !== undefined && !${openName}.startsWith('확인할 기록-1')`, 'the next unsettled document open', { timeoutMs: 15_000 })
+    assert.equal((await fileValues(written[0])).담당, '장비', 'saved')
+    await app.cdp.waitFor(`${listedCount} === ${unsettled - 1}`, 'the saved document gone from the unsettled list', { timeoutMs: 15_000 })
+    assert.ok(await app.cdp.evaluate(`__e2e.all('dc-checkbox').some((c) => c.textContent.trim() === '미확정만 (${unsettled - 1})')`))
+    await app.noAlert()
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.click('dc-checkbox', `미확정만 (${unsettled - 1})`)
+    await Promise.all(written.map((f) => rm(f)))
+    await app.cdp.waitFor(`!__e2e.all('ll-documents').some((d) => d.shadowRoot.textContent.includes('확인할 기록'))`, 'the records gone from the list', {
+      timeoutMs: 30_000,
+    })
+  },
+
   async 'finds documents by the words of their values, and opens one of the cases most like a document'(app, vault) {
     const CASES = { name: '사례', ref: 'cases@1', path: '서식/사례.fd.md' }
     const body = '# 사례\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
@@ -1987,12 +2031,17 @@ const scenarios = {
     await app.cdp.press('Escape', { code: 'Escape', keyCode: 27 })
     await app.cdp.waitFor(`!__e2e.all('dp-shortcut-overlay')[0].open`, 'the shortcuts gone on Escape')
 
-    // The list is one Tab stop: from the find box, Tab lands on one document and the next Tab leaves the list.
+    // The list is one Tab stop: from the find box, Tab lands on one document — past 미확정만, when there is any unsettled
+    // document to list alone — and the next Tab leaves the list.
     await app.cdp.press('f', { code: 'KeyF', modifiers: 2, keyCode: 70 })
     await app.cdp.waitFor(`${focused}?.type === 'search'`, 'the find box focused')
     const stops = await app.cdp.evaluate(`__e2e.all('ll-documents')[0].shadowRoot.querySelectorAll('nav button.document[tabindex="0"]').length`)
     assert.equal(stops, 1, 'one Tab stop in the list')
     await app.cdp.press('Tab', { code: 'Tab', keyCode: 9 })
+    if (await app.cdp.evaluate(`__e2e.all('ll-documents')[0].shadowRoot.querySelector('nav dc-checkbox') !== null`)) {
+      await app.cdp.waitFor(`${focused}?.type === 'checkbox'`, '미확정만 focused')
+      await app.cdp.press('Tab', { code: 'Tab', keyCode: 9 })
+    }
     await app.cdp.waitFor(`${focused}?.classList.contains('document')`, 'a document of the list focused')
     await app.cdp.press('Home', { code: 'Home', keyCode: 36 })
     const first = await app.cdp.waitFor(`${focused}?.classList.contains('document') && ${focused}.textContent.trim()`, 'the first document focused')

@@ -156,13 +156,14 @@ export class LlApp extends LitElement {
    * - Ctrl+S (⌘S) saves whatever is being edited — a template or a document.
    * - Ctrl+N starts a new document of the template shown, on its documents tab.
    * - Ctrl+F goes to the box that finds the template's documents.
+   * - Ctrl+Enter saves the open document and opens the next one with a judgment field still empty.
    * - Ctrl+/ shows the shortcuts, and hides them again.
    * While a dialog is open they do nothing: the question on screen is answered first.
    */
   private readonly onShortcut = (e: KeyboardEvent) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
     const key = e.key.toLowerCase()
-    if (key !== 's' && key !== 'n' && key !== 'f' && key !== '/') return
+    if (key !== 's' && key !== 'n' && key !== 'f' && key !== '/' && key !== 'enter') return
     e.preventDefault()
     if (key === '/' && this.showingShortcuts) return void (this.showingShortcuts = false)
     if (modalOpen(document) || this.showingShortcuts) return
@@ -170,7 +171,8 @@ export class LlApp extends LitElement {
     if (key === 's') {
       const editor = this.renderRoot.querySelector<HTMLElement & { save(): Promise<void> }>('ll-templates, ll-documents')
       void editor?.save()
-    } else void this.toDocuments((documents) => (key === 'n' ? documents.newDocument() : documents.focusFinder()))
+    } else if (key === 'enter') void this.renderRoot.querySelector<LlDocuments>('ll-documents')?.saveAndNext()
+    else void this.toDocuments((documents) => (key === 'n' ? documents.newDocument() : documents.focusFinder()))
   }
 
   /** Shows the documents tab of the template shown, then does `then` there; elsewhere does nothing. */
