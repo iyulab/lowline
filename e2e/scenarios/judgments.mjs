@@ -1,6 +1,7 @@
-import { rm, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
+import { events, fileValues } from '../shared.mjs'
 
 export default {
   async 'says why a field is not suggested for when replaying its history never reaches the target'(app, vault) {
@@ -168,5 +169,59 @@ export default {
     await app.answerUnsaved('편집 버리기')
     await Promise.all([template, ...files].map((f) => rm(f)))
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '인계')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
+  async 'offers a value another program proposed in its field, and learns it only once a person decides it'(app, vault) {
+    // A mail sorter wrote a record with its guesses for all three judgments, marked as proposed — 분야 without saying who.
+    const SORT = { name: '분류', ref: 'sort@1', path: '서식/분류.fd.md' }
+    const body = '# 분류\n\n요청: ___@요청\n\n@담당: [select options="장비,인사,총무"]\n\n@우선: [select options="높음,낮음"]\n\n@분야: [select options="하드웨어,소프트웨어"]\n'
+    const template = join(vault, SORT.path)
+    await writeFile(template, `---\nid: sort\nversion: 1\nlowline:\n  suggest: [담당, 우선, 분야]\n---\n${body}`)
+    const file = join(vault, '문서', '분류-메일.md')
+    const proposed = '  proposed:\n    담당: 메일 분류기\n    우선: 메일 분류기\n    분야: 3\n'
+    await writeFile(file, `---\ntemplate: sort@1\n요청: 프린터가 종이를 씹어요\n담당: 총무\n우선: 높음\n분야: 하드웨어\nlowline:\n  id: sort-mail-1\n${proposed}---\n${body}`)
+
+    await app.sidebar(SORT.name, { timeoutMs: 30_000 })
+    await app.openDocument(SORT, '분류-메일')
+    // Each proposed value is offered in its field, which is shown empty: nothing is settled before the person says so.
+    const noteOf = (field) => `__e2e.one('[data-formdown-note="${field}"] .formdown-field-note-text')?.textContent.trim()`
+    const offeredIn = (field) => `__e2e.one('[data-formdown-note="${field}"] .formdown-suggestion')?.textContent`
+    const note = await app.cdp.waitFor(noteOf('담당'), 'the proposed 담당 offered', { timeoutMs: 15_000 })
+    assert.equal(note, '제안 · 메일 분류기에서 넣은 값')
+    assert.equal(await app.cdp.evaluate(offeredIn('담당')), '총무')
+    assert.equal(await app.cdp.evaluate(noteOf('분야')), '제안 · 다른 프로그램에서 넣은 값', 'who wrote it, when the file does not say')
+    assert.equal(await app.cdp.evaluate(offeredIn('분야')), '하드웨어')
+    for (const field of ['담당', '우선', '분야']) assert.equal(await app.value(`select[name="${field}"]`), '', `${field} shown empty`)
+    assert.equal(await app.value('[data-field-name="요청"]'), '프린터가 종이를 씹어요', 'what was observed is shown as it is')
+
+    // The person takes 담당, turns down 우선, and leaves 분야 to decide later.
+    await app.click('[data-formdown-note="담당"] .formdown-suggestion', '총무')
+    await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '총무'`, 'the proposed 담당 taken')
+    await app.click('[data-formdown-note="우선"] .formdown-decline', '거절')
+    await app.cdp.waitFor(`!__e2e.one('[data-formdown-note="우선"] .formdown-suggestion')`, 'the proposed 우선 set aside')
+    const before = (await events(vault)).length
+    await app.click('dc-button', '저장')
+    await app.status('저장했습니다')
+    await app.noAlert()
+
+    // Saved: 담당 is the person's now, 우선 is gone with its mark, and 분야 is still only proposed.
+    const saved = await fileValues(file)
+    assert.equal(saved.담당, '총무')
+    assert.ok(!('우선' in saved), 'the value turned down is taken out')
+    assert.equal(saved.분야, '하드웨어', 'a value left undecided stays in the file')
+    assert.deepEqual(saved.lowline, { id: 'sort-mail-1', proposed: { 분야: 3 } })
+    assert.match(await readFile(file, 'utf8'), /# 분류/, 'the body stays')
+    const decided = (await events(vault)).slice(before)
+    assert.deepEqual(
+      decided.map((e) => [e.field, e.kind, e.source, e.recall]).sort(),
+      [['담당', 'accept', 'proposed', '메일 분류기'], ['우선', 'reject', 'proposed', '메일 분류기']],
+    )
+    // Still offered after saving, 분야 is still the program's.
+    assert.equal(await app.cdp.evaluate(offeredIn('분야')), '하드웨어')
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await Promise.all([template, file].map((f) => rm(f)))
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '분류')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 }

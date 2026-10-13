@@ -39,6 +39,23 @@ public sealed class CurvesTests
     }
 
     [Fact]
+    public void Counts_what_people_did_with_values_another_program_proposed_apart_from_the_curve()
+    {
+        var events = new List<SuggestionEvent>
+        {
+            Event(0, "문서/1.md", "담당", "accept", source: "key"),
+            Event(1, "문서/1.md", "담당", "reject", source: "proposed"),
+            Event(2, "문서/1.md", "담당", "reject", source: "proposed"),
+        };
+
+        var curve = Curves.Compute(new VaultSnapshot([Intake], [Document("문서/1.md")], events)).Single(c => c.Field == "담당");
+
+        Assert.Equal((1, 0, 0), (curve.Accepted, curve.Corrected, curve.Rejected));
+        Assert.Equal([1.0], curve.Points.Select(p => p.Rate));
+        Assert.Equal([("key", 1, 1), ("proposed", 2, 0)], curve.BySource!.Select(s => (s.Source, s.Decided, s.Accepted)));
+    }
+
+    [Fact]
     public void Takes_each_rate_over_the_latest_decisions_in_order()
     {
         var kinds = new[] { "reject", "correct", "accept", "accept" };

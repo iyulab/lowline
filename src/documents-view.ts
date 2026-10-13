@@ -15,6 +15,7 @@ import {
   newDocument,
   reviseDocument,
   setDocumentId,
+  settleProposed,
   templateBody,
   templateInfo,
   updateDocument,
@@ -482,11 +483,12 @@ export class LlDocuments extends LitElement {
     this.reset()
     try {
       const source = await vault.read(path)
-      const { template, id, values } = documentFrontMatter(source)
-      this.setValues(fieldValues(values))
-      this.initialValues = this.values
+      const { template, id, values, proposed } = documentFrontMatter(source)
       // Written with an earlier revision, it is a document of its template as the template is now.
       const templateRef = template === undefined ? template : revisedRef(template, this.currentRefs)
+      // A value another program only proposed is offered in its field, not filled in.
+      this.setValues(this.judgment.opened(templateRef, fieldValues(values), proposed))
+      this.initialValues = this.values
       const scope = this.scope
       const filled =
         !hasFields(source) && scope && template !== undefined && templateId(template) === templateId(scope.ref)
@@ -585,7 +587,9 @@ export class LlDocuments extends LitElement {
         // program, or before documents had ids — is given that path as its id, as renaming does: what is recorded
         // about it stays with it when it is moved.
         const id = this.sharedIds.has(draft.id) ? newDocumentId() : draft.id
-        const updated = updateDocument(draft.filled ?? draft.source, this.values)
+        // A value still only proposed stays in the file as it was, marked; one the person decided loses its mark.
+        const { values, settled } = this.judgment.forSave(this.values)
+        const updated = settleProposed(updateDocument(draft.filled ?? draft.source, values), settled)
         const source = id === draft.id && documentFrontMatter(draft.source).id ? updated : setDocumentId(updated, id)
         // Unless the person was told the file changed outside, an edit made there since it was read is
         // not overwritten unseen — the watch may not have reported it yet, or at all.
@@ -1049,7 +1053,7 @@ export class LlDocuments extends LitElement {
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : (draft.filled ?? draft.source)}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .choices=${guard([this.opened, this.reads], () => this.choices(draft))}
-                .fieldStates=${guard([this.judgment.suggestions, this.judgment.abstained], () => this.judgment.fieldStates())}
+                .fieldStates=${guard([this.judgment.suggestions, this.judgment.abstained, this.judgment.proposed], () => this.judgment.fieldStates())}
                 @focusin=${this.onFormFocus}
                 @formdown-data-update=${(e: CustomEvent<{ formData: Record<string, unknown> }>) => this.onData(e, opened)}
                 @formdown-suggestion-pick=${(e: CustomEvent<{ field: string; value: string }>) => this.accept(e.detail.field, e.detail.value)}

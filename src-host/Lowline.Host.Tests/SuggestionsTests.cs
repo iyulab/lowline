@@ -607,6 +607,15 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task Turning_down_a_value_another_program_proposed_is_no_rejection_of_what_is_suggested_here()
+    {
+        await using var vault = await Selected(new VaultSnapshot([Intake], Confirmed,
+            [Event("2026-09-28T10:00:00.000Z", "문서/2.md", "reject") with { Source = SuggestionSource.Proposed }]));
+
+        Assert.Equal("장비", await SuggestedIn(vault, "문서/2.md"));
+    }
+
+    [Fact]
     public async Task A_later_confirmation_in_the_document_lifts_a_rejection()
     {
         await using var vault = await Selected(new VaultSnapshot([Intake], Confirmed,

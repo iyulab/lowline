@@ -257,11 +257,12 @@ export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
   value: string | null
   /**
-   * `key`: settled alongside a value this document has · `abstain` · `rejected`. Similar documents are never offered
-   * as a suggestion — they are shown, with the values they confirmed, only when the person opens "비슷한 사례".
+   * `key`: settled alongside a value this document has · `abstain` · `rejected` · `proposed`: the value another program
+   * wrote into the document as a suggestion (`lowline.proposed` — the app's own, never the sidecar's). Similar documents
+   * are never offered as a suggestion — they are shown, with the values they confirmed, only when the person opens "비슷한 사례".
    */
-  mode: 'key' | 'abstain' | 'rejected'
-  /** What it rests on: the other field's value (`부서: 영업`). */
+  mode: 'key' | 'abstain' | 'rejected' | 'proposed'
+  /** What it rests on: the other field's value (`부서: 영업`) — or, for a proposed value, who wrote it (empty: unsaid). */
   source: string | null
   /** Why there is none, when `value` is null and the field was asked (`abstain`). */
   reason?: Abstention | null

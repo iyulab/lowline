@@ -156,6 +156,21 @@ export function documentFrontMatter(documentSource: string): {
   }
 }
 
+/**
+ * Takes the marks off `fields` under `lowline.proposed` — values a person has now decided — dropping the key once none
+ * is left. Other keys under `lowline`, and the rest of the file, stay as they are.
+ */
+export function settleProposed(documentSource: string, fields: readonly string[]): string {
+  const lowline = readFrontMatter(documentSource)?.frontMatter.data.lowline
+  if (typeof lowline !== 'object' || lowline === null || Array.isArray(lowline)) return documentSource
+  const { proposed, ...rest } = lowline as Record<string, unknown>
+  if (typeof proposed !== 'object' || proposed === null || Array.isArray(proposed)) return documentSource
+  const left = Object.fromEntries(Object.entries(proposed).filter(([field]) => !fields.includes(field)))
+  if (Object.keys(left).length === Object.keys(proposed).length) return documentSource
+  const next = Object.keys(left).length > 0 ? { ...rest, proposed: left } : rest
+  return updateFrontMatter(documentSource, { lowline: Object.keys(next).length > 0 ? next : undefined })
+}
+
 /** `lowline.proposed` as field → who wrote it: a name that is not text reads as unsaid; anything but a map, as none. */
 function proposedOf(marks: unknown): Record<string, string> | undefined {
   if (typeof marks !== 'object' || marks === null || Array.isArray(marks)) return undefined

@@ -74,7 +74,8 @@ const answers = { ingest, projection, curves: curve, suggestions: suggestion, se
 
 /** The words the UI branches on — every one its types allow, as the compiler holds them to. */
 const words = {
-  mode: { key: true, abstain: true, rejected: true } satisfies Record<Suggestion['mode'], true>,
+  // `proposed` is the app's own — a value read from the document — and never the sidecar's.
+  mode: { key: true, abstain: true, rejected: true } satisfies Record<Exclude<Suggestion['mode'], 'proposed'>, true>,
   reason: { 'no-history': true, 'below-target': true, undecided: true } satisfies Record<Abstention, true>,
   whyNoReplay: { few: true, pending: true, 'below-target': true } satisfies Record<NonNullable<FieldCurve['whyNoReplay']>, true>,
 }

@@ -35,6 +35,13 @@ public static class SuggestionMode
     public const string Rejected = "rejected";
 }
 
+/// <summary>Where a suggestion a person decided came from, as events record it.</summary>
+public static class SuggestionSource
+{
+    /// <summary>A value another program wrote into the document as a suggestion (<see cref="DocumentSnapshot.Proposed"/>).</summary>
+    public const string Proposed = "proposed";
+}
+
 /// <summary>Why a judgment field gets no suggestion — each is said differently, so "none" is never a wrong reason.</summary>
 public static class Abstention
 {
@@ -110,10 +117,12 @@ public sealed class Suggestions
 
     /// <summary>
     /// The document fields whose latest event is a rejection. A later accept or correction in the same
-    /// document means the field was filled in since, and lifts it.
+    /// document means the field was filled in since, and lifts it. Turning down a value another program proposed
+    /// (<see cref="SuggestionSource.Proposed"/>) says nothing about what suggestions here would offer.
     /// </summary>
     private static HashSet<(string, string)> Rejected(IReadOnlyList<SuggestionEvent> events) =>
         events
+            .Where(e => e.Source != SuggestionSource.Proposed)
             .GroupBy(e => (e.Doc, e.Field))
             .Where(g => g.MaxBy(e => e.At, StringComparer.Ordinal)!.Kind == "reject")
             .Select(g => g.Key)

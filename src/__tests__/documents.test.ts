@@ -7,6 +7,7 @@ import {
   fileNameFor,
   documentTitle,
   documentFrontMatter,
+  settleProposed,
   fieldValues,
   newDocument,
   setDocumentId,
@@ -97,6 +98,24 @@ describe('document id', () => {
     const doc = newDocument(template, { title: 'A' }, 'doc-1')
     expect(documentFrontMatter(doc)).toEqual({ template: 'bug-report@1', id: 'doc-1', values: { title: 'A' } })
     expect(documentFrontMatter(updateDocument(doc, { title: 'B' })).id).toBe('doc-1')
+  })
+
+  it('takes the marks off values a person decided, leaving the rest', () => {
+    const doc = '---\ntemplate: bug-report@1\nseverity: high\nowner: 총무\nlowline:\n  id: doc-1\n  proposed:\n    severity: 메일 분류기\n    owner: 메일 분류기\n---\n'
+    const one = settleProposed(doc, ['severity'])
+    expect(documentFrontMatter(one)).toEqual({
+      template: 'bug-report@1',
+      id: 'doc-1',
+      values: { severity: 'high', owner: '총무' },
+      proposed: { owner: '메일 분류기' },
+    })
+    const both = settleProposed(one, ['owner'])
+    expect(documentFrontMatter(both)).not.toHaveProperty('proposed')
+    expect(both).not.toContain('proposed')
+    expect(documentFrontMatter(both).id).toBe('doc-1')
+    expect(settleProposed(doc, ['title'])).toBe(doc)
+    // With nothing else under `lowline`, the key goes with the last mark.
+    expect(settleProposed('---\ntemplate: t@1\na: x\nlowline:\n  proposed:\n    a: p\n---\n', ['a'])).not.toContain('lowline')
   })
 
   it('reads which values another program proposed, and who', () => {

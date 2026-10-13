@@ -40,6 +40,16 @@ export class JudgmentController implements ReactiveController {
   unavailable = false
   /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
   offered = new Map<string, Offer>()
+  /**
+   * Values another program wrote into the open document as suggestions (`lowline.proposed`) that the person has not
+   * decided yet, with who wrote them: the field is shown empty with the value offered in it, and saving leaves the
+   * value and its mark in the file as they were.
+   */
+  proposed = new Map<string, { value: string; by: string }>()
+  /** The fields marked as proposed in the file as it was last read or saved. */
+  private marked: string[] = []
+  /** Proposed values the person turned down: the save takes them out of the document, with their marks. */
+  private cleared = new Set<string>()
   /** For each judgment field, how many settled documents of the template hold a value in it. */
   private learned = new Map<string, number>()
   /** The draft's filled fields in the order they were filled (see `fillOrder`). */
@@ -80,7 +90,46 @@ export class JudgmentController implements ReactiveController {
     this.filled = []
     this.typing = new Set()
     this.rejected = new Set()
+    this.proposed = new Map()
+    this.marked = []
+    this.cleared = new Set()
     this.host.requestUpdate()
+  }
+
+  /**
+   * A document of template `templateRef` is opened with `values`, `proposed` naming those another program wrote as
+   * suggestions: returns the values the form is handed — each proposed one held back, to be offered in its field
+   * instead. Only a single value of text is offered so; any other marked value is shown as it is.
+   */
+  opened(templateRef: string | undefined, values: FieldValues, proposed: Readonly<Record<string, string>> | undefined): FieldValues {
+    const shown = { ...values }
+    const offers = new Map<string, { value: string; by: string }>()
+    for (const [field, by] of Object.entries(proposed ?? {})) {
+      const value = values[field]
+      if (typeof value !== 'string' || !value.trim()) continue
+      offers.set(field, { value, by })
+      delete shown[field]
+    }
+    this.proposed = offers
+    this.marked = Object.keys(proposed ?? {})
+    for (const [field, { value, by }] of offers) {
+      const offer: Offer = { suggestion: { value, mode: 'proposed', source: by }, shown: new Date(), filled: [], typed: 0 }
+      this.offered.set(field, offer)
+      if (templateRef) void vault.recordPresentation(presentation(templateRef, field, offer)).catch(() => {})
+    }
+    this.host.requestUpdate()
+    return shown
+  }
+
+  /**
+   * What saving the form's `values` writes: each value still only proposed left as the file holds it, each one turned
+   * down taken out — and `settled`, the fields whose marks come off, as a person has decided them.
+   */
+  forSave(values: FieldValues): { values: FieldValues; settled: string[] } {
+    const written: FieldValues = {}
+    for (const [field, value] of Object.entries(values)) if (!this.proposed.has(field)) written[field] = value
+    for (const field of this.cleared) written[field] = ''
+    return { values: written, settled: this.marked.filter((f) => !this.proposed.has(f)) }
   }
 
   /**
@@ -124,6 +173,10 @@ export class JudgmentController implements ReactiveController {
    * about with what it holds), one emptied or picked is not; suggestions are asked for again once typing pauses.
    */
   edited(before: FieldValues, values: FieldValues) {
+    // A value of the person's own in a field offered a proposed one decides it.
+    for (const field of [...this.proposed.keys()]) {
+      if (values[field] !== before[field] && !isEmpty(values[field])) this.settle(field)
+    }
     for (const field of this.template?.suggest ?? []) {
       if (values[field] === before[field]) continue
       if (isEmpty(values[field]) || !this.typeable(field)) this.typing.delete(field)
@@ -138,6 +191,7 @@ export class JudgmentController implements ReactiveController {
   take(field: string) {
     this.decided(field)
     this.typing.delete(field)
+    this.settle(field)
     this.dismiss(field)
   }
 
@@ -145,6 +199,8 @@ export class JudgmentController implements ReactiveController {
   reject(field: string) {
     this.decided(field)
     this.rejected.add(field)
+    if (this.proposed.has(field)) this.cleared.add(field)
+    this.settle(field)
     this.dismiss(field)
   }
 
@@ -158,11 +214,17 @@ export class JudgmentController implements ReactiveController {
       for (const event of events) await vault.recordEvent(event)
     }
     this.typing = new Set()
+    // The file holds marks only on the values still proposed.
+    this.marked = [...this.proposed.keys()]
+    this.cleared = new Set()
   }
 
   /** What the form draws by each judgment field: the suggested value to take or decline, or why there is none. */
   fieldStates(): FieldStates {
     const states: FieldStates = {}
+    for (const [field, { value, by }] of this.proposed) {
+      states[field] = { suggestions: [value], note: strings.suggestionProposed(by), decline: strings.reject }
+    }
     for (const [field, s] of this.suggestions) {
       states[field] = { suggestions: [s.value!], note: this.source.sourceOf(s), decline: strings.reject }
     }
@@ -196,6 +258,8 @@ export class JudgmentController implements ReactiveController {
       // is settled, and not asked about.
       const typed = this.typing.has(field) && typeof values[field] === 'string' ? (values[field] as string) : undefined
       if (!isEmpty(values[field]) && typed === undefined) continue
+      // A value another program proposed is offered in the field until the person decides it.
+      if (this.proposed.has(field)) continue
       try {
         const document = this.source.draft()?.id
         const { [field]: _, ...others } = values
@@ -234,6 +298,15 @@ export class JudgmentController implements ReactiveController {
     const value = this.source.values()[field]
     offer.decided = new Date()
     offer.decidedTyped = charactersTyped(typeof value === 'string' ? value : undefined)
+  }
+
+  /** `field`'s proposed value, if any, is decided: it is no longer offered. */
+  private settle(field: string) {
+    if (!this.proposed.has(field)) return
+    const rest = new Map(this.proposed)
+    rest.delete(field)
+    this.proposed = rest
+    this.host.requestUpdate()
   }
 
   private dismiss(field: string) {
