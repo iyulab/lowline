@@ -185,17 +185,17 @@ public sealed class SuggestionsTests
         Assert.NotNull(chosen.Choice);
 
         // Chosen resting on 부서: kept while the template has it.
-        var resting = new Dictionary<(string, string), FieldThreshold> { [("intake@1", "담당")] = chosen with { DependsOn = ["부서"] } };
+        var resting = new Dictionary<(string, string), FieldThreshold> { [("intake@1", "담당")] = chosen with { KeyFields = ["부서"] } };
         var kept = await Suggestions.BuildAsync(Many(15), Ct, kept: resting);
         Assert.False(kept.NeedsSelection);
-        Assert.Equal(["부서"], kept.Thresholds[("intake@1", "담당")].DependsOn);
+        Assert.Equal(["부서"], kept.Thresholds[("intake@1", "담당")].KeyFields);
 
         // Resting on a field since taken out of the template: its strength was chosen on scores that field gave.
-        var gone = new Dictionary<(string, string), FieldThreshold> { [("intake@1", "담당")] = chosen with { DependsOn = ["접수처"] } };
+        var gone = new Dictionary<(string, string), FieldThreshold> { [("intake@1", "담당")] = chosen with { KeyFields = ["접수처"] } };
         var rebuilt = await Suggestions.BuildAsync(Many(15), Ct, kept: gone);
         Assert.True(rebuilt.NeedsSelection);
         Assert.Null(rebuilt.Choice("intake@1", "담당"));
-        Assert.Null(rebuilt.Thresholds[("intake@1", "담당")].DependsOn);
+        Assert.Null(rebuilt.Thresholds[("intake@1", "담당")].KeyFields);
     }
 
     [Fact]
@@ -211,8 +211,8 @@ public sealed class SuggestionsTests
                 [("intake@1", "승인")] = new(choice, 40, 40, choice),
             });
             var loaded = ThresholdStore.Load(file);
-            Assert.Equal(["부서"], loaded[("intake@1", "담당")].DependsOn);
-            Assert.Null(loaded[("intake@1", "승인")].DependsOn);
+            Assert.Equal(["부서"], loaded[("intake@1", "담당")].KeyFields);
+            Assert.Null(loaded[("intake@1", "승인")].KeyFields);
             // And the strengths for typing into it.
             Assert.Equal([choice, null], loaded[("intake@1", "담당")].Typed);
             Assert.Null(loaded[("intake@1", "승인")].Typed);

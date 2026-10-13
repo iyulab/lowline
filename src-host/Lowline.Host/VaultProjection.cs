@@ -379,7 +379,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
                 {
                     Replay = new FieldReplay(
                         choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups,
-                        _suggestions.DependsOn(c.Template, c.Field)),
+                        _suggestions.KeyFields(c.Template, c.Field)),
                 }
                 : c with
                 {

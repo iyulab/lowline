@@ -43,8 +43,8 @@ public sealed record FieldShortfall(double Precision, double AnswerRate, int Ans
 /// of the ones before it, at the strength the replay chose for values settled alongside the observed ones: <see cref="AnswerRate"/> of the lookups
 /// got a suggestion, and <see cref="Precision"/> of those were right. Unlike the curve, which counts only
 /// suggestions that were made, this says how often none was. <see cref="DependsOn"/> names the fields the replay chose
-/// for the field's suggestions to rest on, when resting on them alone was suggested more often at the same precision;
-/// null when every value filled in counts.
+/// for the field's suggestions to rest on — the fields that key it — when resting on them alone was suggested more often
+/// at the same precision; null when every value filled in counts.
 /// </summary>
 public sealed record FieldReplay(
     double Threshold, double Precision, double AnswerRate, int Answered, int Lookups, IReadOnlyList<string>? DependsOn = null);

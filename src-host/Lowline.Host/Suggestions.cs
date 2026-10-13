@@ -182,20 +182,20 @@ public sealed class Suggestions
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
-            // The fields the judgment rests on first — where a few decide a field of many values, the rest only add to
+            // The fields that key the judgment first — where a few decide a field of many values, the rest only add to
             // every value's score — then the strength, replayed with them. A field a person types into is asked again
             // with each character, and the fields that decide it before typing may blur it once a prefix has narrowed its
             // values: its set is counted by the answers before and while typing together, and the strengths for one, two
             // and three characters typed come with it — replayed on the documents the strength before typing did not answer
             // rightly, so each keeps its promise where a person actually types. Null for a field whose value is picked.
             var typeable = Typeable(_templates[template].Fields.First(f => f.Name == field));
-            var resting = ThresholdSelection.SelectDependsOn(
+            var keyed = ThresholdSelection.SelectKeyFields(
                 () => new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered,
                 typedLongest: typeable ? TypedLongest : 0);
-            var key = resting.Chosen;
+            var key = keyed.Chosen;
             chosen[(template, field)] = new FieldThreshold(
                 key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
-                resting.DependsOn, resting.Typed?.ByLength.Select(r => r.Chosen).ToList());
+                keyed.KeyFields, keyed.Typed?.ByLength.Select(r => r.Chosen).ToList());
         }
         return chosen;
     }
@@ -236,9 +236,9 @@ public sealed class Suggestions
     public IReadOnlyList<ThresholdChoice?>? Typed(string template, string field) =>
         _thresholds.GetValueOrDefault((template, field)) is { SelectedAt: not null, Typed: { } typed } ? typed : null;
 
-    /// <summary>The fields the replay chose for a judgment field to rest on; null when every value filled in counts.</summary>
-    public IReadOnlyList<string>? DependsOn(string template, string field) =>
-        _thresholds.GetValueOrDefault((template, field))?.DependsOn;
+    /// <summary>The fields the replay chose to key a judgment field; null when every value filled in counts.</summary>
+    public IReadOnlyList<string>? KeyFields(string template, string field) =>
+        _thresholds.GetValueOrDefault((template, field))?.KeyFields;
 
     /// <summary>
     /// For a field whose replay chose no strength, the closest it came: the most precise strength that still gathered
@@ -265,15 +265,16 @@ public sealed class Suggestions
         var judged = template.Suggest ?? [];
         if (!template.Fields.Any(f => judged.Contains(f.Name))) return null;
         // A judgment rests on the other values the document holds — the observed ones, and judgments the person has
-        // already confirmed in it, which often say the most about the rest — or on the few of them its replay chose
-        // (DependsOn). A suggestion shown and not taken is no value.
+        // already confirmed in it, which often say the most about the rest. Its key layer may count only the few of them
+        // its replay chose (KeyFields); the similar document layer still sees them all. A suggestion shown and not taken
+        // is no value.
         // A document does not record the order its values came in, so the replay takes the judged ones as confirmed in
         // the form's order: for one confirmed out of that order it counts on more than its suggestion had.
         var fields = template.Fields.Select(f => judged.Contains(f.Name)
             ? new FieldDefinition(f.Name, FieldRole.Judged)
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
-                DependsOn = threshold(f.Name).DependsOn,
+                KeyFields = threshold(f.Name).KeyFields,
                 TypedKeyThresholds = threshold(f.Name).Typed?.Select(c => c?.Threshold).ToList(),
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
@@ -316,12 +317,9 @@ public sealed class Suggestions
         var typing = !string.IsNullOrEmpty(request.Typed);
         if (typing && !Typeable(_templates[request.Template].Fields.First(f => f.Name == request.Field)))
             return Abstain(request.Template, request.Field);
-        var asked = typing
-            ? await _resolver.SuggestAsync(
-                form, request.Document ?? Unsaved, held, new Dictionary<string, IReadOnlyList<string>>(),
-                new Dictionary<string, string> { [request.Field] = request.Typed! }, cancellationToken)
-            : await _resolver.SuggestAsync(form, request.Document ?? Unsaved, held, cancellationToken);
-        var suggestion = asked.SingleOrDefault(s => s.Field == request.Field);
+        // Only the field asked about: typing into it changes no other field's suggestion.
+        var suggestion = await _resolver.SuggestAsync(
+            form, request.Document ?? Unsaved, request.Field, held, sets: null, typing ? request.Typed : null, cancellationToken);
 
         // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
         if (suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SettledFieldMemory } answer, ..] })
@@ -373,8 +371,8 @@ public sealed class Suggestions
 /// <see cref="Closest"/> is the strength that came closest to the target, chosen or not.
 /// </summary>
 /// <param name="Domain">The choices the field had when its threshold was chosen; null for a field whose value is open.</param>
-/// <param name="DependsOn">
-/// The fields the replay chose for the judgment to rest on, the strength chosen with them; null for every other field.
+/// <param name="KeyFields">
+/// The fields the replay chose to key the judgment, the strength chosen with them; null for every other field.
 /// </param>
 /// <param name="Typed">
 /// How the field's replay did with one, two, three characters typed, and the strength chosen for each (null where none was
@@ -382,14 +380,14 @@ public sealed class Suggestions
 /// </param>
 public sealed record FieldThreshold(
     ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
-    IReadOnlyList<string>? DependsOn = null, IReadOnlyList<ThresholdChoice?>? Typed = null)
+    IReadOnlyList<string>? KeyFields = null, IReadOnlyList<ThresholdChoice?>? Typed = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>
         Domain is null ? domain is null : domain is not null && Domain.SequenceEqual(domain, StringComparer.Ordinal);
 
-    /// <summary>Whether every field it rests on is one of <paramref name="fields"/>.</summary>
-    public bool RestsWithin(IReadOnlyCollection<string> fields) => (DependsOn ?? []).All(fields.Contains);
+    /// <summary>Whether every field that keys it is one of <paramref name="fields"/>.</summary>
+    public bool RestsWithin(IReadOnlyCollection<string> fields) => (KeyFields ?? []).All(fields.Contains);
 
     /// <summary>The strength the field's values settled alongside answer at; none — nothing is offered — until one has been chosen.</summary>
     public double? KeyThreshold => Choice?.Threshold;
