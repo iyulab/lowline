@@ -107,4 +107,24 @@ describe('charactersTyped', () => {
     expect(event.typed).toBe(2)
     expect(presentation('intake@1', '담당', typed).typed).toBe(2)
   })
+
+  it('says what was in the field when a suggestion was taken or rejected, and nothing when it was neither', () => {
+    const decided = new Date('2026-09-28T11:59:30Z')
+    const taken: Offer = { ...offer('박영희', decided), decidedTyped: 2 }
+    const declined: Offer = { ...offer('장비', decided), decidedTyped: 1 }
+    const changed: Offer = offer('최민수')
+    const events = suggestionEvents(
+      new Map([['담당', taken], ['분류', declined], ['처리', changed]]),
+      new Set(['분류']),
+      { 담당: '박영희', 처리: '김철수' },
+      'd',
+      at,
+    )
+    expect(events.map((e) => [e.field, e.kind, e.typed, e.decidedTyped])).toEqual([
+      ['담당', 'accept', 0, 2],
+      ['분류', 'reject', 0, 1],
+      ['처리', 'correct', 0, undefined],
+    ])
+    expect('decidedTyped' in events[2]).toBe(false)
+  })
 })

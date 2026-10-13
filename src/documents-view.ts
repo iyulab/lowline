@@ -565,9 +565,13 @@ export class LlDocuments extends LitElement {
     this.dismiss(field)
   }
 
+  /** Notes when a suggestion was taken or rejected, and what was in its field then — before taking it changes that. */
   private decided(field: string) {
     const offer = this.offered.get(field)
-    if (offer) offer.decided = new Date()
+    if (!offer) return
+    const value = this.values[field]
+    offer.decided = new Date()
+    offer.decidedTyped = charactersTyped(typeof value === 'string' ? value : undefined)
   }
 
   /** The form's values, and the order its fields were filled in. */

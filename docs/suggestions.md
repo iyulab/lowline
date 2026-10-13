@@ -22,7 +22,7 @@ A judgment field left without a suggestion says why beside it: nothing confirmed
 
 ## The record of what happened
 
-When a document is saved, what happened to each suggestion — accepted, corrected or rejected — is appended to `.lowline/events/<device>.jsonl` in the vault, one file per install, with the template's version, the fields already filled when it was made (names only, in the order they were filled), how many characters had been typed in the field when the suggestion was first shown, and when it was shown and taken or rejected. Suggestions read these files back: a field whose suggestion was last rejected in a document is not suggested in that document again, even after it is reopened.
+When a document is saved, what happened to each suggestion — accepted, corrected or rejected — is appended to `.lowline/events/<device>.jsonl` in the vault, one file per install, with the template's version, the fields already filled when it was made (names only, in the order they were filled), how many characters had been typed in the field when the suggestion was first shown, and when it was shown and taken or rejected — with how many characters were in the field at that moment. Suggestions read these files back: a field whose suggestion was last rejected in a document is not suggested in that document again, even after it is reopened.
 
 An event records the template version it was made under; it counts for the template of that id as the template is now.
 

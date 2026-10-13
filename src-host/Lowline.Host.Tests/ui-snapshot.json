@@ -94,7 +94,8 @@
       ],
       "shownAt": "2026-10-03T00:00:00.000Z",
       "decidedAt": "2026-10-03T00:00:05.000Z",
-      "typed": 0
+      "typed": 0,
+      "decidedTyped": 0
     }
   ]
 }

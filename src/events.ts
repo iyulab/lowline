@@ -43,6 +43,11 @@ export interface SuggestionEvent {
    * typing and taken after counts 0. Absent in events from before it was recorded: not known, not 0.
    */
   typed?: number
+  /**
+   * How many characters were in the field when the suggestion was taken or rejected — with `decidedAt`, absent
+   * without it. A value shown before typing and taken after two characters has `typed` 0 and `decidedTyped` 2.
+   */
+  decidedTyped?: number
 }
 
 /** A suggestion as it was shown in a draft, and what the person did with it before saving. */
@@ -54,6 +59,8 @@ export interface Offer {
   /** See {@link SuggestionEvent.typed}. */
   typed: number
   decided?: Date
+  /** See {@link SuggestionEvent.decidedTyped}; set with `decided`. */
+  decidedTyped?: number
 }
 
 /** The characters in `text` as a person counts them — a Hangul syllable is one; none when nothing was typed. */
@@ -93,7 +100,7 @@ export function suggestionEvents(
   template?: string,
 ): SuggestionEvent[] {
   const events: SuggestionEvent[] = []
-  for (const [field, { suggestion, shown, filled, typed, decided }] of offered) {
+  for (const [field, { suggestion, shown, filled, typed, decided, decidedTyped }] of offered) {
     if (suggestion.value === null) continue
     const value = saved[field]
     let kind: EventKind | undefined
@@ -116,6 +123,7 @@ export function suggestionEvents(
       shownAt: shown.toISOString(),
       ...(decided ? { decidedAt: decided.toISOString() } : {}),
       typed,
+      ...(decided && decidedTyped !== undefined ? { decidedTyped } : {}),
     })
   }
   return events
