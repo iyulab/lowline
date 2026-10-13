@@ -1,6 +1,6 @@
 // The app's window, driven over CDP: launching the e2e build, opening a vault, clicking and typing
-// the way a person does, and ending it the hard way. The scenarios in run.mjs use it; so can a
-// one-off script that walks a flow and takes pictures:
+// the way a person does, and ending it the hard way. The scenarios (run.mjs, one file per area in
+// scenarios/) use it; so can a one-off script that walks a flow and takes pictures:
 //
 //   import { App, screenshot } from '<lowline>/e2e/app.mjs'
 //   const app = await App.launch()
