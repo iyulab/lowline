@@ -2303,6 +2303,46 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
     await app.cdp.waitFor(`!${sidebar}.hasAttribute('collapsed')`, 'the sidebar whole again')
     await app.noAlert()
   },
+  async 'starts the sidecar again when it ends during the session, and suggests again without the person doing anything'(app, vault) {
+    const suggestion = `__e2e.one('[data-formdown-note="담당"] .formdown-suggestion')?.textContent`
+    await app.newDocument(INTAKE)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.fill('[data-field-name="요청"]', '프린터 토너가 없어요')
+    await app.choose('select[name="부서"]', '영업')
+    await app.cdp.waitFor(`${suggestion} === '장비'`, 'a suggestion for 담당', { timeoutMs: 15_000 })
+
+    // The sidecar ends — killed, as a crash would end it.
+    const { execFileSync } = await import('node:child_process')
+    const sidecar = (verb) =>
+      execFileSync('powershell', [
+        '-NoProfile',
+        '-Command',
+        `Get-CimInstance Win32_Process -Filter "Name='Lowline.Host.exe' AND ParentProcessId=${app.child.pid}" | ForEach-Object { ${verb} }`,
+      ], { encoding: 'utf8' }).trim()
+    const first = sidecar('$_.ProcessId')
+    assert.match(first, /^\d+$/, 'one sidecar of this app')
+    sidecar('Stop-Process -Id $_.ProcessId -Force')
+
+    // The next question finds it gone; it starts again, the vault is handed over again, and the same value is
+    // suggested once more — the person only goes on filling in.
+    await app.choose('select[name="부서"]', '개발')
+    await app.choose('select[name="부서"]', '영업')
+    await app.cdp.waitFor(
+      `(async () => (await window.__TAURI_INTERNALS__.invoke('host_status')).state === 'ready')()`,
+      'the sidecar ready again',
+      { timeoutMs: 60_000 },
+    )
+    await app.choose('select[name="부서"]', '개발')
+    await app.choose('select[name="부서"]', '영업')
+    await app.cdp.waitFor(`${suggestion} === '장비'`, 'a suggestion for 담당 from the sidecar started again', { timeoutMs: 60_000 })
+    const second = sidecar('$_.ProcessId')
+    assert.match(second, /^\d+$/, 'one sidecar of this app again')
+    assert.notEqual(second, first, 'a sidecar started again')
+
+    // Leave the vault as it was.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+  },
 
   // With LOWLINE_PERF=1: what reading one file through the shell costs, the step a full read of
   // the vault repeats once per document.

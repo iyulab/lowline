@@ -7,7 +7,7 @@ import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type Templat
 import { ReadCache } from './read-cache.js'
 import { SharedRun } from './shared-run.js'
 import type { TemplateItem } from './template-scope.js'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { host, onVaultChanged as onShellChange, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -27,12 +27,19 @@ const reads = [templateReads, documentReads, eventReads]
 
 const listeners = new Set<(change: VaultChanged) => void>()
 let watching: Promise<UnlistenFn> | undefined
+let restarted: Promise<UnlistenFn> | undefined
 
 /**
  * Hears changes outside the app from the shell — once, for everyone: what was read of a change is
  * forgotten before anyone is told of it, which the shell's own order of handlers would not promise.
  */
 function watch(): Promise<UnlistenFn> {
+  // A sidecar started again after it ended holds nothing of the vault: every view hands it over again, as on
+  // a change that touched no file.
+  void (restarted ??= listen('host-restarted', () => {
+    shared.invalidate()
+    for (const listener of [...listeners]) listener({ rescan: false, written: [], removed: [] })
+  }))
   return (watching ??= onShellChange((change) => {
     forget(change)
     for (const listener of [...listeners]) listener(change)

@@ -650,6 +650,17 @@ fn encode_segment(s: &str) -> String {
 
 /// Starts the sidecar off the main thread, so the window opens while it starts.
 fn start_host(app: &tauri::AppHandle) {
+    let launcher = app.clone();
+    app.state::<HostState>()
+        .launch_with(move |again| launch_host(&launcher, again));
+}
+
+/// Starts the sidecar in the background. Started `again` after it ended, it is told to the UI once it is
+/// ready: it has nothing of the vault, which the UI hands it again.
+fn launch_host(app: &tauri::AppHandle, again: bool) {
+    if again {
+        report(report::new(report::Layer::Host, "HostEnded", ""));
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         let result = (|| {
@@ -671,9 +682,16 @@ fn start_host(app: &tauri::AppHandle) {
             // Why it failed is a message, and messages do not leave the device: the kind says enough.
             report(report::new(report::Layer::Host, "HostStartFailed", ""));
         }
+        let ready = result.is_ok();
         app.state::<HostState>().set(result);
+        if again && ready {
+            let _ = app.emit(HOST_RESTARTED, ());
+        }
     });
 }
+
+/// What the UI is told when the sidecar is back after it ended.
+const HOST_RESTARTED: &str = "host-restarted";
 
 /// This launch's error reports. Set once the log folder is known; a failure before that is not
 /// reported.
