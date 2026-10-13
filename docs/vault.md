@@ -53,7 +53,7 @@ lowline:
 ---
 ```
 
-What is recorded about a document — its suggestion events, the rejections that hold in it, what suggestions learn from it — is keyed by that id, so it stays with the document when its file is renamed or moved. A document without one — written before documents had ids, or by another tool — is known by its path, the key its earlier events were recorded under; the app does not add ids to files nobody asked it to save.
+What is recorded about a document — its suggestion events, the rejections that hold in it, what suggestions learn from it — is keyed by that id, so it stays with the document when its file is renamed or moved. A document without one — written before documents had ids, or by another tool — is known by its path, the key its earlier events were recorded under. Saving or renaming it gives it that path as its id, so it stays with the document when the file is later moved; the app does not add ids to files nobody asked it to save.
 
 - A new document is named by its day and its first value. A new document or template never replaces a file: when its name is taken it gets a number, `2026-10-03-문의 (1).md`, `새 서식 (1).fd.md` — before the template ending, so it is still a template.
 - Renaming a document renames its file within its folder — never over another file — and a document known by its path is given that path as its id first. A template is renamed the same way on its page; documents name their template by its id, so they stay with it.

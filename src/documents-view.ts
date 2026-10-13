@@ -715,10 +715,12 @@ export class LlDocuments extends LitElement {
     this.message = '' // "saved" is said again only once this save has landed
     try {
       if (draft.kind === 'existing') {
-        // A copy saved with a change is a document of its own from now on.
+        // A copy saved with a change is a document of its own from now on. One known by its path — written by another
+        // program, or before documents had ids — is given that path as its id, as renaming does: what is recorded
+        // about it stays with it when it is moved.
         const id = this.sharedIds.has(draft.id) ? newDocumentId() : draft.id
         const updated = updateDocument(draft.filled ?? draft.source, this.values)
-        const source = id === draft.id ? updated : setDocumentId(updated, id)
+        const source = id === draft.id && documentFrontMatter(draft.source).id ? updated : setDocumentId(updated, id)
         // Unless the person was told the file changed outside, an edit made there since it was read is
         // not overwritten unseen — the watch may not have reported it yet, or at all.
         try {

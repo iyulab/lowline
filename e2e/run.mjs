@@ -889,6 +889,8 @@ const scenarios = {
     await app.cdp.press('Enter', { code: 'Enter', modifiers: 2, keyCode: 13 })
     await app.cdp.waitFor(`${openName} !== undefined && !${openName}.startsWith('확인할 기록-1')`, 'the next unsettled document open', { timeoutMs: 15_000 })
     assert.equal((await fileValues(written[0])).담당, '장비', 'saved')
+    // Written without an id, it is given its path as one when saved: what is recorded about it follows it if moved.
+    assert.deepEqual((await fileValues(written[0])).lowline, { id: '문서/확인할 기록-1.md' })
     await app.cdp.waitFor(`${listedCount} === ${unsettled - 1}`, 'the saved document gone from the unsettled list', { timeoutMs: 15_000 })
     assert.ok(await app.cdp.evaluate(`__e2e.all('dc-checkbox').some((c) => c.textContent.trim() === '미확정만 (${unsettled - 1})')`))
     await app.noAlert()
