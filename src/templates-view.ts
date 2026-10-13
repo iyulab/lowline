@@ -12,6 +12,7 @@ import './keep-copy-control.js'
 import { conflictNoticeFor, conflictOf, isCopy } from './conflicts.js'
 import { describeError } from './errors.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
+import { deleteFile, keepConflictCopy } from './file-lifecycle.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { failureKind, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -351,10 +352,7 @@ export class LlTemplates extends LitElement {
     if (to === from) return
     this.error = ''
     this.message = ''
-    if (this.dirty) {
-      await this.save()
-      if (this.dirty) return // not saved: the error says why
-    }
+    if (!(await this.savedFirst())) return
     try {
       await vault.rename(from, to)
       this.selected = to // the app lists it under its new name and hands it back: nothing to read again
@@ -376,12 +374,10 @@ export class LlTemplates extends LitElement {
     this.untrashable = false
     this.error = ''
     this.message = ''
-    try {
-      if (permanently) await vault.remove(path)
-      else await vault.trash(path)
-    } catch (e) {
-      if (!permanently && failureKind(e) === 'not-trashed') this.untrashable = true
-      else this.error = describeError(e)
+    const deletion = await deleteFile(path, permanently)
+    if (deletion !== 'deleted') {
+      if (deletion === 'untrashable') this.untrashable = true
+      else this.error = deletion.error
       return
     }
     this.dirty = false // what was on screen went with the file, as the question said
@@ -416,24 +412,16 @@ export class LlTemplates extends LitElement {
     this.originalUntrashable = false
     this.error = ''
     this.message = ''
-    if (this.dirty) {
-      await this.save()
-      if (this.dirty) return // not saved: the error says why
-    }
-    try {
-      if (permanently) await vault.remove(original)
-      else await vault.trash(original)
-    } catch (e) {
-      if (!permanently && failureKind(e) === 'not-trashed') this.originalUntrashable = true
-      else this.error = describeError(e)
+    if (!(await this.savedFirst())) return
+    const kept = await keepConflictCopy(copy, original, permanently)
+    if (kept === 'untrashable') {
+      this.originalUntrashable = true
       return
     }
-    try {
-      await vault.rename(copy, original)
-    } catch (e) {
-      // The original is gone as asked; the copy stays under its own name, still a copy.
-      await this.refresh()
-      this.error = failureKind(e) === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
+    if (kept !== 'kept') {
+      // Once the original is gone as asked, the copy stays under its own name, still a copy: the list shows it so.
+      if (kept.originalGone) await this.refresh()
+      this.error = kept.error
       return
     }
     await this.refresh()
@@ -444,6 +432,12 @@ export class LlTemplates extends LitElement {
       return
     }
     this.message = strings.keptCopy(permanently)
+  }
+
+  /** Saves unsaved edits to the open template first; false when they could not be saved — the error says why. */
+  private async savedFirst(): Promise<boolean> {
+    if (this.dirty) await this.save()
+    return !this.dirty
   }
 
   /** Shows a conflict copy of the open template, once unsaved edits to it are let go. */

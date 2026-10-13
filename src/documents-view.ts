@@ -37,6 +37,7 @@ import { createDocumentFile } from './document-files.js'
 import { conflictLabels, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
 import { found, matchingLine, shownName, type Found } from './cases.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
+import { deleteFile, keepConflictCopy } from './file-lifecycle.js'
 import './import-view.js'
 import './rename-control.js'
 import './delete-control.js'
@@ -699,10 +700,7 @@ export class LlDocuments extends LitElement {
    * stay, its body becomes the revision's (`reviseDocument`). Unsaved edits are saved first.
    */
   private readonly reviseDocument = async () => {
-    if (this.dirty) {
-      await this.save()
-      if (this.dirty) return // not saved: the error says why
-    }
+    if (!(await this.savedFirst())) return
     const draft = this.draft
     if (draft?.kind !== 'existing' || !this.scope) return
     this.error = ''
@@ -786,10 +784,7 @@ export class LlDocuments extends LitElement {
     if (to === from) return
     this.error = ''
     this.message = ''
-    if (this.dirty) {
-      await this.save()
-      if (this.dirty) return // not saved: the error says why
-    }
+    if (!(await this.savedFirst())) return
     const draft = this.draft
     if (draft?.kind !== 'existing') return
     try {
@@ -826,12 +821,10 @@ export class LlDocuments extends LitElement {
     this.untrashable = false
     this.error = ''
     this.message = ''
-    try {
-      if (permanently) await vault.remove(draft.path)
-      else await vault.trash(draft.path)
-    } catch (e) {
-      if (!permanently && failureKind(e) === 'not-trashed') this.untrashable = true
-      else this.error = describeError(e)
+    const deletion = await deleteFile(draft.path, permanently)
+    if (deletion !== 'deleted') {
+      if (deletion === 'untrashable') this.untrashable = true
+      else this.error = deletion.error
       return
     }
     if (conflict !== undefined && 'copyOf' in conflict) {
@@ -863,29 +856,27 @@ export class LlDocuments extends LitElement {
     this.originalUntrashable = false
     this.error = ''
     this.message = ''
-    if (this.dirty) {
-      await this.save()
-      if (this.dirty) return // not saved: the error says why
-    }
-    try {
-      if (permanently) await vault.remove(original)
-      else await vault.trash(original)
-    } catch (e) {
-      if (!permanently && failureKind(e) === 'not-trashed') this.originalUntrashable = true
-      else this.error = describeError(e)
+    if (!(await this.savedFirst())) return
+    const kept = await keepConflictCopy(draft.path, original, permanently)
+    if (kept === 'untrashable') {
+      this.originalUntrashable = true
       return
     }
-    try {
-      await vault.rename(draft.path, original)
-    } catch (e) {
-      // The original is gone as asked; the copy stays under its own name, still a copy.
-      await this.refresh()
-      this.error = failureKind(e) === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
+    if (kept !== 'kept') {
+      // Once the original is gone as asked, the copy stays under its own name, still a copy: the list shows it so.
+      if (kept.originalGone) await this.refresh()
+      this.error = kept.error
       return
     }
     await this.refresh()
     await this.open(original)
     this.message = strings.keptCopy(permanently)
+  }
+
+  /** Saves unsaved edits to the open document first; false when they could not be saved — the error says why. */
+  private async savedFirst(): Promise<boolean> {
+    if (this.dirty) await this.save()
+    return !this.dirty
   }
 
   /** Creates the document under a free name; never replaces an existing file. */
@@ -1018,10 +1009,7 @@ export class LlDocuments extends LitElement {
    */
   async saveAndNext() {
     if (!this.draft) return
-    if (this.dirty) {
-      await this.save()
-      if (this.dirty) return // not saved: the error says why
-    }
+    if (!(await this.savedFirst())) return
     const at = this.draft?.kind === 'existing' ? this.draft.path : undefined
     const unsettled = this.unsettled()
     const order = found(this.documents, this.nameFilter, this.valueHits).map((l) => l.entry.path)
