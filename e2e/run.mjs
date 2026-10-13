@@ -1663,31 +1663,39 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '경계 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
-  async 'keeps the window on the app when a link in a template body is clicked, with what was typed'(app, vault) {
+  async 'opens a link in a template body outside the window, keeping the window on the app with what was typed'(app, vault) {
     const GUIDE = { name: '안내 링크', ref: 'guide@1', path: '서식/안내 링크.fd.md' }
     const file = join(vault, GUIDE.path)
     await writeFile(
       file,
-      '---\nid: guide\nversion: 1\n---\n# 안내\n\n작성 전에 [사내 규정](https://example.com/) 을 확인하세요.\n\n<a href="https://example.org/" target="_blank">새 창 안내</a>\n\n요청: ___@요청\n',
+      '---\nid: guide\nversion: 1\n---\n# 안내\n\n작성 전에 [사내 규정](https://example.com/) 을 확인하세요.\n\n<a href="https://example.org/" target="_blank">새 창 안내</a> · [담당자](mailto:desk@example.com) · <a href="file:///C:/Windows/notepad.exe">프로그램</a>\n\n요청: ___@요청\n',
     )
     await app.newDocument(GUIDE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form', { timeoutMs: 30_000 })
     await app.fill('[data-field-name="요청"]', '저장 안 한 입력')
     const page = await app.cdp.evaluate('location.href')
+    const told = (address) =>
+      app.cdp.waitFor(`__e2e.all('p.notice').map((p) => p.textContent.trim()).find((t) => t.includes(${JSON.stringify(address)}))`, `what became of ${address}`)
+    const stays = async (what) => {
+      assert.equal(await app.cdp.evaluate('location.href'), page, `${what}: the window stays on the app`)
+      assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]').textContent`), '저장 안 한 입력', `${what}: what was typed stays`)
+    }
 
-    for (const [link, address] of [
-      ['사내 규정', 'https://example.com/'],
-      ['새 창 안내', 'https://example.org/'],
+    // The web and mail open in the system's own app (an e2e build only says so); anything else is not opened.
+    for (const [link, address, saying] of [
+      ['사내 규정', 'https://example.com/', /^브라우저에서 열었습니다: /],
+      ['새 창 안내', 'https://example.org/', /^브라우저에서 열었습니다: /],
+      ['담당자', 'mailto:desk@example.com', /^브라우저에서 열었습니다: /],
+      ['프로그램', 'file:///C:/Windows/notepad.exe', /^웹 주소와 메일 링크만 엽니다\./],
     ]) {
       await app.click('a', link)
-      const said = await app.cdp.waitFor(
-        `__e2e.all('p.notice').map((p) => p.textContent.trim()).find((t) => t.includes(${JSON.stringify(address)}))`,
-        `the refused address ${address}`,
-      )
-      assert.match(said, /^링크는 Lowline 창에서 열지 않습니다\./)
-      assert.equal(await app.cdp.evaluate('location.href'), page, `${link}: the window stays on the app`)
-      assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]').textContent`), '저장 안 한 입력', `${link}: what was typed stays`)
+      assert.match(await told(address), saying)
+      await stays(link)
     }
+    // Leaving the app another way than by a click is still refused by the window, and said.
+    await app.cdp.evaluate(`location.href = 'https://example.net/'`)
+    assert.match(await told('https://example.net/'), /^링크는 Lowline 창에서 열지 않습니다\./)
+    await stays('a page going elsewhere by itself')
 
     // Leave the vault as the scenarios after this one expect it.
     await app.learning()

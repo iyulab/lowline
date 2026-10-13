@@ -5,7 +5,8 @@
 //! inside the app's window, it would replace the app — and whatever was typed and not yet saved —
 //! with a page the window has no way back from. So the window refuses to leave the app's pages and
 //! to open windows of its own, and tells the screen what it refused, so the person is not left
-//! with a click that did nothing.
+//! with a click that did nothing. A link the person clicks is opened outside instead — in the
+//! system's browser or mail app — when it is to the web or to mail ([`opens_outside`]).
 
 use tauri::{AppHandle, Emitter, Url};
 
@@ -25,6 +26,13 @@ pub fn is_app_page(to: &Url, dev_url: Option<&Url>) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether a link to `to` may be opened in the system's own app for it: the web and mail. A link
+/// to anything else — a file, a program, another app's scheme — is not opened from a body someone
+/// else wrote.
+pub fn opens_outside(to: &Url) -> bool {
+    matches!(to.scheme(), "http" | "https" | "mailto")
 }
 
 /// Lets the window go to `to` when it is one of the app's own pages; otherwise refuses and tells
@@ -80,6 +88,27 @@ mod tests {
             "about:blank",
         ] {
             assert!(!is_app_page(&url(to), None), "{to}");
+        }
+    }
+
+    #[test]
+    fn only_the_web_and_mail_are_opened_outside() {
+        for to in [
+            "https://example.com/",
+            "http://example.com/a?b=c",
+            "mailto:someone@example.com",
+        ] {
+            assert!(opens_outside(&url(to)), "{to}");
+        }
+        for to in [
+            "file:///C:/Windows/notepad.exe",
+            "javascript:alert(1)",
+            "data:text/html,<p>x</p>",
+            "ms-settings:privacy",
+            "tauri://localhost/",
+            "about:blank",
+        ] {
+            assert!(!opens_outside(&url(to)), "{to}");
         }
     }
 }

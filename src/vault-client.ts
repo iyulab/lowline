@@ -151,6 +151,17 @@ export function onHostRestarted(onRestarted: () => void): Promise<UnlistenFn> {
   return listen('host-restarted', () => onRestarted())
 }
 
+/** Calls `onRefused` with each address the window refused to go to or to open a window for. */
+export function onNavigationRefused(onRefused: (address: string) => void): Promise<UnlistenFn> {
+  return listen<string>('navigation-refused', (e) => onRefused(e.payload))
+}
+
+/**
+ * Opens a link the person clicked in the system's browser or mail app. Resolves to false for a link to anything but
+ * the web or mail, which is not opened.
+ */
+export const openLink = (address: string) => invoke<boolean>('open_link', { url: address })
+
 /**
  * Whether a change removed `path`. When changes were lost there is no list of removals, so the
  * vault's listing as it is now — `listed`, read after the change — decides.

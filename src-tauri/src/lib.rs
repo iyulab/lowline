@@ -743,6 +743,26 @@ fn report_error(kind: String, stack: String) {
 
 /// Starts writing error reports, and reports a panic of the shell — to disk only, from the panic
 /// itself: a panicking process is no place to send anything.
+/// Opens a link the person clicked in a template or document body in the system's own app for it
+/// — the browser, the mail app — and says whether it did: a link to anything but the web or mail
+/// is not opened (see [`navigation::opens_outside`]). An e2e build, which must not open a browser
+/// on the machine it runs on, says it did without opening anything.
+#[tauri::command]
+fn open_link(app: AppHandle, url: String) -> Result<bool, String> {
+    let to = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+    if !navigation::opens_outside(&to) {
+        return Ok(false);
+    }
+    if app.config().identifier.ends_with(".e2e") {
+        return Ok(true);
+    }
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(to.as_str(), None::<&str>)
+        .map(|()| true)
+        .map_err(|e| e.to_string())
+}
+
 /// Opens the app's window as configured, kept to the app's own pages (see [`navigation`]).
 fn open_window(app: &AppHandle) -> tauri::Result<()> {
     let config = app
@@ -800,6 +820,14 @@ fn start_reports(app: &tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // The page decides which clicks open a link (`open_link`); the plugin's own script, which takes
+        // clicks on links that open a new window, is left out — it would ask for a permission the page
+        // does not have, and the link would open nowhere.
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(update::UpdateState::default())
@@ -811,6 +839,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            open_link,
             open_vault,
             resume_vault,
             write_session,

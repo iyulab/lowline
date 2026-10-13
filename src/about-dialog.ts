@@ -99,7 +99,7 @@ export class LlAbout extends LitElement {
       <h2>${strings.appName}</h2>
       <p class="muted">${this.version ? strings.aboutVersion(this.version) : nothing} · ${strings.aboutCopyright}</p>
       <p>${strings.aboutLicense}</p>
-      <p>${strings.aboutSource}: <span class="source">${strings.aboutSourceUrl}</span></p>
+      <p>${strings.aboutSource}: <a class="source" href=${strings.aboutSourceUrl}>${strings.aboutSourceUrl}</a></p>
       ${this.settings
         ? html`<p>
             <dc-checkbox

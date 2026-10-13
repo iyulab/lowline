@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DpSidebarActionEvent, DpSidebarActivateEvent, DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
 import { desktopMinWidth } from '@iyulab/desktop-patterns/breakpoints'
 import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import type { UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { createSampleTemplate, createTemplateFile } from './document-files.js'
 import type { LlMark } from './brand/mark.js'
@@ -14,7 +14,7 @@ import { describeError } from './errors.js'
 import { referenceTargets } from './projection.js'
 import { strings } from './strings.js'
 import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesAfterRead, type Place, type TemplateItem } from './template-scope.js'
-import { onWritten, vault, type VaultInfo } from './vault-client.js'
+import { onNavigationRefused, onWritten, openLink, vault, type VaultInfo } from './vault-client.js'
 import { openVault, readVault, resumeVault, onVaultChanged } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
 import { DEFAULT_SETTINGS, UpdateWatch, settings as deviceSettings, update, type AvailableUpdate, type Settings } from './updates.js'
@@ -230,14 +230,41 @@ export class LlApp extends LitElement {
     })
     onWritten.add(this.onTemplateWritten)
     this.unlisten = onVaultChanged(() => void this.refreshPlaces())
-    // A link in a template or document body is not followed inside the window (the shell refuses it):
-    // the person is told so, with the address, rather than left with a click that did nothing.
-    this.unlistenRefused = listen<string>('navigation-refused', (e) => (this.notice = strings.linkNotFollowed(e.payload)))
+    // A link the person clicks opens outside the window, in the system's browser or mail app.
+    window.addEventListener('click', this.onLinkClick)
+    // The window itself never leaves the app (the shell refuses it) — a link opened another way than by
+    // a click, a new window: the person is told so, with the address, rather than left with nothing.
+    this.unlistenRefused = onNavigationRefused((address) => (this.notice = strings.linkNotFollowed(address)))
+  }
+
+  /**
+   * A click on a link to anywhere but the app's own pages — in a template's instructions, a document's body —
+   * opens it outside the window when it is to the web or to mail, and says which. The window stays where it was,
+   * with whatever was typed.
+   */
+  private readonly onLinkClick = (e: MouseEvent) => {
+    if (e.defaultPrevented || e.button !== 0) return
+    const link = e.composedPath().find((n): n is HTMLAnchorElement => n instanceof HTMLAnchorElement && n.hasAttribute('href'))
+    if (!link) return
+    let to: URL
+    try {
+      to = new URL(link.href)
+    } catch {
+      return
+    }
+    if (to.origin === location.origin) return
+    e.preventDefault()
+    const address = to.href
+    openLink(address).then(
+      (opened) => (this.notice = opened ? strings.linkOpened(address) : strings.linkNotWeb(address)),
+      () => (this.notice = strings.linkNotOpened(address)),
+    )
   }
 
   disconnectedCallback() {
     super.disconnectedCallback()
     window.removeEventListener('keydown', this.onShortcut)
+    window.removeEventListener('click', this.onLinkClick)
     this.wideQuery.removeEventListener('change', this.onWidth)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
