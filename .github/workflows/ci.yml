@@ -38,7 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         id: toolchain
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       # First, since it needs nothing built: the shell's code is formatted as `cargo fmt` leaves it.
       - name: Shell format
@@ -70,12 +70,13 @@ jobs:
 
       # The shell embeds the built UI and bundles the published sidecar and the notices; the tests
       # need none of them to be real, only present.
-      - name: Shell tests
+      - name: Shell tests and lints
         run: |
           npx vite build
           mkdir -p src-host/publish notices/out
           touch notices/out/THIRD-PARTY-NOTICES.txt
           cargo test --manifest-path src-tauri/Cargo.toml
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Sidecar tests
         run: npm run test:host
