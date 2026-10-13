@@ -148,4 +148,28 @@ describe('weeklyCounts', () => {
       ['2026-10-19', 1, 1, 1, 0],
     ])
   })
+
+  it('counts what was shown and decided by the characters typed when it was first shown, leaving out what did not say', () => {
+    const at = '2026-10-20T09:00:00.000Z'
+    const typedEvent = (kind: SuggestionEvent['kind'], typed?: number): SuggestionEvent => ({
+      ...event(at, '문서/c.md', '원인', kind, null, 'bug@2'),
+      ...(typed === undefined ? {} : { typed }),
+    })
+    const shown = (typed?: number): Presentation => ({ at, template: 'bug@2', field: '원인', source: 'key', ...(typed === undefined ? {} : { typed }) })
+    const typed = weeklyCounts(
+      [bug],
+      [],
+      [typedEvent('accept', 0), typedEvent('correct', 1), typedEvent('accept', 3), typedEvent('accept', 7), typedEvent('accept')],
+      [shown(0), shown(1), shown(2), shown(3), shown(7), shown()],
+    )
+    const [cell] = typed.counts
+    expect([cell.presented, cell.accepted, cell.corrected]).toEqual([6, 4, 1])
+    expect(cell.byTyped).toEqual({
+      '0': { presented: 1, decided: 1, accepted: 1 },
+      '1': { presented: 1, decided: 1, accepted: 0 },
+      '2': { presented: 1, decided: 0, accepted: 0 },
+      '3+': { presented: 2, decided: 2, accepted: 2 },
+    })
+    expect(counts.counts[0].byTyped).toEqual({}) // events from before the count was kept are in no slot
+  })
 })

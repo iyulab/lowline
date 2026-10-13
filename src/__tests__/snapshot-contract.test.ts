@@ -41,7 +41,7 @@ describe('the vault the sidecar is handed', () => {
     const source = newDocument(intake, { 요청: '모니터가 깜빡여요', 부서: 'sales', 담당: '장비', 태그: ['급함'], 고객: 'customer-1' }, 'doc-1')
     const document = documentSnapshot('문서/2026-10-03-모니터.md', source, 1_790_000_000_000)!
     const events = suggestionEvents(
-      new Map([['담당', { suggestion: { value: '장비', mode: 'key', source: '부서: sales' }, shown: new Date('2026-10-03T00:00:00Z'), filled: ['요청', '부서'], decided: new Date('2026-10-03T00:00:05Z') }]]),
+      new Map([['담당', { suggestion: { value: '장비', mode: 'key', source: '부서: sales' }, shown: new Date('2026-10-03T00:00:00Z'), filled: ['요청', '부서'], typed: 0, decided: new Date('2026-10-03T00:00:05Z') }]]),
       new Set(),
       { 담당: '장비' },
       document.id,

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { fillOrder, parseEvents, parsePresentations, presentation, suggestionEvents, type Offer } from '../events.js'
+import { charactersTyped, fillOrder, parseEvents, parsePresentations, presentation, suggestionEvents, type Offer } from '../events.js'
 import type { Suggestion } from '../projection.js'
 
 const suggestion = (value: string): Suggestion => ({ value, mode: 'key', source: '부서: 영업' })
 const shown = new Date('2026-09-28T11:59:00Z')
-const offer = (value: string, decided?: Date): Offer => ({ suggestion: suggestion(value), shown, filled: ['요청'], ...(decided ? { decided } : {}) })
+const offer = (value: string, decided?: Date): Offer => ({ suggestion: suggestion(value), shown, filled: ['요청'], typed: 0, ...(decided ? { decided } : {}) })
 const at = new Date('2026-09-28T12:00:00Z')
 
 describe('suggestionEvents', () => {
@@ -35,6 +35,7 @@ describe('suggestionEvents', () => {
       filled: ['요청'],
       shownAt: '2026-09-28T11:59:00.000Z',
       decidedAt: '2026-09-28T11:59:30.000Z',
+      typed: 0,
     })
     expect(events[1]).not.toHaveProperty('decidedAt') // changed by hand, neither taken nor rejected
   })
@@ -79,8 +80,31 @@ describe('fillOrder', () => {
 describe('presentations', () => {
   it('keep where a suggestion was shown and nothing of its value', () => {
     const p = presentation('intake@1', '담당', offer('장비'))
-    expect(p).toEqual({ at: '2026-09-28T11:59:00.000Z', template: 'intake@1', field: '담당', source: 'key' })
+    expect(p).toEqual({ at: '2026-09-28T11:59:00.000Z', template: 'intake@1', field: '담당', source: 'key', typed: 0 })
     const text = [JSON.stringify(p), '{"at":"x","templ', '[1]', JSON.stringify({ ...p, field: 3 }), ''].join('\n')
     expect(parsePresentations(text)).toEqual([p])
+  })
+
+  it('read one from before the characters typed were kept as not knowing them', () => {
+    const { typed: _, ...older } = presentation('intake@1', '담당', offer('장비'))
+    expect(parsePresentations(JSON.stringify(older))).toEqual([older])
+    expect(parsePresentations(JSON.stringify({ ...older, typed: '2' }))).toEqual([older])
+  })
+})
+
+describe('charactersTyped', () => {
+  it('counts characters as a person does — a Hangul syllable or one being composed is one — and nothing typed as 0', () => {
+    expect(charactersTyped(undefined)).toBe(0)
+    expect(charactersTyped('')).toBe(0)
+    expect(charactersTyped('박영')).toBe(2)
+    expect(charactersTyped('ㅂ')).toBe(1)
+    expect(charactersTyped('A3😀')).toBe(3)
+  })
+
+  it('is what an event and a presentation say was typed when the suggestion was first shown', () => {
+    const typed: Offer = { ...offer('박영희'), typed: charactersTyped('박영') }
+    const [event] = suggestionEvents(new Map([['담당', typed]]), new Set(), { 담당: '박영희' }, 'd', at)
+    expect(event.typed).toBe(2)
+    expect(presentation('intake@1', '담당', typed).typed).toBe(2)
   })
 })

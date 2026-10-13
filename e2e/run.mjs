@@ -1225,6 +1225,8 @@ const scenarios = {
     await app.click('[data-formdown-note="담당자"] .formdown-suggestion', '박영희')
     await app.cdp.waitFor(`__e2e.one('input[name="담당자"]')?.value === '박영희'`, 'the offered value taken')
     await app.cdp.waitFor(`!__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')`, 'nothing more offered once taken')
+    // What the save will record: the value was first shown at one character typed, and taken at two — still one.
+    assert.equal(await app.cdp.evaluate(`__e2e.one('ll-documents').offered.get('담당자')?.typed`), 1, 'typed when first shown')
     await app.noAlert()
 
     // Leave the vault as the scenarios after this one expect it.

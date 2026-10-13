@@ -29,6 +29,7 @@ public sealed class SnapshotContractTests
             ["filled"] = "the fill order, for studying the curves; not learned from",
             ["shownAt"] = "timing, for studying the curves; not learned from",
             ["decidedAt"] = "timing, for studying the curves; not learned from",
+            ["typed"] = "the characters typed when the suggestion was shown, for studying the curves; not learned from",
         },
     };
 

@@ -31,6 +31,13 @@ export interface WeekCounts {
    * format 1 — a reader that does not know it can pass it by.
    */
   bySource: Record<string, { decided: number; accepted: number }>
+  /**
+   * Presentations and decisions by how many characters had been typed in the field when the suggestion was first
+   * shown: `"0"` (before typing), `"1"`, `"2"`, `"3+"`. A typed suggestion answers to a promise of its own length, so
+   * each is read apart. Those recorded before the count was kept are in none, so the slots can add up to less than
+   * `presented` and the decisions. Added within format 1 — a reader that does not know it can pass it by.
+   */
+  byTyped: Record<string, { presented: number; decided: number; accepted: number }>
 }
 
 export interface FormCounts {
@@ -53,6 +60,11 @@ export interface WeeklyCounts {
 }
 
 const DAY = 24 * 60 * 60 * 1000
+
+/** The `byTyped` slot of a count of characters typed: 0, 1, 2, or 3 and more. */
+export function typedSlot(typed: number): string {
+  return typed >= 3 ? '3+' : String(Math.max(0, Math.floor(typed)))
+}
 
 /**
  * The Monday of the week `ms` falls in, in this device's time — the time a document's file is named by — as
@@ -109,14 +121,17 @@ export function weeklyCounts(
     const key = `${week}|${form}|${field}`
     let cell = cells.get(key)
     if (!cell) {
-      cell = { week, form, field, presented: 0, accepted: 0, corrected: 0, rejected: 0, bySimilarity: {}, bySource: {} }
+      cell = { week, form, field, presented: 0, accepted: 0, corrected: 0, rejected: 0, bySimilarity: {}, bySource: {}, byTyped: {} }
       cells.set(key, cell)
     }
     return cell
   }
+  const typedOf = (cell: WeekCounts, typed: number) => (cell.byTyped[typedSlot(typed)] ??= { presented: 0, decided: 0, accepted: 0 })
   for (const shown of presentations) {
     const cell = cellOf(shown.template, shown.field, shown.at)
-    if (cell) cell.presented++
+    if (!cell) continue
+    cell.presented++
+    if (typeof shown.typed === 'number') typedOf(cell, shown.typed).presented++
   }
   for (const event of events) {
     // An event names its template; older ones are placed through their document, if it is still there.
@@ -127,6 +142,11 @@ export function weeklyCounts(
     else cell.rejected++
     if (typeof event.source === 'string' && event.source) {
       const slot = (cell.bySource[event.source] ??= { decided: 0, accepted: 0 })
+      slot.decided++
+      if (event.kind === 'accept') slot.accepted++
+    }
+    if (typeof event.typed === 'number') {
+      const slot = typedOf(cell, event.typed)
       slot.decided++
       if (event.kind === 'accept') slot.accepted++
     }

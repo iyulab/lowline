@@ -37,6 +37,12 @@ export interface SuggestionEvent {
   shownAt?: string
   /** When it was taken or rejected; absent when the field was changed without either. */
   decidedAt?: string
+  /**
+   * How many characters were typed in the field when the suggestion was first shown — 0 when it was shown before
+   * any typing. The same value still showing as typing goes on is the same presentation, so a value shown before
+   * typing and taken after counts 0. Absent in events from before it was recorded: not known, not 0.
+   */
+  typed?: number
 }
 
 /** A suggestion as it was shown in a draft, and what the person did with it before saving. */
@@ -45,7 +51,14 @@ export interface Offer {
   shown: Date
   /** See {@link SuggestionEvent.filled}. */
   filled: string[]
+  /** See {@link SuggestionEvent.typed}. */
+  typed: number
   decided?: Date
+}
+
+/** The characters in `text` as a person counts them — a Hangul syllable is one; none when nothing was typed. */
+export function charactersTyped(text: string | undefined): number {
+  return text === undefined ? 0 : [...text].length
 }
 
 /**
@@ -80,7 +93,7 @@ export function suggestionEvents(
   template?: string,
 ): SuggestionEvent[] {
   const events: SuggestionEvent[] = []
-  for (const [field, { suggestion, shown, filled, decided }] of offered) {
+  for (const [field, { suggestion, shown, filled, typed, decided }] of offered) {
     if (suggestion.value === null) continue
     const value = saved[field]
     let kind: EventKind | undefined
@@ -102,6 +115,7 @@ export function suggestionEvents(
       filled,
       shownAt: shown.toISOString(),
       ...(decided ? { decidedAt: decided.toISOString() } : {}),
+      typed,
     })
   }
   return events
@@ -151,10 +165,12 @@ export interface Presentation {
   field: string
   /** Where the suggestion came from, as in {@link SuggestionEvent.source}. */
   source: string
+  /** As in {@link SuggestionEvent.typed}; absent in presentations from before it was recorded. */
+  typed?: number
 }
 
 export function presentation(template: string, field: string, offer: Offer): Presentation {
-  return { at: offer.shown.toISOString(), template, field, source: offer.suggestion.mode }
+  return { at: offer.shown.toISOString(), template, field, source: offer.suggestion.mode, typed: offer.typed }
 }
 
 /** The presentations in this device's file; a line that is not one is skipped. */
@@ -169,9 +185,9 @@ export function parsePresentations(text: string): Presentation[] {
       continue
     }
     if (typeof p !== 'object' || p === null) continue
-    const { at, template, field, source } = p as Record<string, unknown>
+    const { at, template, field, source, typed } = p as Record<string, unknown>
     if (typeof at === 'string' && typeof template === 'string' && typeof field === 'string' && typeof source === 'string')
-      shown.push({ at, template, field, source })
+      shown.push({ at, template, field, source, ...(typeof typed === 'number' ? { typed } : {}) })
   }
   return shown
 }

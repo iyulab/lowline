@@ -9,7 +9,7 @@
 // the counts say. Runs only when `LOWLINE_REPLAY` is set; needs `dotnet`.
 import { describe, expect, it } from 'vitest'
 import { documentFileName, documentTitle, newDocument, type FieldValues } from '../documents.js'
-import { presentation, suggestionEvents, type Offer, type Presentation, type SuggestionEvent } from '../events.js'
+import { charactersTyped, presentation, suggestionEvents, type Offer, type Presentation, type SuggestionEvent } from '../events.js'
 import { importFields, planImport } from '../import.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type Suggestion } from '../projection.js'
 import { weekOf, weeklyCounts } from '../weekly-counts.js'
@@ -114,7 +114,7 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       const offers = new Map<string, Offer>()
       for (const o of byDoc.get(document.id) ?? []) {
         if (o.suggestion.value === null) continue
-        const offer: Offer = { suggestion: o.suggestion, shown: at, filled: o.filled, decided: at }
+        const offer: Offer = { suggestion: o.suggestion, shown: at, filled: o.filled, typed: charactersTyped(o.typed ?? undefined), decided: at }
         offers.set(o.field, offer)
         shown.push(presentation(document.template, o.field, offer))
       }
@@ -132,6 +132,9 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     expect(decided).toBe(events.length)
     expect(presented).toBe(shown.length)
     expect(counts.counts.reduce((n, c) => n + Object.values(c.bySource).reduce((m, s) => m + s.decided, 0), 0)).toBe(decided)
+    // Every decision and presentation here was recorded with what had been typed, so each falls in one slot.
+    expect(counts.counts.reduce((n, c) => n + Object.values(c.byTyped).reduce((m, s) => m + s.decided, 0), 0)).toBe(decided)
+    expect(counts.counts.reduce((n, c) => n + Object.values(c.byTyped).reduce((m, s) => m + s.presented, 0), 0)).toBe(presented)
 
     // Nothing that says what the records are about: no form or field name, no value.
     const values = new Set(documents.flatMap((d) => Object.values(d.values).map(String)).filter((v) => v.length >= 2))

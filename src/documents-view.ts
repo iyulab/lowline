@@ -23,7 +23,7 @@ import {
 import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { currentRefs, revisedRef, templateId, templateVersion } from './template-revision.js'
 import { describeError } from './errors.js'
-import { fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
+import { charactersTyped, fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
 import { cellText, referenceTargets, type Abstention, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
 import { namedEvidence, referenceChoices, referringDocuments } from './references.js'
 import { strings } from './strings.js'
@@ -477,6 +477,7 @@ export class LlDocuments extends LitElement {
     const values = { ...this.values }
     const next = new Map<string, Suggestion>()
     const abstained = new Map<string, Abstention | null | 'unavailable'>()
+    const typedWhenAsked = new Map<string, number>()
     for (const field of template.suggest) {
       // A field being typed into is asked with what has been typed, as an open field; one holding a value otherwise
       // is settled, and not asked about.
@@ -493,6 +494,7 @@ export class LlDocuments extends LitElement {
           if (suggestion.value !== null && suggestion.value !== typed) next.set(field, suggestion)
         } else if (suggestion.value !== null) next.set(field, suggestion)
         else abstained.set(field, suggestion.reason ?? null)
+        typedWhenAsked.set(field, charactersTyped(typed))
       } catch {
         abstained.set(field, 'unavailable')
       }
@@ -505,7 +507,7 @@ export class LlDocuments extends LitElement {
     for (const [field, suggestion] of next) {
       // Asked again after each pause in typing: the same value still showing is the same presentation.
       if (this.offered.get(field)?.suggestion.value === suggestion.value) continue
-      const offer: Offer = { suggestion, shown: new Date(), filled }
+      const offer: Offer = { suggestion, shown: new Date(), filled, typed: typedWhenAsked.get(field) ?? 0 }
       this.offered.set(field, offer)
       void vault.recordPresentation(presentation(template.ref, field, offer)).catch(() => {})
     }
