@@ -99,6 +99,17 @@ describe('document id', () => {
     expect(documentFrontMatter(updateDocument(doc, { title: 'B' })).id).toBe('doc-1')
   })
 
+  it('reads which values another program proposed, and who', () => {
+    const doc = '---\ntemplate: bug-report@1\ntitle: A\nlowline:\n  id: doc-1\n  proposed:\n    severity: 메일 분류기\n    owner: 3\n---\n'
+    expect(documentFrontMatter(doc)).toEqual({
+      template: 'bug-report@1',
+      id: 'doc-1',
+      values: { title: 'A' },
+      proposed: { severity: '메일 분류기', owner: '' },
+    })
+    expect(documentFrontMatter(doc.replace(/ {2}proposed:\n(?: {4}.*\n)+/, '  proposed: [severity]\n'))).not.toHaveProperty('proposed')
+  })
+
   it('is set without touching the rest of the file or other keys under lowline', () => {
     const doc = '---\ntemplate: bug-report@1\nlowline:\n  note: kept\ntitle: A\n---\n# Body\n'
     const moved = setDocumentId(doc, '문서/old.md')

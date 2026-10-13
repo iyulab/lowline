@@ -2,7 +2,7 @@
 // The UI parses (Formdown lives here); the sidecar projects. Neither re-reads the other's work.
 
 import { parseFormdown } from '@formdown/core'
-import { documentFrontMatter, templateInfo } from './documents.js'
+import { documentFrontMatter, holdsValue, templateInfo } from './documents.js'
 import { documentId } from './identity.js'
 import { templateId } from './template-revision.js'
 import type { SuggestionEvent } from './events.js'
@@ -51,6 +51,11 @@ export interface DocumentSnapshot {
    * documents had ids. Its judgment values are learned from all the same, though no one may have confirmed them.
    */
   outside?: boolean
+  /**
+   * Its fields holding a value another program wrote as a suggestion (`lowline.proposed`): the value stays in the
+   * document and the table, but suggestions do not learn from it, and the field is not settled until a person decides it.
+   */
+  proposed?: string[]
 }
 
 export interface VaultSnapshot {
@@ -110,9 +115,19 @@ function suggestFields(data: Record<string, unknown> | undefined, fields: Templa
 
 /** A document's template and values, or undefined when it names no template. */
 export function documentSnapshot(path: string, source: string, modified?: number): DocumentSnapshot | undefined {
-  const { template, id, values } = documentFrontMatter(source)
+  const { template, id, values, proposed } = documentFrontMatter(source)
   if (!template) return undefined
-  return { path, id: documentId(path, id), template, values, ...(modified ? { modified } : {}), ...(id ? {} : { outside: true }) }
+  // A mark on a field holding no value says nothing.
+  const marked = Object.keys(proposed ?? {}).filter((f) => holdsValue(values[f]))
+  return {
+    path,
+    id: documentId(path, id),
+    template,
+    values,
+    ...(modified ? { modified } : {}),
+    ...(id ? {} : { outside: true }),
+    ...(marked.length > 0 ? { proposed: marked } : {}),
+  }
 }
 
 export interface ProjectionTable {

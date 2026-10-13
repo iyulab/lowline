@@ -74,7 +74,10 @@
       },
       "modified": 1790000000000,
       "conflicted": true,
-      "outside": true
+      "outside": true,
+      "proposed": [
+        "담당"
+      ]
     }
   ],
   "events": [

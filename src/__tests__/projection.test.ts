@@ -86,6 +86,13 @@ describe('documentSnapshot', () => {
     })
   })
 
+  it('names the fields whose value another program proposed, if they hold one', () => {
+    const doc = '---\ntemplate: bug-report@2\nlowline:\n  id: id-b\n  proposed:\n    심각도: 메일 분류기\n    제목: 메일 분류기\n    재현됨: 규칙\n---\n'
+    const withValues = doc.replace('---\n\n', '').replace('lowline:', '제목: 멈춤\n심각도: high\nlowline:')
+    expect(documentSnapshot('문서/b.md', withValues)).toMatchObject({ id: 'id-b', proposed: ['심각도', '제목'] })
+    expect(documentSnapshot('문서/b.md', doc)).not.toHaveProperty('proposed')
+  })
+
   it('skips a file that names no template', () => {
     expect(documentSnapshot('문서/note.md', '# just a note\n')).toBeUndefined()
   })

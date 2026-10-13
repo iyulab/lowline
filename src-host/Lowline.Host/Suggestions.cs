@@ -134,13 +134,14 @@ public sealed class Suggestions
         var templates = vault.Templates
             .Where(t => t.Fields.Any(f => t.Suggest?.Contains(f.Name) == true))
             .ToDictionary(t => t.Ref, StringComparer.Ordinal);
-        var settled = templates.Keys.ToDictionary(t => t, t => documents[t].Select(Settled).ToList(), StringComparer.Ordinal);
+        var settled = templates.Values.ToDictionary(t => t.Ref, t => documents[t.Ref].Select(d => Settled(t, d)).ToList(), StringComparer.Ordinal);
         var thresholds = new Dictionary<(string, string), FieldThreshold>();
         foreach (var template in templates.Values)
         {
             foreach (var field in template.Suggest!)
             {
-                var confirmed = settled[template.Ref].Count(d => d.Values.ContainsKey(field));
+                // A value another program proposed is not one a person confirmed.
+                var confirmed = settled[template.Ref].Count(d => d.Values.ContainsKey(field) && d.Settlements?.GetValueOrDefault(field) is not SettlementKind.Fill);
                 // A threshold chosen while the field had other choices is used until it is chosen again over these:
                 // the values it may be suggested are not the ones its replay counted. One resting on a field the template
                 // no longer has is no threshold: its strength was chosen on scores those fields gave.
@@ -287,12 +288,18 @@ public sealed class Suggestions
 
     /// <summary>
     /// A saved document as Gil sees it: its values as text, settled when the file was last written — the
-    /// oldest possible time when that is unknown, as the shell reports an unreadable one.
+    /// oldest possible time when that is unknown, as the shell reports an unreadable one. A judgment value another
+    /// program proposed is filled in, not settled by a person (<see cref="SettlementKind.Fill"/>): it stays in the
+    /// document, and memory neither learns it nor asks about it when choosing thresholds.
     /// </summary>
-    private static SettledDocument Settled(DocumentSnapshot document) => new(
-        document.Identity,
-        Texts(document.Values),
-        DateTimeOffset.FromUnixTimeMilliseconds(document.Modified ?? 0));
+    private static SettledDocument Settled(TemplateSnapshot template, DocumentSnapshot document)
+    {
+        var settled = new SettledDocument(document.Identity, Texts(document.Values), DateTimeOffset.FromUnixTimeMilliseconds(document.Modified ?? 0));
+        var filled = (document.Proposed ?? []).Where(f => template.Suggest!.Contains(f)).ToList();
+        return filled.Count == 0
+            ? settled
+            : settled with { Settlements = filled.ToDictionary(f => f, _ => SettlementKind.Fill, StringComparer.Ordinal) };
+    }
 
     private static Dictionary<string, string> Texts(IReadOnlyDictionary<string, JsonElement> values) =>
         values

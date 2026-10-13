@@ -94,8 +94,9 @@ export class JudgmentController implements ReactiveController {
       const template = synced.templates.find((t) => t.ref === templateRef)
       if (this.source.draft()?.templateRef !== templateRef) return // another draft opened meanwhile
       this.template = template?.suggest.length ? template : undefined
+      // A value another program proposed is not learned from: it is not counted as settled.
       const settled = synced.documents.filter((d) => d.template === templateRef && !d.conflicted)
-      this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f])).length]))
+      this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f]) && !d.proposed?.includes(f)).length]))
       this.unavailable = false
       this.host.requestUpdate()
       await this.suggest()

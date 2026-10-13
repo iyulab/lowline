@@ -806,8 +806,8 @@ export class LlDocuments extends LitElement {
   }
 
   /**
-   * The documents of this list with a judgment field of their template left empty: records another program wrote
-   * for a person to confirm, or ones saved before every judgment was made. Conflict copies are not among them —
+   * The documents of this list with a judgment field of their template left empty, or holding a value another program
+   * only proposed: records another program wrote for a person to confirm, or ones saved before every judgment was made. Conflict copies are not among them —
    * they are settled by keeping one of the two.
    */
   private unsettled(): Set<string> {
@@ -821,7 +821,9 @@ export class LlDocuments extends LitElement {
     for (const d of this.vaultDocuments) {
       if (!listed.has(d.path)) continue
       const fields = suggest.get(d.template) ?? scoped ?? []
-      if (fields.some((f) => !holdsValue(typeof d.values[f] === 'string' ? (d.values[f] as string).trim() : d.values[f])))
+      // A value another program proposed is not settled until a person decides it.
+      const settled = (f: string) => !d.proposed?.includes(f) && holdsValue(typeof d.values[f] === 'string' ? (d.values[f] as string).trim() : d.values[f])
+      if (fields.some((f) => !settled(f)))
         unsettled.add(d.path)
     }
     this.unsettledOf = { inputs, paths: unsettled }

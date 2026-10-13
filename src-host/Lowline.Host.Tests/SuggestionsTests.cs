@@ -117,6 +117,37 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task Does_not_learn_a_value_another_program_proposed()
+    {
+        // Every 담당 was written by another program as a suggestion: nobody has confirmed one yet.
+        await using var vault = await Selected(new VaultSnapshot([Intake], [.. Decided().Select(d => d with { Proposed = ["담당"] })]));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "기차 사과 1!", "부서": "영업"}""")), Ct);
+        var table = await vault.TableAsync("intake@1", Ct);
+
+        Assert.Equal(new Suggestion(null, "abstain", null, Abstention.NoHistory), suggestion);
+        Assert.Equal(30, table!.Rows.Count); // the values stay in the documents
+    }
+
+    [Fact]
+    public async Task A_proposed_value_does_not_outweigh_what_people_confirmed()
+    {
+        // People settled 영업 → 장비; another program proposed 총무 for 영업 in more documents since.
+        DocumentSnapshot[] proposed =
+        [
+            .. Enumerable.Range(30, 40).Select(i => new DocumentSnapshot($"문서/{i}.md", "intake@1",
+                Values($$"""{"요청": "{{Words[i % 10]}} {{i}}", "부서": "영업", "담당": "총무"}"""), Modified: i, Proposed: ["담당"])),
+        ];
+        await using var vault = await Selected(new VaultSnapshot([Intake], [.. Decided(), .. proposed]));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("intake@1", "담당", Values("""{"요청": "기차 사과 1!", "부서": "영업"}""")), Ct);
+
+        Assert.Equal("장비", suggestion!.Value);
+    }
+
+    [Fact]
     public async Task Abstains_until_the_history_shows_what_decides_the_field()
     {
         // The same request confirmed once: too little to show its value is right often enough.

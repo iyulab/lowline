@@ -133,11 +133,35 @@ export function updateDocument(documentSource: string, values: FieldValues): str
   return updateFrontMatter(documentSource, valueChanges(values))
 }
 
-/** A document's template reference, id and values, read from its front matter alone. */
-export function documentFrontMatter(documentSource: string): { template?: string; id?: string; values: Record<string, unknown> } {
+/**
+ * A document's template reference, id and values, read from its front matter alone — and `proposed`, the judgment fields
+ * whose value another program wrote as a suggestion rather than a person's decision (`lowline.proposed`: field → who
+ * wrote it, shown to the person; empty when not said). A value under it is not learned from until a person settles it.
+ */
+export function documentFrontMatter(documentSource: string): {
+  template?: string
+  id?: string
+  values: Record<string, unknown>
+  proposed?: Record<string, string>
+} {
   const { template, lowline, ...values } = readFrontMatter(documentSource)?.frontMatter.data ?? {}
-  const id = typeof lowline === 'object' && lowline !== null ? (lowline as { id?: unknown }).id : undefined
-  return { ...(typeof template === 'string' ? { template } : {}), ...(typeof id === 'string' && id ? { id } : {}), values }
+  const own = typeof lowline === 'object' && lowline !== null && !Array.isArray(lowline) ? (lowline as Record<string, unknown>) : {}
+  const id = own.id
+  const proposed = proposedOf(own.proposed)
+  return {
+    ...(typeof template === 'string' ? { template } : {}),
+    ...(typeof id === 'string' && id ? { id } : {}),
+    values,
+    ...(proposed ? { proposed } : {}),
+  }
+}
+
+/** `lowline.proposed` as field → who wrote it: a name that is not text reads as unsaid; anything but a map, as none. */
+function proposedOf(marks: unknown): Record<string, string> | undefined {
+  if (typeof marks !== 'object' || marks === null || Array.isArray(marks)) return undefined
+  const proposed: Record<string, string> = {}
+  for (const [field, by] of Object.entries(marks)) proposed[field] = typeof by === 'string' ? by.trim() : ''
+  return Object.keys(proposed).length > 0 ? proposed : undefined
 }
 
 /**

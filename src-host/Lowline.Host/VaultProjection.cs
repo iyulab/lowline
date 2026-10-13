@@ -24,10 +24,12 @@ public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> F
 /// client left a conflict copy of it — until the person settles which to keep, its values are not
 /// confirmed: it stays in the table, and suggestions do not learn from it. <see cref="Id"/> is what it is
 /// known by — the id in its front matter, or its path when it has none — and what events name it by.
+/// <see cref="Proposed"/> names its fields holding a value another program wrote as a suggestion, not a person's
+/// decision: the value stays in the document, but suggestions do not learn from it.
 /// </summary>
 public sealed record DocumentSnapshot(
     string Path, string Template, IReadOnlyDictionary<string, JsonElement> Values, long? Modified = null, bool Conflicted = false,
-    string? Id = null)
+    string? Id = null, IReadOnlyList<string>? Proposed = null)
 {
     /// <summary>What suggestions learned and events recorded about the document are keyed by.</summary>
     public string Identity => Id ?? Path;
