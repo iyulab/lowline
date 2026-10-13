@@ -48,6 +48,11 @@ export class JudgmentController implements ReactiveController {
   proposed = new Map<string, { value: string; by: string }>()
   /** The fields marked as proposed in the file as it was last read or saved. */
   private marked: string[] = []
+  /**
+   * Marked fields not offered in their field — a value of more than one item, a check, or none — with the value the
+   * form was handed: the mark stays until the person changes that value.
+   */
+  private shownAsIs = new Map<string, FieldValues[string] | undefined>()
   /** Proposed values the person turned down: the save takes them out of the document, with their marks. */
   private cleared = new Set<string>()
   /** For each judgment field, how many settled documents of the template hold a value in it. */
@@ -92,6 +97,7 @@ export class JudgmentController implements ReactiveController {
     this.rejected = new Set()
     this.proposed = new Map()
     this.marked = []
+    this.shownAsIs = new Map()
     this.cleared = new Set()
     this.host.requestUpdate()
   }
@@ -112,6 +118,7 @@ export class JudgmentController implements ReactiveController {
     }
     this.proposed = offers
     this.marked = Object.keys(proposed ?? {})
+    this.shownAsIs = new Map(this.marked.filter((f) => !offers.has(f)).map((f) => [f, values[f]]))
     for (const [field, { value, by }] of offers) {
       const offer: Offer = { suggestion: { value, mode: 'proposed', source: by }, shown: new Date(), filled: [], typed: 0 }
       this.offered.set(field, offer)
@@ -129,7 +136,17 @@ export class JudgmentController implements ReactiveController {
     const written: FieldValues = {}
     for (const [field, value] of Object.entries(values)) if (!this.proposed.has(field)) written[field] = value
     for (const field of this.cleared) written[field] = ''
-    return { values: written, settled: this.marked.filter((f) => !this.proposed.has(f)) }
+    return { values: written, settled: this.marked.filter((f) => this.decidedMark(f, values)) }
+  }
+
+  /**
+   * Whether the person has decided marked field `field`: its offered value taken, changed or turned down — or, for one
+   * shown as it is, its value changed. Saving untouched leaves every mark where it was.
+   */
+  private decidedMark(field: string, values: FieldValues): boolean {
+    if (this.proposed.has(field)) return false
+    if (!this.shownAsIs.has(field)) return true
+    return !sameValue(values[field], this.shownAsIs.get(field))
   }
 
   /**
@@ -214,8 +231,10 @@ export class JudgmentController implements ReactiveController {
       for (const event of events) await vault.recordEvent(event)
     }
     this.typing = new Set()
-    // The file holds marks only on the values still proposed.
-    this.marked = [...this.proposed.keys()]
+    // The file holds marks only on the values not yet decided.
+    const values = this.source.values()
+    this.marked = this.marked.filter((f) => !this.decidedMark(f, values))
+    for (const field of [...this.shownAsIs.keys()]) if (!this.marked.includes(field)) this.shownAsIs.delete(field)
     this.cleared = new Set()
   }
 
@@ -321,4 +340,11 @@ export class JudgmentController implements ReactiveController {
     const f = this.template?.fields.find((f) => f.name === field)
     return !!f && !f.multiple && f.options.length === 0 && TYPED_TYPES.has(f.type)
   }
+}
+
+/** Whether two values of a field are the same: items in the same order, or both empty. */
+function sameValue(a: FieldValues[string] | undefined, b: FieldValues[string] | undefined): boolean {
+  if (isEmpty(a) && isEmpty(b)) return true
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => v === b[i])
+  return a === b
 }

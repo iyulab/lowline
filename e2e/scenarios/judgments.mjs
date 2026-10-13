@@ -174,12 +174,13 @@ export default {
   async 'offers a value another program proposed in its field, and learns it only once a person decides it'(app, vault) {
     // A mail sorter wrote a record with its guesses for all three judgments, marked as proposed — 분야 without saying who.
     const SORT = { name: '분류', ref: 'sort@1', path: '서식/분류.fd.md' }
-    const body = '# 분류\n\n요청: ___@요청\n\n@담당: [select options="장비,인사,총무"]\n\n@우선: [select options="높음,낮음"]\n\n@분야: [select options="하드웨어,소프트웨어"]\n'
+    const body = '# 분류\n\n요청: ___@요청\n\n@담당: [select options="장비,인사,총무"]\n\n@우선: [select options="높음,낮음"]\n\n@분야: [select options="하드웨어,소프트웨어"]\n\n@태그: [checkbox options="급함,반복"]\n'
     const template = join(vault, SORT.path)
     await writeFile(template, `---\nid: sort\nversion: 1\nlowline:\n  suggest: [담당, 우선, 분야]\n---\n${body}`)
     const file = join(vault, '문서', '분류-메일.md')
-    const proposed = '  proposed:\n    담당: 메일 분류기\n    우선: 메일 분류기\n    분야: 3\n'
-    await writeFile(file, `---\ntemplate: sort@1\n요청: 프린터가 종이를 씹어요\n담당: 총무\n우선: 높음\n분야: 하드웨어\nlowline:\n  id: sort-mail-1\n${proposed}---\n${body}`)
+    // 태그 holds several items: shown as it is, not offered — and its mark stays until the person changes it.
+    const proposed = '  proposed:\n    담당: 메일 분류기\n    우선: 메일 분류기\n    분야: 3\n    태그: 메일 분류기\n'
+    await writeFile(file, `---\ntemplate: sort@1\n요청: 프린터가 종이를 씹어요\n담당: 총무\n우선: 높음\n분야: 하드웨어\n태그: [급함]\nlowline:\n  id: sort-mail-1\n${proposed}---\n${body}`)
 
     await app.sidebar(SORT.name, { timeoutMs: 30_000 })
     await app.openDocument(SORT, '분류-메일')
@@ -209,7 +210,8 @@ export default {
     assert.equal(saved.담당, '총무')
     assert.ok(!('우선' in saved), 'the value turned down is taken out')
     assert.equal(saved.분야, '하드웨어', 'a value left undecided stays in the file')
-    assert.deepEqual(saved.lowline, { id: 'sort-mail-1', proposed: { 분야: 3 } })
+    assert.deepEqual(saved.lowline, { id: 'sort-mail-1', proposed: { 분야: 3, 태그: '메일 분류기' } }, 'saving untouched decides nothing')
+    assert.deepEqual(saved.태그, ['급함'])
     assert.match(await readFile(file, 'utf8'), /# 분류/, 'the body stays')
     const decided = (await events(vault)).slice(before)
     assert.deepEqual(
