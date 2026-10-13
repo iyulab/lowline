@@ -98,5 +98,37 @@
       "source": "https://raw.githubusercontent.com/aaubry/YamlDotNet/748334a8fa7c227740018b284b71ad95cc6b7fc7/LICENSE-libyaml",
       "sha256": "d0d8b09800a45cd982e9568fc7669d9c1a4c330e275a821bbe24d54366d16fe9"
     }
-  ]
+  ],
+  "Anthropic@12.53.0": {
+    "source": "https://raw.githubusercontent.com/anthropics/anthropic-sdk-csharp/d84902e4ac1a50503f39e06b34ab398ea2e4be16/LICENSE",
+    "sha256": "8bf96984ff8bcfae7e48cae76a529e8a25317ba9e02abf7fd3cc64fdf95657a6"
+  },
+  "Google.GenAI@1.24.0": {
+    "source": "https://raw.githubusercontent.com/googleapis/dotnet-genai/63f8806a6e6979444fa19c8ac0888104145d02fb/LICENSE",
+    "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+  },
+  "OpenAI@2.14.0": {
+    "source": "https://raw.githubusercontent.com/openai/openai-dotnet/2e77b08828145f658ec04e49aec87abb1543c553/LICENSE",
+    "sha256": "5b1ac9960dc46756e316a2962c77fb8cbdee8fa87c9ab1825671235fac6a1f96"
+  },
+  "System.ClientModel@1.15.0": {
+    "source": "https://raw.githubusercontent.com/Azure/azure-sdk-for-net/6366473d5584b140bda80ddd1120c2f67e5d2658/LICENSE.txt",
+    "sha256": "9b45236978bb5cd5de992021769e1eeaa79f0116d3b02cf8ba065a1ed603d5fa"
+  },
+  "System.Memory.Data@10.0.9": {
+    "source": "https://raw.githubusercontent.com/dotnet/dotnet/901ca941248413c79832d2fdbd709da0c4386353/LICENSE.TXT",
+    "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
+  },
+  "Tiktoken.Core@3.1.5": {
+    "source": "https://raw.githubusercontent.com/tryAGI/Tiktoken/871d38c16d8478faeb6d53f4fdf8a5e76c382854/LICENSE.txt",
+    "sha256": "0789f2ac922216b2f1e8b4b16135b32449771d512909a492f383c54aa477f3a0"
+  },
+  "Tiktoken.Encodings.Abstractions@3.1.5": {
+    "source": "https://raw.githubusercontent.com/tryAGI/Tiktoken/871d38c16d8478faeb6d53f4fdf8a5e76c382854/LICENSE.txt",
+    "sha256": "0789f2ac922216b2f1e8b4b16135b32449771d512909a492f383c54aa477f3a0"
+  },
+  "Tiktoken.Encodings.cl100k@3.1.5": {
+    "source": "https://raw.githubusercontent.com/tryAGI/Tiktoken/871d38c16d8478faeb6d53f4fdf8a5e76c382854/LICENSE.txt",
+    "sha256": "0789f2ac922216b2f1e8b4b16135b32449771d512909a492f383c54aa477f3a0"
+  }
 }
