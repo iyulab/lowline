@@ -61,6 +61,7 @@ What is recorded about a document — its suggestion events, the rejections that
 - Documents and templates are listed by their file names. A template's documents are listed the last name first — a new document's name starts with its day, so the latest are on top — and a sync conflict copy follows its original.
 - A file copied outside the app keeps its original's id; the copy that is then saved with a change gets a new one and becomes a document of its own.
 - A document written by another program with its front matter alone opens with its template's fields, and saving it writes the template's body under its front matter.
+- A judgment value another program wrote as a suggestion is named under `lowline.proposed`, field by field, with who wrote it (`proposed: { 담당: 메일 분류기 }`). Suggestions do not learn from it, and it is offered in its field instead of filled in; a person deciding it takes the mark off when the document is saved, and a value rejected goes with its mark. See [Edits from outside](outside-edits.md).
 
 ### Fields that name other documents
 

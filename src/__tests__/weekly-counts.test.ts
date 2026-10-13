@@ -92,6 +92,14 @@ describe('weeklyCounts', () => {
     expect(weeklyCounts([notes, intake, bug], unsettled, events).forms[1]).toEqual({ form: 2, confirmed: 1, outside: 0, weeks: 1, perWeek: 1 })
   })
 
+  it('does not count as confirmed a document whose judgment values another program only proposed', () => {
+    const proposed = documents.map((d) => (d.path === '문서/3.md' ? { ...d, proposed: Object.keys(d.values) } : d))
+    expect(weeklyCounts([notes, intake, bug], proposed, events).forms[1]).toEqual({ form: 2, confirmed: 1, outside: 0, weeks: 1, perWeek: 1 })
+    // One value settled by a person is enough.
+    const partly = documents.map((d) => (d.path === '문서/3.md' ? { ...d, values: { ...d.values, 긴급: '높음' }, proposed: ['담당'] } : d))
+    expect(weeklyCounts([notes, intake, bug], partly, events).forms[1].confirmed).toBe(2)
+  })
+
   it('counts a document in the week of the day its file is named by, not when its file was last written', () => {
     // A year of records brought in at once, then two made in the app: the form gets one a week, not fifty-four.
     const importedAt = Date.parse('2026-10-05T08:00:00Z')

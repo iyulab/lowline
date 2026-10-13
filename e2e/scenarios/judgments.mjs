@@ -218,6 +218,14 @@ export default {
     )
     // Still offered after saving, 분야 is still the program's.
     assert.equal(await app.cdp.evaluate(offeredIn('분야')), '하드웨어')
+    // The table shows each value, saying which is only proposed.
+    await app.showTable(SORT)
+    const row = await app.cdp.waitFor(
+      `__e2e.all('tbody tr').map((r) => [...r.querySelectorAll('td, th')].map((c) => c.textContent.trim())).find((cells) => cells.includes('총무'))`,
+      'the document in the table',
+      { timeoutMs: 15_000 },
+    )
+    assert.ok(row.includes('하드웨어 (제안)') && !row.some((c) => c.startsWith('총무 ')), JSON.stringify(row))
 
     // Leave the vault as the scenarios after this one expect it.
     await app.learning()

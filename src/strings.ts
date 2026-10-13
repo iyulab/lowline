@@ -287,6 +287,8 @@ export const strings = {
   suggestionKey: (value: string) => `제안 · 함께 확정된 값: ${value}`,
   // A value another program wrote into the document as a suggestion: who wrote it, as the file names them.
   suggestionProposed: (by: string) => `제안 · ${by || '다른 프로그램'}에서 넣은 값`,
+  // In the table: a value another program wrote as a suggestion, not yet decided by a person.
+  tableProposed: (value: string) => `${value} (제안)`,
   reject: '거절',
   hostFailed: (message: string) => `표를 만드는 도우미가 시작되지 않았습니다: ${message}`,
   errors: {

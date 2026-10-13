@@ -15,6 +15,8 @@ const FILTER_DELAY_MS = 250
 /** A choice or reference filter's pick for a field left blank — a character no option or document id holds. */
 const BLANK = '\u0000'
 
+const NONE: ReadonlySet<string> = new Set()
+
 /** A template's documents as a table, projected by the sidecar from what is in the vault now. */
 @customElement('ll-table')
 export class LlTable extends LitElement {
@@ -74,6 +76,8 @@ export class LlTable extends LitElement {
   @state() private names = new Map<string, string>()
   /** The vault's documents as last handed over: what reference fields name (`references.ts`). */
   @state() private documents: DocumentSnapshot[] = []
+  /** Of {@link documents}, the fields each holds only proposed, by path; worked out once per read. */
+  private proposedOf?: Map<string, Set<string>>
   /**
    * The table's filters, one per column and kind (`op:column`) — a name or a field's text it contains, a
    * choice field's value, a number field's lower and upper bound.
@@ -115,6 +119,7 @@ export class LlTable extends LitElement {
       this.templates = synced.templates
       this.names = synced.names
       this.documents = synced.documents
+      this.proposedOf = undefined
       this.ingest = synced.ingest
       this.waiting = false
       await this.show(this.template)
@@ -339,6 +344,12 @@ export class LlTable extends LitElement {
     return this.templates.find((t) => t.ref === this.selected)?.fields.find((f) => f.name === field)?.label ?? field
   }
 
+  /** The fields of the document at `path` holding a value another program only proposed. */
+  private proposedIn(path: string): ReadonlySet<string> {
+    this.proposedOf ??= new Map(this.documents.flatMap((d) => (d.proposed ? [[d.path, new Set(d.proposed)]] : [])))
+    return this.proposedOf.get(path) ?? NONE
+  }
+
   render() {
     if (this.error) return html`<p class="error" role="alert">${this.error}</p>`
     if (this.waiting) return html`<p class="message" role="status">${strings.hostStarting}</p>`
@@ -362,12 +373,19 @@ export class LlTable extends LitElement {
       ${table
         ? html`<dc-data-table
             .columns=${table.columns.map((c) => ({ key: c.name, label: this.label(c.name) }))}
-            .rows=${table.rows.map((row) => ({
-              id: row.path,
-              cells: Object.fromEntries(
-                table.columns.map((c, i) => [c.name, cellText(row.values[c.name]) || (i === 0 ? fileName(row.path, '.md') : '')]),
-              ),
-            }))}
+            .rows=${table.rows.map((row) => {
+              // A value another program only proposed is shown, and said to be one.
+              const proposed = this.proposedIn(row.path)
+              return {
+                id: row.path,
+                cells: Object.fromEntries(
+                  table.columns.map((c, i) => {
+                    const text = cellText(row.values[c.name])
+                    return [c.name, text && proposed.has(c.name) ? strings.tableProposed(text) : text || (i === 0 ? fileName(row.path, '.md') : '')]
+                  }),
+                ),
+              }
+            })}
             empty-label=${filtered ? strings.tableNoMatch : strings.tableEmpty}
             @activate=${(e: CustomEvent<{ id: string }>) => this.openRow(e.detail.id)}
           ></dc-data-table>`

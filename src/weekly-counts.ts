@@ -26,9 +26,10 @@ export interface WeekCounts {
   /** Decisions by the similarity the suggestion was made at, in steps of 0.1 (`"0.6"` = 0.6 to under 0.7). */
   bySimilarity: Record<string, { decided: number; accepted: number }>
   /**
-   * Decisions by where the suggestion came from: `key` (a value settled alongside one the document has) or
-   * `memory` (a similar record). Each promises the target on its own, so each is read apart. Added within
-   * format 1 — a reader that does not know it can pass it by.
+   * Decisions by where the suggestion came from: `key` (a value settled alongside one the document has), `memory`
+   * (a similar record) or `proposed` (a value another program wrote into the document as a suggestion, offered as it
+   * was — no promise of the app's). Each is read apart. Added within format 1 — a reader that does not know it can
+   * pass it by.
    */
   bySource: Record<string, { decided: number; accepted: number }>
   /**
@@ -75,7 +76,10 @@ export function dwellSpan(seconds: number): number {
 
 export interface FormCounts {
   form: number
-  /** Saved documents with a value in at least one judgment field, leaving out those not settled (`conflicted`). */
+  /**
+   * Saved documents with a value in at least one judgment field that a person settled — leaving out those not settled
+   * (`conflicted`), and values another program only proposed (`DocumentSnapshot.proposed`).
+   */
   confirmed: number
   /**
    * Of those, the ones the app has never saved (`DocumentSnapshot.outside`): their judgment values were written by
@@ -212,7 +216,7 @@ export function weeklyCounts(
 
   const formCounts = forms.map((template, i): FormCounts => {
     const confirmed = documents.filter(
-      (d) => d.template === template.ref && !d.conflicted && template.suggest.some((f) => isFilled(d.values[f])),
+      (d) => d.template === template.ref && !d.conflicted && template.suggest.some((f) => isFilled(d.values[f]) && !d.proposed?.includes(f)),
     )
     const saved = confirmed.map((d) => namedDay(d.path) ?? d.modified)
     const times = saved.filter((m): m is number => m !== undefined && m > 0)

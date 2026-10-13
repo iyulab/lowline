@@ -15,7 +15,20 @@ When a sync client keeps both devices' edits of a file as a copy beside it, the 
 
 ## Programs that write documents
 
-Another program may add documents to the vault — an automation that turns incoming mail into new records, for example. The app reads them like any other edit from outside. A value in a judgment field is taken as a person's decision: it is what suggestions learn the right answer from. So a program writing documents should fill in the observed fields and leave the judgment fields empty, for a person to confirm in the app with its suggestions. A template's document list can show only the documents with a judgment field still empty, and Ctrl+Enter saves the one open and opens the next. Judgment values a program fills in are learned from as if someone had decided them. The learning screen says, for each template, how many of the documents with a judgment value the app has never saved — documents whose front matter has no `lowline.id`.
+Another program may add documents to the vault — an automation that turns incoming mail into new records, for example. The app reads them like any other edit from outside. A value in a judgment field is taken as a person's decision: it is what suggestions learn the right answer from. So a program writing documents should fill in the observed fields and leave the judgment fields empty, for a person to confirm in the app with its suggestions.
+
+A program that has a guess for a judgment field can write it as a suggestion instead: the value goes in its field as usual, and the field is named under `lowline.proposed` with who wrote it, in words a person can read:
+
+```yaml
+담당: 총무
+lowline:
+  proposed:
+    담당: 메일 분류기
+```
+
+The app does not learn from a marked value. Opening the document, the person sees the field empty with the value offered in it — "제안 · 메일 분류기에서 넣은 값" — to take, change or reject. Saving takes the mark off each value the person decided: a value taken or changed is theirs from then on, and one rejected is taken out of the file with its mark. A value left alone stays in the file, still marked. The table shows a marked value with "(제안)" after it. A program that does not know the mark can still read the value; one that writes a value without it is taken at its word.
+
+A template's document list can show only the documents with a judgment field still empty or only proposed, and Ctrl+Enter saves the one open and opens the next. Judgment values a program fills in without the mark are learned from as if someone had decided them. The learning screen says, for each template, how many of the documents with a judgment value the app has never saved — documents whose front matter has no `lowline.id`.
 
 ## Shared folders
 
