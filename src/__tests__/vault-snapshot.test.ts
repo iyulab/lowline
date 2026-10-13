@@ -15,6 +15,7 @@ vi.mock('../vault-client.js', async (importOriginal) => {
       handlers.unshift(onChange)
       return () => {}
     },
+    onHostRestarted: async () => () => {},
     vault: {
       ...actual.vault,
       listTemplates: () => new Promise<VaultEntry[]>((resolve) => listings.push({ resolve })),

@@ -146,6 +146,11 @@ export function onVaultChanged(onChange: (change: VaultChanged) => void): Promis
   return listen<VaultChanged>('vault-changed', (e) => onChange(e.payload))
 }
 
+/** Calls `onRestarted` when the sidecar is back after it ended during the session: it holds nothing of the vault. */
+export function onHostRestarted(onRestarted: () => void): Promise<UnlistenFn> {
+  return listen('host-restarted', () => onRestarted())
+}
+
 /**
  * Whether a change removed `path`. When changes were lost there is no list of removals, so the
  * vault's listing as it is now — `listed`, read after the change — decides.

@@ -7,8 +7,8 @@ import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type Templat
 import { ReadCache } from './read-cache.js'
 import { SharedRun } from './shared-run.js'
 import type { TemplateItem } from './template-scope.js'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { host, onVaultChanged as onShellChange, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+import type { UnlistenFn } from '@tauri-apps/api/event'
+import { host, onHostRestarted, onVaultChanged as onShellChange, onWritten, vault, withoutConflictCopies, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -36,7 +36,7 @@ let restarted: Promise<UnlistenFn> | undefined
 function watch(): Promise<UnlistenFn> {
   // A sidecar started again after it ended holds nothing of the vault: every view hands it over again, as on
   // a change that touched no file.
-  void (restarted ??= listen('host-restarted', () => {
+  void (restarted ??= onHostRestarted(() => {
     shared.invalidate()
     for (const listener of [...listeners]) listener({ rescan: false, written: [], removed: [] })
   }))
