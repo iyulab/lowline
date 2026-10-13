@@ -1576,6 +1576,39 @@ const scenarios = {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '경계 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'keeps the window on the app when a link in a template body is clicked, with what was typed'(app, vault) {
+    const GUIDE = { name: '안내 링크', ref: 'guide@1', path: '서식/안내 링크.fd.md' }
+    const file = join(vault, GUIDE.path)
+    await writeFile(
+      file,
+      '---\nid: guide\nversion: 1\n---\n# 안내\n\n작성 전에 [사내 규정](https://example.com/) 을 확인하세요.\n\n<a href="https://example.org/" target="_blank">새 창 안내</a>\n\n요청: ___@요청\n',
+    )
+    await app.newDocument(GUIDE)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form', { timeoutMs: 30_000 })
+    await app.fill('[data-field-name="요청"]', '저장 안 한 입력')
+    const page = await app.cdp.evaluate('location.href')
+
+    for (const [link, address] of [
+      ['사내 규정', 'https://example.com/'],
+      ['새 창 안내', 'https://example.org/'],
+    ]) {
+      await app.click('a', link)
+      const said = await app.cdp.waitFor(
+        `__e2e.all('p.notice').map((p) => p.textContent.trim()).find((t) => t.includes(${JSON.stringify(address)}))`,
+        `the refused address ${address}`,
+      )
+      assert.match(said, /^링크는 Lowline 창에서 열지 않습니다\./)
+      assert.equal(await app.cdp.evaluate('location.href'), page, `${link}: the window stays on the app`)
+      assert.equal(await app.cdp.evaluate(`__e2e.one('[data-field-name="요청"]').textContent`), '저장 안 한 입력', `${link}: what was typed stays`)
+    }
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await rm(file)
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '안내 링크')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'lists a template once after its version is edited and saved on its page'(app, vault) {
     const REVISED = { name: '개정 서식', ref: 'revised@1', path: '서식/개정 서식.fd.md' }
     const file = join(vault, REVISED.path)

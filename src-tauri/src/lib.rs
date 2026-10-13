@@ -1,4 +1,5 @@
 mod host;
+mod navigation;
 mod report;
 mod update;
 mod vault;
@@ -724,6 +725,32 @@ fn report_error(kind: String, stack: String) {
 
 /// Starts writing error reports, and reports a panic of the shell — to disk only, from the panic
 /// itself: a panicking process is no place to send anything.
+/// Opens the app's window as configured, kept to the app's own pages (see [`navigation`]).
+fn open_window(app: &AppHandle) -> tauri::Result<()> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .first()
+        .cloned()
+        .expect("the window is configured");
+    let dev_url = if cfg!(dev) {
+        app.config().build.dev_url.clone()
+    } else {
+        None
+    };
+    let (navigating, opening) = (app.clone(), app.clone());
+    let dev = dev_url.clone();
+    tauri::WebviewWindowBuilder::from_config(app, &config)?
+        .on_navigation(move |to| navigation::allow(&navigating, to, dev_url.as_ref()))
+        .on_new_window(move |to, _| {
+            navigation::allow(&opening, &to, dev.as_ref());
+            tauri::webview::NewWindowResponse::Deny
+        })
+        .build()?;
+    Ok(())
+}
+
 fn start_reports(app: &tauri::AppHandle) {
     let Ok(dir) = app.path().app_log_dir() else {
         return;
@@ -760,6 +787,7 @@ pub fn run() {
         .manage(update::UpdateState::default())
         .manage(HostState::default())
         .setup(|app| {
+            open_window(app.handle())?;
             start_reports(app.handle());
             start_host(app.handle());
             Ok(())

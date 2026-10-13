@@ -165,6 +165,8 @@ export const strings = {
   removed: '지웠습니다',
   templateDeleted: (permanently: boolean, orphans: boolean) =>
     `${permanently ? '서식을 지웠습니다.' : '서식을 휴지통으로 옮겼습니다.'} 그 서식으로 쓴 문서는 지우지 않았습니다${orphans ? ' — "서식 없는 문서"에 있습니다' : ''}.`,
+  linkNotFollowed: (address: string) =>
+    `링크는 Lowline 창에서 열지 않습니다. 쓰던 내용은 그대로입니다. 브라우저에서 보려면 주소를 복사해 여세요: ${address}`,
   nameTaken: '같은 이름의 문서가 이미 있습니다.',
   templateNameTaken: '같은 이름의 서식이 이미 있습니다.',
   nameInvalid: '이름이 비었거나 파일 이름에 쓸 수 없는 글자(\\ / :* ? " < > |)가 있습니다.',

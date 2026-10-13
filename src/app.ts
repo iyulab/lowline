@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { DpSidebarActionEvent, DpSidebarActivateEvent, DpSidebarSelectEvent } from '@iyulab/desktop-patterns/sidebar'
 import { desktopMinWidth } from '@iyulab/desktop-patterns/breakpoints'
 import type { DcTabChangeEvent } from '@iyulab/desktop-compact/tab-bar'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
 import { createSampleTemplate, createTemplateFile } from './document-files.js'
 import type { LlMark } from './brand/mark.js'
@@ -74,6 +74,7 @@ export class LlApp extends LitElement {
     .notice {
       margin: 0 0 var(--dc-space-2);
       color: var(--dc-color-text-muted);
+      user-select: text; /* an address said here is copied from it */
     }
     .welcome {
       min-height: 60vh;
@@ -143,6 +144,7 @@ export class LlApp extends LitElement {
   private answer?: (discard: boolean) => void
   @queryAll('ll-mark') private marks!: NodeListOf<LlMark>
   private unlisten?: Promise<UnlistenFn>
+  private unlistenRefused?: Promise<UnlistenFn>
   /** A template the app writes (makes, saves) may change the list. */
   private readonly onTemplateWritten = (path: string | null) => {
     if (path !== null && this.vaultInfo && path.startsWith(this.vaultInfo.templatesDir + '/')) void this.refreshPlaces()
@@ -226,6 +228,9 @@ export class LlApp extends LitElement {
     })
     onWritten.add(this.onTemplateWritten)
     this.unlisten = onVaultChanged(() => void this.refreshPlaces())
+    // A link in a template or document body is not followed inside the window (the shell refuses it):
+    // the person is told so, with the address, rather than left with a click that did nothing.
+    this.unlistenRefused = listen<string>('navigation-refused', (e) => (this.notice = strings.linkNotFollowed(e.payload)))
   }
 
   disconnectedCallback() {
@@ -234,6 +239,7 @@ export class LlApp extends LitElement {
     this.wideQuery.removeEventListener('change', this.onWidth)
     onWritten.delete(this.onTemplateWritten)
     void this.unlisten?.then((stop) => stop())
+    void this.unlistenRefused?.then((stop) => stop())
     this.updates.stop()
   }
 

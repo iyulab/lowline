@@ -20,3 +20,7 @@ Another program may add documents to the vault — an automation that turns inco
 ## Shared folders
 
 A vault may sit on a shared folder. Where a location has no trash — a network share, some removable drives — deleting never happens silently: the app says the file could not be moved to a trash, and deletes it for good only when the person chooses so.
+
+## Links in a template or document
+
+A template or document from someone else may carry links — to written instructions, for example. The app's window shows the app and nothing else: clicking a link does not replace it with the linked page, and does not open a window of its own. The app says it did not follow the link and shows the address, and whatever was typed stays as it was. Scripts in a template's or document's body do not run.
