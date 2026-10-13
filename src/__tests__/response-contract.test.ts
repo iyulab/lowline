@@ -5,6 +5,7 @@
 // ways: nothing the UI does not know, nothing it needs missing, and every key carried at least once.
 import { describe, expect, it } from 'vitest'
 import type { Abstention, CaseHit, FieldCurve, IngestResult, ProjectionTable, Suggestion } from '../projection.js'
+import type { ModelFailure, ModelProbeResult } from '../vault-client.js'
 import file from './sidecar-responses.json'
 
 type Item<V> = V extends readonly (infer E)[] ? E : V
@@ -69,8 +70,10 @@ const suggestion: Shape<Suggestion> = { value: 'required', mode: 'required', sou
 
 const hit: Shape<CaseHit> = { path: 'required', template: 'required', text: 'required', conflicted: 'required', score: 'required' }
 
+const probe: Shape<ModelProbeResult> = { ok: 'required', failure: 'required', statusCode: 'required', modelIds: 'required' }
+
 /** Each answer in the file, and the shape the UI reads it by. */
-const answers = { ingest, projection, curves: curve, suggestions: suggestion, search: hit, similar: hit }
+const answers = { ingest, projection, curves: curve, suggestions: suggestion, search: hit, similar: hit, probe }
 
 /** The words the UI branches on — every one its types allow, as the compiler holds them to. */
 const words = {
@@ -78,6 +81,16 @@ const words = {
   mode: { key: true, abstain: true, rejected: true } satisfies Record<Exclude<Suggestion['mode'], 'proposed'>, true>,
   reason: { 'no-history': true, 'below-target': true, undecided: true } satisfies Record<Abstention, true>,
   whyNoReplay: { few: true, pending: true, 'below-target': true } satisfies Record<NonNullable<FieldCurve['whyNoReplay']>, true>,
+  probeFailure: {
+    invalid: true,
+    unauthorized: true,
+    'http-status': true,
+    timeout: true,
+    refused: true,
+    'host-not-found': true,
+    unreachable: true,
+    transport: true,
+  } satisfies Record<ModelFailure, true>,
 }
 
 type AnyShape = Record<string, string | { presence: string; inside: AnyShape | 'any keys' }>

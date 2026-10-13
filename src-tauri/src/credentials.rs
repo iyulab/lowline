@@ -23,6 +23,12 @@ impl From<tauri_kit_credentials::Error> for CredentialError {
     }
 }
 
+impl std::fmt::Display for CredentialError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.kind, self.message)
+    }
+}
+
 type Result<T> = std::result::Result<T, CredentialError>;
 
 /// The entry a provider's key is kept under. A provider is named as the model settings name it:
@@ -65,6 +71,11 @@ fn keep(credentials: &Credentials, provider: &str, key: &str) -> Result<()> {
 
 fn forget(credentials: &Credentials, provider: &str) -> Result<()> {
     Ok(credentials.delete(&account(provider)?)?)
+}
+
+/// The key kept for `provider`, for the shell to hand the sidecar with one request; never for the window.
+pub(crate) fn model_key<R: Runtime>(app: &AppHandle<R>, provider: &str) -> Result<Option<String>> {
+    Ok(credentials(app).get(&account(provider)?)?)
 }
 
 /// Whether a key is kept for `provider`.

@@ -350,6 +350,22 @@
       "score": 0
     }
   ],
+  "probe": [
+    {
+      "ok": true,
+      "failure": null,
+      "statusCode": null,
+      "modelIds": [
+        "qwen3-4b"
+      ]
+    },
+    {
+      "ok": false,
+      "failure": "unauthorized",
+      "statusCode": 0,
+      "modelIds": []
+    }
+  ],
   "words": {
     "mode": [
       "key",
@@ -365,6 +381,16 @@
       "few",
       "pending",
       "below-target"
+    ],
+    "probeFailure": [
+      "invalid",
+      "unauthorized",
+      "http-status",
+      "timeout",
+      "refused",
+      "host-not-found",
+      "unreachable",
+      "transport"
     ]
   }
 }

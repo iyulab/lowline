@@ -57,6 +57,9 @@ app.MapPost("/suggest", async (SuggestRequest request, VaultProjection vault, Ca
 app.MapPost("/search", (CaseQuery query, VaultProjection vault, CancellationToken ct) => vault.SearchAsync(query, ct));
 app.MapPost("/similar", (SimilarQuery query, VaultProjection vault, CancellationToken ct) => vault.SimilarAsync(query, ct));
 
+// Whether a model endpoint the person named answers, with the key the shell read from the credential store for it.
+app.MapPost("/model/probe", (ModelProbe probe, CancellationToken ct) => ModelConnection.ProbeAsync(probe, timeout: null, ct));
+
 // Failures of work no request waited on, since the last time the shell asked.
 app.MapPost("/failures/take", (HostFailures failures) => failures.Take());
 

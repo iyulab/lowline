@@ -610,6 +610,27 @@ async fn host_suggest(
     host_json(blocking(move || client.post_json("/suggest", &body)).await?)
 }
 
+/// What the sidecar is asked to check a model endpoint with (`ModelProbe`): the key, if one is kept, goes with it.
+fn model_probe_body(preset: &str, base_url: Option<&str>, key: Option<&str>) -> String {
+    serde_json::json!({ "preset": preset, "baseUrl": base_url, "apiKey": key }).to_string()
+}
+
+/// Whether a model endpoint the person named answers. `provider` names the key kept for it (`credentials.rs`):
+/// the shell reads it from the credential store and hands it on with this one request; the window never sees it.
+#[tauri::command]
+async fn host_model_probe(
+    app: AppHandle,
+    preset: String,
+    base_url: Option<String>,
+    provider: String,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let key = credentials::model_key(&app, &provider).map_err(|e| e.to_string())?;
+    let client = state.client()?;
+    let body = model_probe_body(&preset, base_url.as_deref(), key.as_deref());
+    host_json(blocking(move || client.post_json("/model/probe", &body)).await?)
+}
+
 /// Documents whose values hold some words, from the sidecar's text index — of one template when named.
 #[tauri::command]
 async fn host_search(
@@ -873,6 +894,7 @@ pub fn run() {
             record_presentation,
             read_presentations,
             third_party_notices,
+            host_model_probe,
             credentials::model_key_kept,
             credentials::keep_model_key,
             credentials::forget_model_key
@@ -889,6 +911,26 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hands_the_sidecar_a_model_endpoint_by_the_names_it_reads() {
+        let body: serde_json::Value = serde_json::from_str(&model_probe_body(
+            "custom",
+            Some("http://127.0.0.1:1234/v1"),
+            Some("k"),
+        ))
+        .unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({ "preset": "custom", "baseUrl": "http://127.0.0.1:1234/v1", "apiKey": "k" })
+        );
+        let none: serde_json::Value =
+            serde_json::from_str(&model_probe_body("ollama", None, None)).unwrap();
+        assert_eq!(
+            none,
+            serde_json::json!({ "preset": "ollama", "baseUrl": null, "apiKey": null })
+        );
+    }
 
     /// Every kind a command failure can name, as the UI's `VAULT_FAILURE_KINDS` lists them too.
     const FAILURE_KINDS: [&str; 7] = [

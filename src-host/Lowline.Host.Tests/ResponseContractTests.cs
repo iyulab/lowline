@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Lowline.Host.Tests;
@@ -114,6 +115,16 @@ public sealed class ResponseContractTests
         var ingest = await Post("/vault/ingest", snapshot);
         await factory.Services.GetRequiredService<VaultProjection>().ThresholdsSelected.WaitAsync(ct);
 
+        var (listingApp, listingUrl) = await ModelConnectionTests.StandIn(context =>
+            context.Response.WriteAsJsonAsync(new { @object = "list", data = new[] { new { id = "qwen3-4b", @object = "model" } } }));
+        await using var _listing = listingApp;
+        var (refusingApp, refusingUrl) = await ModelConnectionTests.StandIn(async context =>
+        {
+            context.Response.StatusCode = 401;
+            await context.Response.WriteAsJsonAsync(new { error = new { message = "Incorrect API key provided" } });
+        });
+        await using var _refusing = refusingApp;
+
         var observed = new Dictionary<string, object> { ["부서"] = "영업" };
         var responses = new JsonObject
         {
@@ -126,12 +137,18 @@ public sealed class ResponseContractTests
                 await Post("/suggest", new { template = "intake@1", field = "담당", values = observed, document = "문서/1.md" })),
             ["search"] = await Post("/search", new CaseQuery("모니터", Max: 1)),
             ["similar"] = await Post("/similar", new SimilarQuery("문서/3.md", Max: 1)),
+            // A model endpoint on this computer that lists its models, and one that refuses the key: what a failed check
+            // carries is the kind and the status, never the endpoint's words.
+            ["probe"] = new JsonArray(
+                await Post("/model/probe", new { preset = "custom", baseUrl = listingUrl }),
+                await Post("/model/probe", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong" })),
             // The words the UI branches on, every one the sidecar can send — not only those this vault happens to draw.
             ["words"] = new JsonObject
             {
                 ["mode"] = Words(typeof(SuggestionMode)),
                 ["reason"] = Words(typeof(Abstention)),
                 ["whyNoReplay"] = Words(typeof(NoReplay), Abstention.BelowTarget),
+                ["probeFailure"] = Words(typeof(ModelFailure)),
             },
         };
         var written = Zeroed(responses)!.ToJsonString(Written).ReplaceLineEndings("\n") + "\n";

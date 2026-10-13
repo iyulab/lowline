@@ -202,3 +202,28 @@ export const host = {
   /** The documents of the same template most like the one at `path`, best first. */
   similar: (path: string) => invoke<CaseHit[]>('host_similar', { request: { path } }),
 }
+
+/** Why a model endpoint did not answer, for the app to say in its own words (the sidecar's `ModelFailure`). */
+export type ModelFailure = 'invalid' | 'unauthorized' | 'http-status' | 'timeout' | 'refused' | 'host-not-found' | 'unreachable' | 'transport'
+
+/** Whether a model endpoint answered, and the models it lists; or why not — never the endpoint's own words. */
+export interface ModelProbeResult {
+  ok: boolean
+  failure: ModelFailure | null
+  /** The HTTP status it answered with, when it answered one. */
+  statusCode: number | null
+  modelIds: string[]
+}
+
+/**
+ * Model endpoints and their keys. A key is kept in the system's credential store by the shell, under the provider it
+ * is for: the window hands it over once and only ever learns whether one is kept.
+ */
+export const model = {
+  /** Checks an endpoint — an IronProw preset, its address when not the preset's own — with the key kept for `provider`. */
+  probe: (preset: string, baseUrl: string | undefined, provider: string) =>
+    invoke<ModelProbeResult>('host_model_probe', { preset, baseUrl, provider }),
+  keyKept: (provider: string) => invoke<boolean>('model_key_kept', { provider }),
+  keepKey: (provider: string, key: string) => invoke<void>('keep_model_key', { provider, key }),
+  forgetKey: (provider: string) => invoke<void>('forget_model_key', { provider }),
+}
