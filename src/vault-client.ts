@@ -33,14 +33,25 @@ export function withoutConflictCopies(entries: readonly VaultEntry[]): { files: 
   return { files, conflicted }
 }
 
+/**
+ * What a failed command says went wrong, as the shell names it; `shell-failure-kinds.json` holds the shell's own
+ * list, and a test holds this one to it.
+ */
+export const VAULT_FAILURE_KINDS = ['outside-vault', 'already-exists', 'not-found', 'not-trashed', 'changed-outside', 'io', 'no-vault'] as const
+
 /** A failed command, as the shell reports it. */
 export interface VaultFailure {
-  kind: 'outside-vault' | 'already-exists' | 'not-found' | 'not-trashed' | 'io' | 'no-vault'
+  kind: (typeof VAULT_FAILURE_KINDS)[number]
   message: string
 }
 
 export function isVaultFailure(e: unknown): e is VaultFailure {
   return typeof e === 'object' && e !== null && 'kind' in e && 'message' in e
+}
+
+/** What a failure says went wrong, when it is the shell's; undefined for anything else. */
+export function failureKind(e: unknown): VaultFailure['kind'] | undefined {
+  return isVaultFailure(e) ? e.kind : undefined
 }
 
 /**

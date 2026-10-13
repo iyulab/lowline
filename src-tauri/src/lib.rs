@@ -856,6 +856,51 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every kind a command failure can name, as the UI's `VAULT_FAILURE_KINDS` lists them too.
+    const FAILURE_KINDS: [&str; 7] = [
+        "outside-vault",
+        "already-exists",
+        "not-found",
+        "not-trashed",
+        "changed-outside",
+        "io",
+        "no-vault",
+    ];
+
+    /// The kinds a command failure names, held to the list the UI reads: a kind added or renamed here is a
+    /// kind the UI must hear of. `LOWLINE_UPDATE_CONTRACT=1` writes the list for the UI's own test.
+    #[test]
+    fn every_failure_kind_is_one_the_ui_knows() {
+        let named = [
+            VaultError::OutsideVault(String::new()),
+            VaultError::AlreadyExists(String::new()),
+            VaultError::NotFound(String::new()),
+            VaultError::NotTrashed(String::new()),
+            VaultError::Changed(String::new()),
+            VaultError::Io(std::io::Error::other("x")),
+        ]
+        .map(|e| CommandError::from(e).kind);
+        let mut kinds: Vec<&str> = named.into_iter().chain([no_vault().kind]).collect();
+        kinds.sort_unstable();
+        let mut listed = FAILURE_KINDS.to_vec();
+        listed.sort_unstable();
+        assert_eq!(kinds, listed);
+
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/__tests__/shell-failure-kinds.json");
+        let json = serde_json::to_string_pretty(&FAILURE_KINDS).unwrap() + "\n";
+        if std::env::var("LOWLINE_UPDATE_CONTRACT").as_deref() == Ok("1") {
+            std::fs::write(&path, &json).unwrap();
+        }
+        let file = std::fs::read_to_string(&path)
+            .expect("shell-failure-kinds.json; write it with LOWLINE_UPDATE_CONTRACT=1");
+        assert_eq!(
+            file.replace("\r\n", "\n"),
+            json,
+            "the UI's list is out of date; write it with LOWLINE_UPDATE_CONTRACT=1"
+        );
+    }
     use tauri_kit_watch::Change;
 
     #[test]

@@ -14,7 +14,7 @@ import { describeError } from './errors.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+import { failureKind, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 
 /** What a template's file name ends with. */
 const TEMPLATE_SUFFIX = '.fd.md'
@@ -361,7 +361,7 @@ export class LlTemplates extends LitElement {
       await this.refresh()
       this.message = strings.renamed
     } catch (e) {
-      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.templateNameTaken : describeError(e)
+      this.error = failureKind(e) === 'already-exists' ? strings.templateNameTaken : describeError(e)
     }
   }
 
@@ -380,7 +380,7 @@ export class LlTemplates extends LitElement {
       if (permanently) await vault.remove(path)
       else await vault.trash(path)
     } catch (e) {
-      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.untrashable = true
+      if (!permanently && failureKind(e) === 'not-trashed') this.untrashable = true
       else this.error = describeError(e)
       return
     }
@@ -424,7 +424,7 @@ export class LlTemplates extends LitElement {
       if (permanently) await vault.remove(original)
       else await vault.trash(original)
     } catch (e) {
-      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.originalUntrashable = true
+      if (!permanently && failureKind(e) === 'not-trashed') this.originalUntrashable = true
       else this.error = describeError(e)
       return
     }
@@ -433,7 +433,7 @@ export class LlTemplates extends LitElement {
     } catch (e) {
       // The original is gone as asked; the copy stays under its own name, still a copy.
       await this.refresh()
-      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
+      this.error = failureKind(e) === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
       return
     }
     await this.refresh()
@@ -471,7 +471,7 @@ export class LlTemplates extends LitElement {
         if (this.changedOutside) await vault.write(this.selected, this.source)
         else await vault.writeIfUnchanged(this.selected, this.loaded, this.source)
       } catch (e) {
-        if ((e as { kind?: string }).kind !== 'changed-outside') throw e
+        if (failureKind(e) !== 'changed-outside') throw e
         this.error = strings.changedOutsideDirty
         this.changedOutside = true
         return

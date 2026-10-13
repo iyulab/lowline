@@ -30,7 +30,7 @@ import { cellText, referenceTargets, type Abstention, type CaseHit, type Documen
 import { namedEvidence, referenceChoices, referringDocuments } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { host, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
+import { failureKind, host, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
 import { readVault, syncVault, onVaultChanged } from './vault-snapshot.js'
 import { documentsOf, newestFirst, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
@@ -341,6 +341,12 @@ export class LlDocuments extends LitElement {
    */
   private async outsideChange(change: VaultChanged) {
     await this.refresh()
+    // A change that touched no file is the sidecar started again after it ended (`vault-snapshot.ts`): what it
+    // could not suggest for the open draft is asked again, once it has the vault.
+    if (!change.rescan && change.written.length === 0 && change.removed.length === 0) {
+      if (this.draft) void this.prepareSuggestions(this.draft.templateRef)
+      return
+    }
     const draft = this.draft
     if (draft?.kind === 'existing' && touches(change, draft.path)) {
       if (removedBy(change, draft.path, this.documents.map((d) => d.path))) {
@@ -703,7 +709,7 @@ export class LlDocuments extends LitElement {
       await this.open(draft.path)
       this.message = strings.revised
     } catch (e) {
-      this.error = (e as { kind?: string }).kind === 'changed-outside' ? strings.changedOutsideDirty : describeError(e)
+      this.error = failureKind(e) === 'changed-outside' ? strings.changedOutsideDirty : describeError(e)
     }
   }
 
@@ -727,7 +733,7 @@ export class LlDocuments extends LitElement {
           if (this.changedOutside) await vault.write(draft.path, source)
           else await vault.writeIfUnchanged(draft.path, draft.source, source)
         } catch (e) {
-          if ((e as { kind?: string }).kind !== 'changed-outside') throw e
+          if (failureKind(e) !== 'changed-outside') throw e
           this.error = strings.changedOutsideDirty
           this.changedOutside = true
           return
@@ -798,7 +804,7 @@ export class LlDocuments extends LitElement {
       // The sidecar knows documents by their paths too: it is handed the vault as it is now.
       void this.prepareSuggestions(draft.templateRef)
     } catch (e) {
-      const kind = (e as { kind?: string }).kind
+      const kind = failureKind(e)
       if (kind === 'changed-outside') this.changedOutside = true
       this.error = kind === 'already-exists' ? strings.nameTaken : kind === 'changed-outside' ? strings.changedOutsideDirty : describeError(e)
     }
@@ -820,7 +826,7 @@ export class LlDocuments extends LitElement {
       if (permanently) await vault.remove(draft.path)
       else await vault.trash(draft.path)
     } catch (e) {
-      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.untrashable = true
+      if (!permanently && failureKind(e) === 'not-trashed') this.untrashable = true
       else this.error = describeError(e)
       return
     }
@@ -861,7 +867,7 @@ export class LlDocuments extends LitElement {
       if (permanently) await vault.remove(original)
       else await vault.trash(original)
     } catch (e) {
-      if (!permanently && (e as { kind?: string }).kind === 'not-trashed') this.originalUntrashable = true
+      if (!permanently && failureKind(e) === 'not-trashed') this.originalUntrashable = true
       else this.error = describeError(e)
       return
     }
@@ -870,7 +876,7 @@ export class LlDocuments extends LitElement {
     } catch (e) {
       // The original is gone as asked; the copy stays under its own name, still a copy.
       await this.refresh()
-      this.error = (e as { kind?: string }).kind === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
+      this.error = failureKind(e) === 'already-exists' ? strings.keptCopyNameTaken(permanently) : describeError(e)
       return
     }
     await this.refresh()

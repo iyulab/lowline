@@ -2327,14 +2327,8 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
     // suggested once more — the person only goes on filling in.
     await app.choose('select[name="부서"]', '개발')
     await app.choose('select[name="부서"]', '영업')
-    await app.cdp.waitFor(
-      `(async () => (await window.__TAURI_INTERNALS__.invoke('host_status')).state === 'ready')()`,
-      'the sidecar ready again',
-      { timeoutMs: 60_000 },
-    )
-    await app.choose('select[name="부서"]', '개발')
-    await app.choose('select[name="부서"]', '영업')
     await app.cdp.waitFor(`${suggestion} === '장비'`, 'a suggestion for 담당 from the sidecar started again', { timeoutMs: 60_000 })
+    assert.equal(await app.cdp.evaluate(`(async () => (await window.__TAURI_INTERNALS__.invoke('host_status')).state)()`), 'ready')
     const second = sidecar('$_.ProcessId')
     assert.match(second, /^\d+$/, 'one sidecar of this app again')
     assert.notEqual(second, first, 'a sidecar started again')
