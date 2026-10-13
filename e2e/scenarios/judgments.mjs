@@ -145,10 +145,10 @@ export default {
     assert.equal(await app.cdp.evaluate(`__e2e.one('input[name="담당자"]').value`), '박', 'one syllable, composed once')
     // A person who goes on typing without looking keeps being offered the value believed at the first character, though
     // thirty documents leave no strength of its own for two characters typed.
-    await app.cdp.evaluate(`window.__asked = __e2e.one('ll-documents').suggestions`)
+    await app.cdp.evaluate(`window.__asked = __e2e.one('ll-documents').judgment.suggestions`)
     await app.cdp.send('Input.insertText', { text: '영' })
     await app.cdp.waitFor(`__e2e.one('input[name="담당자"]')?.value === '박영'`, 'a second character typed')
-    await app.cdp.waitFor(`__e2e.one('ll-documents').suggestions !== window.__asked`, 'asked again with 박영', { timeoutMs: 15_000 })
+    await app.cdp.waitFor(`__e2e.one('ll-documents').judgment.suggestions !== window.__asked`, 'asked again with 박영', { timeoutMs: 15_000 })
     assert.equal(
       await app.cdp.evaluate(`__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')?.textContent`),
       '박영희',
@@ -159,8 +159,8 @@ export default {
     await app.cdp.waitFor(`!__e2e.one('[data-formdown-note="담당자"] .formdown-suggestion')`, 'nothing more offered once taken')
     // What the save will record: the value was first shown at one character typed, and taken at two — still one,
     // with two in the field when it was taken.
-    assert.equal(await app.cdp.evaluate(`__e2e.one('ll-documents').offered.get('담당자')?.typed`), 1, 'typed when first shown')
-    assert.equal(await app.cdp.evaluate(`__e2e.one('ll-documents').offered.get('담당자')?.decidedTyped`), 2, 'in the field when taken')
+    assert.equal(await app.cdp.evaluate(`__e2e.one('ll-documents').judgment.offered.get('담당자')?.typed`), 1, 'typed when first shown')
+    assert.equal(await app.cdp.evaluate(`__e2e.one('ll-documents').judgment.offered.get('담당자')?.decidedTyped`), 2, 'in the field when taken')
     await app.noAlert()
 
     // Leave the vault as the scenarios after this one expect it.

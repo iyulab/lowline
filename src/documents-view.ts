@@ -5,7 +5,6 @@ import { desktopMedia } from '@iyulab/desktop-patterns/breakpoints'
 import '@iyulab/desktop-patterns/list-detail'
 import { guard } from 'lit/directives/guard.js'
 import { keyed } from 'lit/directives/keyed.js'
-import type { FieldStates } from '@formdown/ui'
 import {
   documentTitle,
   fileName,
@@ -20,13 +19,14 @@ import {
   templateInfo,
   updateDocument,
   withTemplateBody,
+  holdsValue,
   type FieldValues,
 } from './documents.js'
 import { documentId, newDocumentId, sharedIds } from './identity.js'
 import { currentRefs, revisedRef, templateId, templateVersion } from './template-revision.js'
 import { describeError } from './errors.js'
-import { charactersTyped, fillOrder, presentation, suggestionEvents, type Offer } from './events.js'
-import { cellText, referenceTargets, type Abstention, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
+import { JudgmentController } from './judgment-controller.js'
+import { cellText, referenceTargets, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
 import { namedEvidence, referenceChoices, referringDocuments } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
@@ -43,10 +43,6 @@ import './rename-control.js'
 import './delete-control.js'
 import './keep-copy-control.js'
 
-/** How long typing pauses before suggestions are asked for again. */
-const SUGGEST_DELAY_MS = 300
-/** The field types whose value a person types out, rather than picks, checks or enters as a number or date. */
-const TYPED_TYPES = new Set(['text', 'textarea', 'email', 'tel', 'url', 'search'])
 /** How long typing in the list's filter pauses before the documents' values are looked in. */
 const SEARCH_DELAY_MS = 250
 
@@ -251,34 +247,17 @@ export class LlDocuments extends LitElement {
   @state() private opened = 0
   /** The form's current values, as it reports them. */
   private values: FieldValues = {}
-  /** The open draft's template as the sidecar knows it; undefined when suggestions are unavailable. */
-  private template?: TemplateSnapshot
-  /** Judgment fields asked for a suggestion and given none, with why — or `unavailable` when asking failed. */
-  @state() private abstained = new Map<string, Abstention | null | 'unavailable'>()
-  /** The open draft's template has judgment fields, and the sidecar that suggests for them did not start. */
-  @state() private unavailable = false
+  /** The draft's judgment fields: their suggestions, and what the person did with them. */
+  private readonly judgment = new JudgmentController(this, {
+    draft: () => this.draft && { templateRef: this.draft.templateRef, id: this.draft.kind === 'existing' ? this.draft.id : undefined },
+    values: () => this.values,
+    sourceOf: (s) => this.sourceOf(s),
+    hasCases: () => this.draft?.kind === 'existing' && !!this.scope,
+  })
   /** Ids more than one document holds (a file copied outside the app); see `sharedIds`. */
   private sharedIds = new Set<string>()
-  /** For each judgment field, how many settled documents of the template hold a value in it. */
-  private learned = new Map<string, number>()
-  /** Suggestions for the draft's empty judgment fields, by field name. */
-  @state() private suggestions = new Map<string, Suggestion>()
-  /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
-  private offered = new Map<string, Offer>()
-  /** The draft's filled fields in the order they were filled (see `fillOrder`). */
-  private filled: string[] = []
-  /**
-   * Judgment fields the person is typing a value into — typed by hand since the draft was opened or last saved, not
-   * taken from a suggestion. Such a field stays open: it is asked about with what has been typed so far.
-   */
-  private typing = new Set<string>()
   /** The field the person was last in, to go back to once a save has drawn the form again. */
   private lastField?: string
-  /**
-   * Fields whose suggestion was rejected in this draft and not offered again. Once the draft is
-   * saved the rejection is an event, and the sidecar keeps it out of the document after reopening.
-   */
-  private rejected = new Set<string>()
   /** Template names (their file names) by `id@version`. */
   @state() private templateNames = new Map<string, string>()
   /** Each template id's reference now: a document of an earlier revision is read as its template now. */
@@ -287,9 +266,6 @@ export class LlDocuments extends LitElement {
   @state() private writtenWith?: string
   /** Counts accepted suggestions, so the form is handed its values again. */
   @state() private applied = 0
-  private suggestTimer?: ReturnType<typeof setTimeout>
-  /** Counts requests for suggestions; only the latest one's answers are shown. */
-  private suggestRun = 0
   @state() private dirty = false
   /** The import panel is showing instead of a document. */
   @state() private importing = false
@@ -345,7 +321,7 @@ export class LlDocuments extends LitElement {
     // A change that touched no file is the sidecar started again after it ended (`vault-snapshot.ts`): what it
     // could not suggest for the open draft is asked again, once it has the vault.
     if (!change.rescan && change.written.length === 0 && change.removed.length === 0) {
-      if (this.draft) void this.prepareSuggestions(this.draft.templateRef)
+      if (this.draft) void this.judgment.prepare(this.draft.templateRef)
       return
     }
     const draft = this.draft
@@ -372,7 +348,7 @@ export class LlDocuments extends LitElement {
         }
       }
     }
-    if (this.template) void this.prepareSuggestions(draft?.templateRef)
+    if (this.judgment.template) void this.judgment.prepare(draft?.templateRef)
   }
 
   private async refresh() {
@@ -458,142 +434,24 @@ export class LlDocuments extends LitElement {
     this.originalUntrashable = false
     this.message = ''
     this.dirty = false
-    this.template = undefined
-    this.suggestions = new Map()
-    this.abstained = new Map()
-    this.unavailable = false
-    this.offered = new Map()
-    this.filled = []
-    this.typing = new Set()
-    this.rejected = new Set()
+    this.judgment.reset()
     this.similar = undefined
-  }
-
-  /**
-   * Hands the sidecar the vault as it is now — its saved documents are what suggestions learn
-   * from — and finds the draft's template. Suggestions are an aid: without the sidecar the
-   * document is filled in by hand as before.
-   */
-  private async prepareSuggestions(templateRef: string | undefined) {
-    if (!templateRef) return
-    try {
-      const synced = await syncVault()
-      const template = synced.templates.find((t) => t.ref === templateRef)
-      if (this.draft?.templateRef !== templateRef) return // another draft opened meanwhile
-      this.template = template?.suggest.length ? template : undefined
-      const settled = synced.documents.filter((d) => d.template === templateRef && !d.conflicted)
-      this.learned = new Map(template?.suggest.map((f) => [f, settled.filter((d) => holdsValue(d.values[f])).length]))
-      this.unavailable = false
-      await this.suggest()
-    } catch {
-      this.template = undefined
-      // Saying nothing would read as "no suggestion to make": say they failed, if the template has fields to suggest for.
-      try {
-        const read = await readVault()
-        if (this.draft?.templateRef !== templateRef) return
-        this.unavailable = !!read.templates.find((t) => t.ref === templateRef)?.suggest.length
-      } catch {
-        // the vault itself could not be read: nothing more to say about suggestions
-      }
-    }
-  }
-
-  /** Asks for a value for each empty judgment field, given what the other fields hold. */
-  private async suggest() {
-    const template = this.template
-    if (!template) return
-    const run = ++this.suggestRun
-    const values = { ...this.values }
-    const next = new Map<string, Suggestion>()
-    const abstained = new Map<string, Abstention | null | 'unavailable'>()
-    const typedWhenAsked = new Map<string, number>()
-    for (const field of template.suggest) {
-      // A field being typed into is asked with what has been typed, as an open field; one holding a value otherwise
-      // is settled, and not asked about.
-      const typed = this.typing.has(field) && typeof values[field] === 'string' ? (values[field] as string) : undefined
-      if (!isEmpty(values[field]) && typed === undefined) continue
-      try {
-        const document = this.draft?.kind === 'existing' ? this.draft.id : undefined
-        const { [field]: _, ...others } = values
-        const suggestion = await host.suggest(template.ref, field, typed === undefined ? values : others, document, typed)
-        // Declined here, now or before it was last saved: not offered again, and nothing to explain.
-        if (this.rejected.has(field) || suggestion.mode === 'rejected') continue
-        // While typing, only a value that adds to the text is worth showing, and no reason is given for there being none.
-        if (typed !== undefined) {
-          if (suggestion.value !== null && suggestion.value !== typed) next.set(field, suggestion)
-        } else if (suggestion.value !== null) next.set(field, suggestion)
-        else abstained.set(field, suggestion.reason ?? null)
-        typedWhenAsked.set(field, charactersTyped(typed))
-      } catch {
-        abstained.set(field, 'unavailable')
-      }
-    }
-    // Values may have changed (or another draft opened) while these were asked for.
-    if (run !== this.suggestRun || this.template !== template) return
-    this.suggestions = next
-    this.abstained = abstained
-    const filled = fillOrder(this.filled, values)
-    for (const [field, suggestion] of next) {
-      // Asked again after each pause in typing: the same value still showing is the same presentation.
-      if (this.offered.get(field)?.suggestion.value === suggestion.value) continue
-      const offer: Offer = { suggestion, shown: new Date(), filled, typed: typedWhenAsked.get(field) ?? 0 }
-      this.offered.set(field, offer)
-      void vault.recordPresentation(presentation(template.ref, field, offer)).catch(() => {})
-    }
-  }
-
-  private scheduleSuggest() {
-    clearTimeout(this.suggestTimer)
-    if (this.template) this.suggestTimer = setTimeout(() => void this.suggest(), SUGGEST_DELAY_MS)
   }
 
   /** Puts a suggested value into the form. It is a value like any other until the document is saved. */
   private accept(field: string, value: string) {
-    this.decided(field)
-    this.typing.delete(field)
+    this.judgment.take(field)
     this.setValues({ ...this.values, [field]: value })
     this.initialValues = this.values
     this.applied++
     this.dirty = true
     this.message = ''
-    this.dismiss(field)
-  }
-
-  /** Sets a suggestion aside. The rejection is recorded if the field is still empty when saved. */
-  private reject(field: string) {
-    this.decided(field)
-    this.rejected.add(field)
-    this.dismiss(field)
-  }
-
-  /** Notes when a suggestion was taken or rejected, and what was in its field then — before taking it changes that. */
-  private decided(field: string) {
-    const offer = this.offered.get(field)
-    if (!offer) return
-    const value = this.values[field]
-    offer.decided = new Date()
-    offer.decidedTyped = charactersTyped(typeof value === 'string' ? value : undefined)
   }
 
   /** The form's values, and the order its fields were filled in. */
   private setValues(values: FieldValues) {
     this.values = values
-    this.filled = fillOrder(this.filled, values)
-  }
-
-  private dismiss(field: string) {
-    const rest = new Map(this.suggestions)
-    rest.delete(field)
-    this.suggestions = rest
-  }
-
-  /** Records what the save confirmed about the suggestions offered for this draft. */
-  private async recordSuggestionEvents(id: string) {
-    const events = suggestionEvents(this.offered, this.rejected, this.values, id, new Date(), this.template?.ref)
-    // Each event is recorded once; a rejection stays in force while the draft is open. A suggestion
-    // the save said nothing about is still the one showing, not a new presentation.
-    for (const event of events) this.offered.delete(event.field)
-    for (const event of events) await vault.recordEvent(event)
+    this.judgment.track(values)
   }
 
   /** Drops the unsaved edits and shows the document as it is on disk now. */
@@ -612,7 +470,7 @@ export class LlDocuments extends LitElement {
       this.initialValues = this.values
       this.draft = { kind: 'new', templateSource, templateRef: ref }
       this.opened++
-      void this.prepareSuggestions(ref)
+      void this.judgment.prepare(ref)
       // A new document is started to be written: the cursor goes to its first field.
       await this.focusForm()
     } catch (e) {
@@ -637,7 +495,7 @@ export class LlDocuments extends LitElement {
       this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef, ...(filled ? { filled } : {}) }
       this.writtenWith = template !== templateRef && template !== undefined ? template : undefined
       this.opened++
-      void this.prepareSuggestions(this.draft.templateRef)
+      void this.judgment.prepare(this.draft.templateRef)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -751,9 +609,8 @@ export class LlDocuments extends LitElement {
       // The app's own writes are not reported back, so the list is read here: a new document, or
       // one made again after it was removed outside, joins it.
       await this.refresh()
-      if (this.draft?.kind === 'existing') await this.recordSuggestionEvents(this.draft.id)
-      // What was typed is confirmed now, no longer being typed.
-      this.typing = new Set()
+      // What the save confirmed about the suggestions is recorded; what was typed is no longer being typed.
+      await this.judgment.saved(this.draft?.kind === 'existing' ? this.draft.id : undefined)
       this.dirty = false
       this.changedOutside = false
       this.message = strings.saved
@@ -761,7 +618,7 @@ export class LlDocuments extends LitElement {
       await this.focusForm(this.lastField)
       this.dispatchEvent(new CustomEvent('ll-confirmed', { bubbles: true, composed: true }))
       // What was just saved is confirmed: the next suggestions learn from it.
-      void this.prepareSuggestions(this.draft?.templateRef)
+      void this.judgment.prepare(this.draft?.templateRef)
     } catch (e) {
       this.error = describeError(e)
     }
@@ -801,7 +658,7 @@ export class LlDocuments extends LitElement {
       await this.refresh()
       this.message = strings.renamed
       // The sidecar knows documents by their paths too: it is handed the vault as it is now.
-      void this.prepareSuggestions(draft.templateRef)
+      void this.judgment.prepare(draft.templateRef)
     } catch (e) {
       const kind = failureKind(e)
       if (kind === 'changed-outside') this.changedOutside = true
@@ -920,51 +777,19 @@ export class LlDocuments extends LitElement {
    */
   private onData(e: CustomEvent<{ formData: Record<string, unknown> }>, opened: number) {
     if (opened !== this.opened || !this.draft) return
-    const values = fieldValues(e.detail.formData)
-    for (const field of this.template?.suggest ?? []) {
-      if (values[field] === this.values[field]) continue
-      if (isEmpty(values[field]) || !this.typeable(field)) this.typing.delete(field)
-      else this.typing.add(field)
-    }
-    this.setValues(values)
+    const before = this.values
+    this.values = fieldValues(e.detail.formData)
+    this.judgment.edited(before, this.values)
     this.dirty = true
     this.message = ''
-    this.scheduleSuggest()
   }
 
   /** Which fields of this template learn from confirmed documents — set on the template's page. */
   private renderJudgment() {
-    if (this.unavailable) return html`<p class="message judgment" role="status">${strings.suggestionsUnavailable}</p>`
-    const template = this.template
+    if (this.judgment.unavailable) return html`<p class="message judgment" role="status">${strings.suggestionsUnavailable}</p>`
+    const template = this.judgment.template
     if (!template) return nothing
-    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map((f) => this.label(f)))}</p>`
-  }
-
-  /** Whether a person types a field's value out — one value of a text kind, with no choices to pick from. */
-  private typeable(field: string): boolean {
-    const f = this.template?.fields.find((f) => f.name === field)
-    return !!f && !f.multiple && f.options.length === 0 && TYPED_TYPES.has(f.type)
-  }
-
-  private label(field: string): string {
-    return this.template?.fields.find((f) => f.name === field)?.label ?? field
-  }
-
-  /** What the form draws by each judgment field: the suggested value to take or decline, or why there is none. */
-  private fieldStates(): FieldStates {
-    const states: FieldStates = {}
-    for (const [field, s] of this.suggestions) {
-      states[field] = { suggestions: [s.value!], note: this.sourceOf(s), decline: strings.reject }
-    }
-    for (const [field, reason] of this.abstained) {
-      states[field] = {
-        note:
-          reason === 'unavailable'
-            ? strings.judgmentUnavailable
-            : strings.judgmentAbstained(reason, this.learned.get(field) ?? 0, this.draft?.kind === 'existing' && !!this.scope),
-      }
-    }
-    return states
+    return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map((f) => this.judgment.label(f)))}</p>`
   }
 
   /** What a suggestion rests on, in words: the value it was settled with. */
@@ -1028,9 +853,9 @@ export class LlDocuments extends LitElement {
    * person reads for themselves, never a suggestion.
    */
   private judgedIn(path: string) {
-    const fields = this.template?.suggest ?? []
+    const fields = this.judgment.template?.suggest ?? []
     const values = this.vaultDocuments.find((d) => d.path === path)?.values
-    const judged = fields.flatMap((f) => (holdsValue(values?.[f]) ? [{ label: this.label(f), value: cellText(values![f]) }] : []))
+    const judged = fields.flatMap((f) => (holdsValue(values?.[f]) ? [{ label: this.judgment.label(f), value: cellText(values![f]) }] : []))
     return judged.length ? html`<span class="note judged">${strings.similarJudged(judged)}</span>` : nothing
   }
 
@@ -1222,11 +1047,11 @@ export class LlDocuments extends LitElement {
                 .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : (draft.filled ?? draft.source)}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .choices=${guard([this.opened, this.reads], () => this.choices(draft))}
-                .fieldStates=${guard([this.suggestions, this.abstained], () => this.fieldStates())}
+                .fieldStates=${guard([this.judgment.suggestions, this.judgment.abstained], () => this.judgment.fieldStates())}
                 @focusin=${this.onFormFocus}
                 @formdown-data-update=${(e: CustomEvent<{ formData: Record<string, unknown> }>) => this.onData(e, opened)}
                 @formdown-suggestion-pick=${(e: CustomEvent<{ field: string; value: string }>) => this.accept(e.detail.field, e.detail.value)}
-                @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.reject(e.detail.field)}
+                @formdown-suggestion-decline=${(e: CustomEvent<{ field: string }>) => this.judgment.reject(e.detail.field)}
               ></formdown-ui>`,
               )}
               ${draft.kind === 'existing' ? this.renderReferring(draft.id) : nothing}
@@ -1240,15 +1065,6 @@ export class LlDocuments extends LitElement {
       </section>
     </dp-list-detail>`
   }
-}
-
-/** A saved value, as the vault's front matter holds it (a key written empty reads as null). */
-function holdsValue(value: unknown): boolean {
-  return value !== undefined && value !== null && !isEmpty(value as FieldValues[string])
-}
-
-function isEmpty(value: FieldValues[string] | undefined): boolean {
-  return value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
 }
 
 declare global {

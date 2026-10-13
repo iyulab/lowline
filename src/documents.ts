@@ -79,6 +79,16 @@ export function fieldValues(data: Record<string, unknown>): FieldValues {
   return values
 }
 
+/** A field left empty: no value, empty text, or no item picked. */
+export function isEmpty(value: FieldValues[string] | undefined): boolean {
+  return value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
+}
+
+/** A saved value, as the vault's front matter holds it (a key written empty reads as null). */
+export function holdsValue(value: unknown): boolean {
+  return value !== undefined && value !== null && !isEmpty(value as FieldValues[string])
+}
+
 /** A new document filled in from `templateSource`, named by `id`. */
 export function newDocument(templateSource: string, values: FieldValues, id: string): string {
   const { ref } = templateInfo(templateSource)
