@@ -78,8 +78,12 @@ describe('documentSnapshot', () => {
     })
   })
 
-  it('knows a document without an id by its path', () => {
-    expect(documentSnapshot('문서/old.md', '---\ntemplate: bug-report@2\n제목: 멈춤\n---\n')).toMatchObject({ id: '문서/old.md', values: { 제목: '멈춤' } })
+  it('knows a document without an id by its path, as one the app has never saved', () => {
+    expect(documentSnapshot('문서/old.md', '---\ntemplate: bug-report@2\n제목: 멈춤\n---\n')).toMatchObject({
+      id: '문서/old.md',
+      values: { 제목: '멈춤' },
+      outside: true,
+    })
   })
 
   it('skips a file that names no template', () => {

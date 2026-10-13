@@ -227,6 +227,8 @@ export const strings = {
   tableSkippedField: (document: string, field: string) => `${document} — ${field}`,
   hostStarting: '표를 준비하고 있습니다…',
   learningEmpty: '제안을 받는 판단 칸이 아직 없습니다. 서식에서 판단 칸을 정하면 여기서 곡선이 자랍니다.',
+  learningOutside: (form: string, outside: number, confirmed: number) =>
+    `${form}: 판단 칸이 채워진 문서 ${confirmed}건 가운데 ${outside}건은 Lowline에서 저장한 적이 없습니다. 다른 프로그램이 쓴 값이라 사람이 확정했는지 알 수 없지만, 제안은 이 값에서도 배웁니다.`,
   learningUndecided: '아직 결정된 제안이 없습니다 — 제안을 수락·교정·거절하며 저장하면 곡선이 자랍니다.',
   // What a field needs for a suggestion: another field whose value the documents settled it alongside.
   learningWhatSuggests: '제안은 다른 칸에 같은 값이 든 문서들이 이 칸을 목표만큼 자주 같게 확정해 왔을 때 나옵니다 — 이 칸을 가르는 칸이 서식에 있는지 보세요.',

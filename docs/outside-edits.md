@@ -15,7 +15,7 @@ When a sync client keeps both devices' edits of a file as a copy beside it, the 
 
 ## Programs that write documents
 
-Another program may add documents to the vault — an automation that turns incoming mail into new records, for example. The app reads them like any other edit from outside. A value in a judgment field is taken as a person's decision: it is what suggestions learn the right answer from. So a program writing documents should fill in the observed fields and leave the judgment fields empty, for a person to confirm in the app with its suggestions. A template's document list can show only the documents with a judgment field still empty, and Ctrl+Enter saves the one open and opens the next. Judgment values a program fills in are learned from as if someone had decided them.
+Another program may add documents to the vault — an automation that turns incoming mail into new records, for example. The app reads them like any other edit from outside. A value in a judgment field is taken as a person's decision: it is what suggestions learn the right answer from. So a program writing documents should fill in the observed fields and leave the judgment fields empty, for a person to confirm in the app with its suggestions. A template's document list can show only the documents with a judgment field still empty, and Ctrl+Enter saves the one open and opens the next. Judgment values a program fills in are learned from as if someone had decided them. The learning screen says, for each template, how many of the documents with a judgment value the app has never saved — documents whose front matter has no `lowline.id`.
 
 ## Shared folders
 

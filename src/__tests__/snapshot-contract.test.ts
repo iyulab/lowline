@@ -48,7 +48,7 @@ describe('the vault the sidecar is handed', () => {
       new Date('2026-10-03T00:00:10Z'),
       template.ref,
     )
-    const vault: VaultSnapshot = { templates: [template], documents: [{ ...document, conflicted: true }], events }
+    const vault: VaultSnapshot = { templates: [template], documents: [{ ...document, conflicted: true, outside: true }], events }
     await expect(JSON.stringify(vault, null, 2) + '\n').toMatchFileSnapshot('../../src-host/Lowline.Host.Tests/ui-snapshot.json')
   })
 })

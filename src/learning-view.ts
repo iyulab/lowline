@@ -216,7 +216,21 @@ export class LlLearning extends LitElement {
     if (this.error) return html`<p class="error" role="alert">${this.error}</p>`
     if (this.waiting) return html`<p class="message" role="status">${strings.hostStarting}</p>`
     if (this.curves.length === 0) return html`<p class="message">${strings.learningEmpty}</p>`
-    return html`${this.curves.map((c) => this.renderCurve(c))}${this.renderCounts()}`
+    return html`${this.renderOutside()}${this.curves.map((c) => this.renderCurve(c))}${this.renderCounts()}`
+  }
+
+  /**
+   * For each form, how many of the documents suggestions learn from were written by another program and never
+   * saved here — values no one may have confirmed. Nothing is said for a form with none.
+   */
+  private renderOutside() {
+    const forms = numberedForms(this.templates)
+    return (this.counts?.forms ?? [])
+      .filter((f) => f.outside > 0)
+      .map((f) => {
+        const ref = forms[f.form - 1].ref
+        return html`<p class="message outside">${strings.learningOutside(this.names.get(ref) ?? ref, f.outside, f.confirmed)}</p>`
+      })
   }
 
   /**

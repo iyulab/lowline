@@ -21,6 +21,10 @@ public sealed class SnapshotContractTests
             ["optionLabels"] = "what the form shows for an option; suggestions go by the option's value",
             ["reference"] = "the UI resolves a reference to a name; the sidecar keeps the id it is given",
         },
+        [typeof(DocumentSnapshot)] = new()
+        {
+            ["outside"] = "whether the app has ever saved the document, for the person to see on the learning screen; learned from all the same",
+        },
         [typeof(SuggestionEvent)] = new()
         {
             ["value"] = "what was saved is read from the document itself",

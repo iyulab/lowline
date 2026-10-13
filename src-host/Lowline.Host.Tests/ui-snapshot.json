@@ -73,7 +73,8 @@
         "고객": "customer-1"
       },
       "modified": 1790000000000,
-      "conflicted": true
+      "conflicted": true,
+      "outside": true
     }
   ],
   "events": [

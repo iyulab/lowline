@@ -904,9 +904,26 @@ const scenarios = {
     assert.equal((await fileValues(written[2])).담당, '인사')
     await app.noAlert()
 
-    // Leave the vault as the scenarios after this one expect it.
+    // The learning screen says how many of the documents suggestions learn from no one saved here: those written
+    // with a judgment value by another program — the fixture's records — and not the two just saved.
+    let outside = 0
+    let confirmed = 0
+    for (const name of (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md') && !n.includes('충돌'))) {
+      const values = await fileValues(join(vault, '문서', name))
+      if (values.template !== 'intake@1' || !String(values.담당 ?? '').trim()) continue
+      confirmed++
+      if (!values.lowline?.id) outside++
+    }
+    assert.ok(outside > 0 && confirmed > outside, `${outside} of ${confirmed} written outside`)
     await app.click('dc-checkbox', `미확정만 (${unsettled - 2})`)
     await app.learning() // nothing open: removing the records is not an open document gone
+    await app.cdp.waitFor(
+      `__e2e.all('p.outside').some((p) => p.textContent.startsWith('접수: 판단 칸이 채워진 문서 ${confirmed}건 가운데 ${outside}건은 Lowline에서 저장한 적이 없습니다.'))`,
+      'the documents no one saved here counted on the learning screen',
+      { timeoutMs: 15_000 },
+    )
+
+    // Leave the vault as the scenarios after this one expect it.
     await Promise.all(written.map((f) => rm(f)))
     await app.documentsOf(INTAKE)
     await app.cdp.waitFor(`!__e2e.all('ll-documents').some((d) => d.shadowRoot.textContent.includes('확인할 기록'))`, 'the records gone from the list', {

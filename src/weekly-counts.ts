@@ -78,6 +78,12 @@ export interface FormCounts {
   /** Saved documents with a value in at least one judgment field, leaving out those not settled (`conflicted`). */
   confirmed: number
   /**
+   * Of those, the ones the app has never saved (`DocumentSnapshot.outside`): their judgment values were written by
+   * another program, and no one may have confirmed them. Added within format 1 — a reader that does not know it
+   * can pass it by.
+   */
+  outside: number
+  /**
    * Weeks from the first such document's day to the last, both included. A document's day is the one its file is
    * named by — the day it was made, or for a record brought in, its own day — or, for a file renamed without it, its
    * last save. Records brought in all at once are counted in the weeks they were made, not the week they came in.
@@ -205,15 +211,16 @@ export function weeklyCounts(
   }
 
   const formCounts = forms.map((template, i): FormCounts => {
-    const saved = documents
-      .filter((d) => d.template === template.ref && !d.conflicted && template.suggest.some((f) => isFilled(d.values[f])))
-      .map((d) => namedDay(d.path) ?? d.modified)
+    const confirmed = documents.filter(
+      (d) => d.template === template.ref && !d.conflicted && template.suggest.some((f) => isFilled(d.values[f])),
+    )
+    const saved = confirmed.map((d) => namedDay(d.path) ?? d.modified)
     const times = saved.filter((m): m is number => m !== undefined && m > 0)
     // Folded rather than spread: a spread's arguments are limited, and a vault can hold more documents.
     const first = times.reduce((a, b) => Math.min(a, b), Infinity)
     const last = times.reduce((a, b) => Math.max(a, b), -Infinity)
     const weeks = times.length === 0 ? 0 : Math.round((Date.parse(weekOf(last)) - Date.parse(weekOf(first))) / (7 * DAY)) + 1
-    return { form: i + 1, confirmed: saved.length, weeks, perWeek: weeks === 0 ? 0 : Math.round((saved.length / weeks) * 100) / 100 }
+    return { form: i + 1, confirmed: saved.length, outside: confirmed.filter((d) => d.outside).length, weeks, perWeek: weeks === 0 ? 0 : Math.round((saved.length / weeks) * 100) / 100 }
   })
 
   const counts = [...cells.values()].sort((a, b) =>

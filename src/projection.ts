@@ -46,6 +46,11 @@ export interface DocumentSnapshot {
    * which to keep. It stays in the table; suggestions do not learn from it.
    */
   conflicted?: boolean
+  /**
+   * Its front matter has no id: the app has never saved it — another program wrote it, or it was made before
+   * documents had ids. Its judgment values are learned from all the same, though no one may have confirmed them.
+   */
+  outside?: boolean
 }
 
 export interface VaultSnapshot {
@@ -107,7 +112,7 @@ function suggestFields(data: Record<string, unknown> | undefined, fields: Templa
 export function documentSnapshot(path: string, source: string, modified?: number): DocumentSnapshot | undefined {
   const { template, id, values } = documentFrontMatter(source)
   if (!template) return undefined
-  return { path, id: documentId(path, id), template, values, ...(modified ? { modified } : {}) }
+  return { path, id: documentId(path, id), template, values, ...(modified ? { modified } : {}), ...(id ? {} : { outside: true }) }
 }
 
 export interface ProjectionTable {

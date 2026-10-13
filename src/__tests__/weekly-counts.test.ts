@@ -82,14 +82,14 @@ describe('weeklyCounts', () => {
   it('numbers only forms with judgment fields, in the order of their references', () => {
     // bug@2 is 1, intake@1 is 2; a form without judgment fields is not counted.
     expect(counts.forms).toEqual([
-      { form: 1, confirmed: 0, weeks: 0, perWeek: 0 },
-      { form: 2, confirmed: 2, weeks: 3, perWeek: 0.67 },
+      { form: 1, confirmed: 0, outside: 0, weeks: 0, perWeek: 0 },
+      { form: 2, confirmed: 2, outside: 0, weeks: 3, perWeek: 0.67 },
     ])
   })
 
   it('does not count a document with a conflict copy as confirmed', () => {
     const unsettled = documents.map((d) => (d.path === '문서/3.md' ? { ...d, conflicted: true } : d))
-    expect(weeklyCounts([notes, intake, bug], unsettled, events).forms[1]).toEqual({ form: 2, confirmed: 1, weeks: 1, perWeek: 1 })
+    expect(weeklyCounts([notes, intake, bug], unsettled, events).forms[1]).toEqual({ form: 2, confirmed: 1, outside: 0, weeks: 1, perWeek: 1 })
   })
 
   it('counts a document in the week of the day its file is named by, not when its file was last written', () => {
@@ -103,7 +103,7 @@ describe('weeklyCounts', () => {
       doc('문서/2026-10-05-접수.md', 'intake@1', { 담당: '장비' }, Date.parse('2026-10-05T10:00:00Z')),
       doc('문서/2026-10-12-접수 (1).md', 'intake@1', { 담당: '장비' }, Date.parse('2026-10-12T10:00:00Z')),
     ]
-    expect(weeklyCounts([intake], [...history, ...made], []).forms).toEqual([{ form: 1, confirmed: 54, weeks: 54, perWeek: 1 }])
+    expect(weeklyCounts([intake], [...history, ...made], []).forms).toEqual([{ form: 1, confirmed: 54, outside: 0, weeks: 54, perWeek: 1 }])
   })
 
   it('counts a decision in the week of the document it was saved with, early on a Monday too', () => {
@@ -114,7 +114,14 @@ describe('weeklyCounts', () => {
       [event(new Date(early).toISOString(), '문서/2026-10-05-접수.md', '담당', 'accept', null, 'intake@1')],
     )
     expect(counted.counts.map((c) => c.week)).toEqual(['2026-10-05'])
-    expect(counted.forms).toEqual([{ form: 1, confirmed: 1, weeks: 1, perWeek: 1 }])
+    expect(counted.forms).toEqual([{ form: 1, confirmed: 1, outside: 0, weeks: 1, perWeek: 1 }])
+  })
+
+  it('counts apart the confirmed documents the app has never saved', () => {
+    const outside = { ...doc('문서/2026-10-05-접수.md', 'intake@1', { 담당: '총무' }), outside: true }
+    const blank = { ...doc('문서/2026-10-06-접수.md', 'intake@1', {}), outside: true } // no judgment value: not confirmed at all
+    const made = doc('문서/2026-10-07-접수.md', 'intake@1', { 담당: '장비' })
+    expect(weeklyCounts([intake], [outside, blank, made], []).forms[0]).toMatchObject({ confirmed: 2, outside: 1 })
   })
 
   it('reads the day a file is named by, if it is one', () => {
