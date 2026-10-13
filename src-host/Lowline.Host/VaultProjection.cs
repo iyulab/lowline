@@ -77,20 +77,23 @@ public sealed record ProjectionRow(string Path, IReadOnlyDictionary<string, obje
 /// <summary>
 /// One condition on a template's table. <see cref="Column"/> is a field's name, or
 /// <see cref="VaultProjection.PathColumn"/> for the document's vault path; <see cref="Op"/> is <c>contains</c>
-/// (text, ignoring case), <c>equal</c>, or <c>atLeast</c> / <c>atMost</c> (a number or date field's bounds, both
-/// included — a date as the field writes it, read as the same day on every computer).
+/// (text, ignoring case), <c>equal</c>, <c>atLeast</c> / <c>atMost</c> (a number or date field's bounds, both
+/// included — a date as the field writes it, read as the same day on every computer), or <c>empty</c> (no value;
+/// <see cref="Value"/> is not read).
 /// </summary>
 public sealed record ColumnFilter(string Column, string Op, string Value)
 {
-    /// <summary>The condition as Formbase asks it. An operator other than the two is a request no screen makes.</summary>
-    public FieldFilter ToFieldFilter() => new(Column, Op switch
-    {
-        "contains" => FilterOperator.Contains,
-        "equal" => FilterOperator.Equal,
-        "atLeast" => FilterOperator.GreaterThanOrEqual,
-        "atMost" => FilterOperator.LessThanOrEqual,
-        _ => throw new ArgumentException("unknown filter operator", nameof(Op)),
-    }, Value);
+    /// <summary>The condition as Formbase asks it. An operator other than these is a request no screen makes.</summary>
+    public FieldFilter ToFieldFilter() => Op == "empty"
+        ? new(Column, FilterOperator.IsNull, null)
+        : new(Column, Op switch
+        {
+            "contains" => FilterOperator.Contains,
+            "equal" => FilterOperator.Equal,
+            "atLeast" => FilterOperator.GreaterThanOrEqual,
+            "atMost" => FilterOperator.LessThanOrEqual,
+            _ => throw new ArgumentException("unknown filter operator", nameof(Op)),
+        }, Value);
 }
 
 /// <summary>What the UI asks the text of the vault: documents holding these words, within one template if named.</summary>

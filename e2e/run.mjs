@@ -813,6 +813,31 @@ const scenarios = {
     await typeIn('칸에 든 글자', '')
     await shows(intake.length, `문서 ${intake.length}건`)
 
+    // A judgment field left blank — as in records another program wrote for a person to confirm — is found by its
+    // filter's 「비어 있음」, whether the field is written empty or not written at all; with another field's value, both hold.
+    const blanks = [join(vault, '문서', '밖에서 쓴 기록-1.md'), join(vault, '문서', '밖에서 쓴 기록-2.md')]
+    await writeFile(blanks[0], '---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 1\n부서: 영업\n담당: ""\n---\n# 접수\n')
+    await writeFile(blanks[1], '---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 2\n부서: 개발\n---\n# 접수\n')
+    const unsettled = intake.filter((d) => !String(d.담당 ?? '').trim())
+    await shows(intake.length + 2, `문서 ${intake.length + 2}건`)
+    assert.ok(
+      await app.cdp.evaluate(`__e2e.all('dc-select').find((el) => el.getAttribute('aria-label') === '담당').options.some((o) => o.label === '담당: 비어 있음')`),
+      'the filter offers 비어 있음',
+    )
+    await pick('담당', '\u0000')
+    await shows(unsettled.length + 2, `조건에 맞는 문서 ${unsettled.length + 2}건`)
+    await pick('부서', '개발')
+    const unsettledDev = unsettled.filter((d) => d.부서 === '개발').length + 1
+    await shows(unsettledDev, `조건에 맞는 문서 ${unsettledDev}건`)
+    // A value picked in its place takes the blank away.
+    await pick('부서', '')
+    await pick('담당', '장비')
+    const equipment = intake.filter((d) => d.담당 === '장비').length
+    await shows(equipment, `조건에 맞는 문서 ${equipment}건`)
+    await pick('담당', '')
+    await Promise.all(blanks.map((f) => rm(f)))
+    await shows(intake.length, `문서 ${intake.length}건`)
+
     // The document list narrows by name as it is typed.
     await app.documentsOf(INTAKE)
     await app.cdp.waitFor(

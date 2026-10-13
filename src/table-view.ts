@@ -12,6 +12,8 @@ import { SidecarUnavailable, syncVault, onVaultChanged } from './vault-snapshot.
 
 /** How long typing into a filter pauses before the table is asked for again. */
 const FILTER_DELAY_MS = 250
+/** A choice or reference filter's pick for a field left blank — a character no option or document id holds. */
+const BLANK = '\u0000'
 
 /** A template's documents as a table, projected by the sidecar from what is in the vault now. */
 @customElement('ll-table')
@@ -171,6 +173,21 @@ export class LlTable extends LitElement {
     this.filterTimer = setTimeout(() => void this.show(this.template), FILTER_DELAY_MS)
   }
 
+  /**
+   * Sets a choice or reference field's filter: any value (none), one value, or left blank. The value and the blank
+   * are one filter on the field, so picking either takes the other away.
+   */
+  private choose(column: string, picked: string) {
+    const next = new Map(this.filters)
+    next.delete(`equal:${column}`)
+    next.delete(`empty:${column}`)
+    if (picked === BLANK) next.set(`empty:${column}`, { column, op: 'empty', value: '' })
+    else if (picked) next.set(`equal:${column}`, { column, op: 'equal', value: picked })
+    this.filters = next
+    clearTimeout(this.filterTimer)
+    this.filterTimer = setTimeout(() => void this.show(this.template), FILTER_DELAY_MS)
+  }
+
   /** Moves the text filter to another field, keeping what was typed. */
   private pickTextField(field: string) {
     const typed = this.filters.get(`contains:${this.textField}`)?.value ?? ''
@@ -198,6 +215,9 @@ export class LlTable extends LitElement {
     const textField = this.textField || texts[0]?.name || ''
     const value = (column: string, op: ColumnFilter['op']) => this.filters.get(`${op}:${column}`)?.value ?? ''
     const input = (e: Event) => (e.target as HTMLInputElement).value
+    // What a choice or reference filter shows picked: the blank, a value, or any.
+    const picked = (column: string) => (this.filters.has(`empty:${column}`) ? BLANK : value(column, 'equal'))
+    const blank = (f: TemplateField) => ({ value: BLANK, label: strings.tableFilterEmpty(f.label) })
     return html`<div class="filters" role="search" aria-label=${strings.tableFilters}>
       <dc-input
         size="sm"
@@ -211,18 +231,22 @@ export class LlTable extends LitElement {
         (f: TemplateField) => html`<dc-select
           size="sm"
           aria-label=${f.label}
-          .value=${value(f.name, 'equal')}
-          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...f.options.map((o) => ({ value: o, label: f.optionLabels?.[o] ?? o }))]}
-          @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
+          .value=${picked(f.name)}
+          .options=${[
+            { value: '', label: strings.tableFilterAny(f.label) },
+            blank(f),
+            ...f.options.map((o) => ({ value: o, label: f.optionLabels?.[o] ?? o })),
+          ]}
+          @change=${(e: Event) => this.choose(f.name, input(e))}
         ></dc-select>`,
       )}
       ${references.map(
         (f: TemplateField) => html`<dc-select
           size="sm"
           aria-label=${f.label}
-          .value=${value(f.name, 'equal')}
-          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, ...(named[f.name] ?? [])]}
-          @change=${(e: Event) => this.filter(f.name, 'equal', input(e))}
+          .value=${picked(f.name)}
+          .options=${[{ value: '', label: strings.tableFilterAny(f.label) }, blank(f), ...(named[f.name] ?? [])]}
+          @change=${(e: Event) => this.choose(f.name, input(e))}
         ></dc-select>`,
       )}
       ${texts.length > 0

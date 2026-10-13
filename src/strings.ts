@@ -199,6 +199,7 @@ export const strings = {
   tableFilters: '표 거르기',
   tableFilterName: '이름에 든 글자',
   tableFilterAny: (label: string) => `${label}: 모두`,
+  tableFilterEmpty: (label: string) => `${label}: 비어 있음`,
   tableFilterField: '글자를 찾을 칸',
   tableFilterText: '칸에 든 글자',
   tableFilterAtLeast: (label: string) => `${label} 이상`,

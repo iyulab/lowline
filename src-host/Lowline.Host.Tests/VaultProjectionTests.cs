@@ -79,6 +79,16 @@ public sealed class VaultProjectionTests
         Assert.Equal(["문서/1.md", "문서/2.md"],
             await Paths(new ColumnFilter("점수", "atLeast", "1"), new ColumnFilter("점수", "atMost", "2.5")));
         await Assert.ThrowsAsync<ArgumentException>(() => Paths(new ColumnFilter("제목", "near", "저장")));
+        await vault.IngestAsync(new VaultSnapshot([BugReport],
+        [
+            Document("문서/a.md", """{"제목": "정함", "심각도": "높음"}"""),
+            Document("문서/b.md", """{"제목": "빈 글", "심각도": ""}"""),
+            Document("문서/c.md", """{"제목": "공백", "심각도": "  "}"""),
+            Document("문서/d.md", """{"제목": "없음"}"""),
+        ]), Ct);
+        // A field left blank, written as nothing or not written at all, has no value; `empty` asks for those.
+        Assert.Equal(["문서/b.md", "문서/c.md", "문서/d.md"], await Paths(new ColumnFilter("심각도", "empty", "")));
+        Assert.Equal(["문서/a.md"], await Paths(new ColumnFilter("심각도", "equal", "높음")));
     }
 
     [Fact]

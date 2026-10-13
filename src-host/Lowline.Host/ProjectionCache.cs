@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Formbase.Core;
 using Formbase.Core.Primitives;
@@ -88,7 +89,9 @@ internal sealed class ProjectionCache : IAsyncDisposable
                 continue;
             }
             var body = new JsonObject { [VaultProjection.PathColumn] = document.Path };
-            foreach (var (name, value) in document.Values) body[name] = JsonNode.Parse(value.GetRawText());
+            // A field left blank — no text, or an empty list — has no value: it is not stored as an empty one.
+            foreach (var (name, value) in document.Values)
+                if (!IsBlank(value)) body[name] = JsonNode.Parse(value.GetRawText());
             ofTemplate[RecordKeyOf(document.Path).Value] = (document.Path, body);
         }
 
@@ -194,6 +197,15 @@ internal sealed class ProjectionCache : IAsyncDisposable
     /// and Formbase compares keys exactly, so the key is the composed form.
     /// </summary>
     public static RecordKey RecordKeyOf(string path) => RecordKey.Create(path.Normalize(NormalizationForm.FormC));
+
+    /// <summary>Whether a field's value is blank: null, text of nothing but white space, or an empty list.</summary>
+    internal static bool IsBlank(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.Null or JsonValueKind.Undefined => true,
+        JsonValueKind.String => string.IsNullOrWhiteSpace(value.GetString()),
+        JsonValueKind.Array => value.GetArrayLength() == 0,
+        _ => false,
+    };
 
     /// <summary>Removes a cache file and what SQLite keeps beside it.</summary>
     public static void Delete(string file)

@@ -139,12 +139,13 @@ export function cellText(value: unknown): string {
 
 /**
  * One condition on a template's table, answered by the sidecar from the projection: `column` is a field's
- * name, or `$path` for the document's vault path (its name); `contains` matches text ignoring case, and
- * `atLeast`/`atMost` bound a number or date field, both included.
+ * name, or `$path` for the document's vault path (its name); `contains` matches text ignoring case,
+ * `atLeast`/`atMost` bound a number or date field, both included, and `empty` matches a field left blank
+ * (its `value` is not read).
  */
 export interface ColumnFilter {
   column: string
-  op: 'contains' | 'equal' | 'atLeast' | 'atMost'
+  op: 'contains' | 'equal' | 'atLeast' | 'atMost' | 'empty'
   value: string
 }
 
