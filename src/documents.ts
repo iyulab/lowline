@@ -92,11 +92,23 @@ export function newDocument(templateSource: string, values: FieldValues, id: str
  */
 export function reviseDocument(documentSource: string, templateSource: string): string {
   const { ref } = templateInfo(templateSource)
+  return updateFrontMatter(withTemplateBody(documentSource, templateSource), { template: ref })
+}
+
+/** A document's front matter, as it is, above `templateSource`'s body. */
+export function withTemplateBody(documentSource: string, templateSource: string): string {
   const span = readFrontMatter(documentSource)?.frontMatter.span
   const newline = documentSource.includes('\r\n') ? '\r\n' : '\n'
   const body = templateBody(templateSource)
-  const moved = span ? documentSource.slice(0, span.end) + newline + body : body
-  return updateFrontMatter(moved, { template: ref })
+  return span ? documentSource.slice(0, span.end) + newline + body : body
+}
+
+/**
+ * Whether a document's body has fields to fill. A document is a copy of its template's body, but one another
+ * program wrote may carry its front matter alone.
+ */
+export function hasFields(documentSource: string): boolean {
+  return parseFormdown(documentSource).forms.length > 0
 }
 
 /** Gives a document the id `id`; other keys under `lowline`, and the rest of the file, stay as they are. */

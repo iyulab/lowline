@@ -21,6 +21,8 @@ import {
   templateInfo,
   templateProblems,
   updateDocument,
+  hasFields,
+  withTemplateBody,
 } from '../documents.js'
 import { starterTemplate } from '../strings.js'
 
@@ -367,5 +369,23 @@ describe('reviseDocument', () => {
     expect(readFrontMatter(moved)?.frontMatter.data.lowline).toEqual({ id: 'd-1', keep: 'yes' })
     expect(moved.endsWith('# 접수 (2판)\n\n요청: ___@요청\n\n@긴급: [select options="보통,급함"]\n')).toBe(true)
     expect(parseFormdown(moved).forms.map((f) => f.name)).toEqual(['요청', '긴급'])
+  })
+})
+
+describe('a document written with its front matter alone', () => {
+  const v1 = '---\nid: intake\nversion: 1\n---\n# 접수\n\n요청: ___@요청\n\n@담당: [select options="장비,인사"]\n'
+  const bare = '---\ntemplate: intake@1\n요청: 밖에서 쓴 요청\n---\n# 접수\n'
+
+  it('has no fields to fill, as a copy of its template does', () => {
+    expect(hasFields(bare)).toBe(false)
+    expect(hasFields('---\ntemplate: intake@1\n---\n')).toBe(false)
+    expect(hasFields(newDocument(v1, {}, 'd-1'))).toBe(true)
+  })
+
+  it("takes its template's body under its front matter as it is, naming the revision it named", () => {
+    const filled = withTemplateBody(bare, v1)
+    expect(documentFrontMatter(filled)).toEqual({ template: 'intake@1', values: { 요청: '밖에서 쓴 요청' } })
+    expect(parseFormdown(filled).forms.map((f) => f.name)).toEqual(['요청', '담당'])
+    expect(updateDocument(filled, { 요청: '밖에서 쓴 요청', 담당: '장비' }).endsWith('@담당: [select options="장비,인사"]\n')).toBe(true)
   })
 })

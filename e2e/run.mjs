@@ -863,7 +863,8 @@ const scenarios = {
     const body = '# 접수\n\n요청: ___@요청\n\n@부서: [select options="영업,개발,인사"]\n\n@담당: [select options="장비,인사,총무"]\n'
     await writeFile(written[0], `---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 1\n부서: 영업\n담당: ""\n---\n${body}`)
     await writeFile(written[1], `---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 2\n부서: 개발\n---\n${body}`)
-    await writeFile(written[2], `---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 3\n부서: 인사\n---\n${body}`)
+    // One written with its front matter alone: it is drawn with its template's body, and saving makes it the copy.
+    await writeFile(written[2], '---\ntemplate: intake@1\n요청: 밖에서 쓴 요청 3\n부서: 인사\n---\n# 접수\n')
     const unsettledNow = async () => {
       let n = 0
       for (const name of (await readdir(join(vault, '문서'))).filter((n) => n.endsWith('.md') && !n.includes('충돌'))) {
@@ -892,9 +893,20 @@ const scenarios = {
     assert.ok(await app.cdp.evaluate(`__e2e.all('dc-checkbox').some((c) => c.textContent.trim() === '미확정만 (${unsettled - 1})')`))
     await app.noAlert()
 
+    await app.click('nav button.document', '확인할 기록-3')
+    await app.cdp.waitFor(`__e2e.one('select[name="담당"]')`, 'the fields of a record written with its front matter alone')
+    await app.choose('select[name="담당"]', '인사')
+    await app.cdp.press('s', { code: 'KeyS', modifiers: 2, keyCode: 83 })
+    await app.status('저장했습니다')
+    assert.deepEqual(parseFormdown(await readFile(written[2], 'utf8')).forms.map((f) => f.name), ['요청', '부서', '담당'], 'the body written')
+    assert.equal((await fileValues(written[2])).담당, '인사')
+    await app.noAlert()
+
     // Leave the vault as the scenarios after this one expect it.
-    await app.click('dc-checkbox', `미확정만 (${unsettled - 1})`)
+    await app.click('dc-checkbox', `미확정만 (${unsettled - 2})`)
+    await app.learning() // nothing open: removing the records is not an open document gone
     await Promise.all(written.map((f) => rm(f)))
+    await app.documentsOf(INTAKE)
     await app.cdp.waitFor(`!__e2e.all('ll-documents').some((d) => d.shadowRoot.textContent.includes('확인할 기록'))`, 'the records gone from the list', {
       timeoutMs: 30_000,
     })

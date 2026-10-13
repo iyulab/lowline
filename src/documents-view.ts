@@ -12,12 +12,14 @@ import {
   fileNameFor,
   documentFrontMatter,
   fieldValues,
+  hasFields,
   newDocument,
   reviseDocument,
   setDocumentId,
   templateBody,
   templateInfo,
   updateDocument,
+  withTemplateBody,
   type FieldValues,
 } from './documents.js'
 import { documentId, newDocumentId, sharedIds } from './identity.js'
@@ -50,7 +52,20 @@ const SEARCH_DELAY_MS = 250
 /** What is open in the editor: a new document from a template, or an existing document. */
 type Draft =
   | { kind: 'new'; templateSource: string; templateRef: string }
-  | { kind: 'existing'; path: string; id: string; source: string; templateRef?: string }
+  | {
+      kind: 'existing'
+      path: string
+      id: string
+      /** The file as it was read: what a save checks it still holds. */
+      source: string
+      templateRef?: string
+      /**
+       * For a file with no fields of its own — front matter alone, as another program may write a record — its front
+       * matter above its template's body: what the form draws, and what saving writes, so the file becomes the copy
+       * of its template a document is.
+       */
+      filled?: string
+    }
 
 /**
  * A template's documents: fill in the template to create one, or open one and change its values.
@@ -603,7 +618,12 @@ export class LlDocuments extends LitElement {
       this.initialValues = this.values
       // Written with an earlier revision, it is a document of its template as the template is now.
       const templateRef = template === undefined ? template : revisedRef(template, this.currentRefs)
-      this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef }
+      const scope = this.scope
+      const filled =
+        !hasFields(source) && scope && template !== undefined && templateId(template) === templateId(scope.ref)
+          ? withTemplateBody(source, await vault.read(scope.path))
+          : undefined
+      this.draft = { kind: 'existing', path, id: documentId(path, id), source, templateRef, ...(filled ? { filled } : {}) }
       this.writtenWith = template !== templateRef && template !== undefined ? template : undefined
       this.opened++
       void this.prepareSuggestions(this.draft.templateRef)
@@ -697,7 +717,7 @@ export class LlDocuments extends LitElement {
       if (draft.kind === 'existing') {
         // A copy saved with a change is a document of its own from now on.
         const id = this.sharedIds.has(draft.id) ? newDocumentId() : draft.id
-        const updated = updateDocument(draft.source, this.values)
+        const updated = updateDocument(draft.filled ?? draft.source, this.values)
         const source = id === draft.id ? updated : setDocumentId(updated, id)
         // Unless the person was told the file changed outside, an edit made there since it was read is
         // not overwritten unseen — the watch may not have reported it yet, or at all.
@@ -710,7 +730,8 @@ export class LlDocuments extends LitElement {
           this.changedOutside = true
           return
         }
-        this.draft = { ...draft, id, source }
+        const { filled: _, ...read } = draft
+        this.draft = { ...read, id, source }
       } else {
         const id = newDocumentId()
         const source = newDocument(draft.templateSource, this.values, id)
@@ -1198,7 +1219,7 @@ export class LlDocuments extends LitElement {
               ${keyed(
                 opened,
                 html`<formdown-ui
-                .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : draft.source}
+                .content=${draft.kind === 'new' ? templateBody(draft.templateSource) : (draft.filled ?? draft.source)}
                 .data=${guard([this.opened, this.applied], () => this.initialValues)}
                 .choices=${guard([this.opened, this.reads], () => this.choices(draft))}
                 .fieldStates=${guard([this.suggestions, this.abstained], () => this.fieldStates())}

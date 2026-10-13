@@ -60,6 +60,7 @@ What is recorded about a document — its suggestion events, the rejections that
 - Deleting a document or a template moves its file to the system's trash, after asking. Where a location has no trash, the file stays until the person chooses to delete it for good. A deleted template's documents are kept, and listed apart as documents whose template the vault does not have.
 - Documents and templates are listed by their file names. A template's documents are listed the last name first — a new document's name starts with its day, so the latest are on top — and a sync conflict copy follows its original.
 - A file copied outside the app keeps its original's id; the copy that is then saved with a change gets a new one and becomes a document of its own.
+- A document written by another program with its front matter alone opens with its template's fields, and saving it writes the template's body under its front matter.
 
 ### Fields that name other documents
 
