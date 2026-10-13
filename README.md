@@ -2,11 +2,12 @@
 
 **Your forms, with an AI that learns from your decisions.**
 
-Lowline is a desktop app for the forms you fill again and again — inspections, intake, defect reports. You write a form like a note; fields written inline become columns, many documents become tables and views, and the more a form is used, the better it gets at suggesting the fields that need judgment — learned from what people confirmed, on your own machine, with no model to download.
+Lowline is a desktop app for the forms you fill again and again — inspections, intake, defect reports. You write a form like a note; fields written inline become columns, a form's documents become one table to filter and export, and the more a form is used, the better it gets at suggesting the fields that need judgment — learned from what people confirmed, on your own machine, with no model to download.
 
 - **Local-first** — documents are plain files on your machine. No account is required, and every feature works offline.
 - **Forms, not free notes** — a form's fields are part of the text itself. The same document reads as prose and queries as a row.
 - **Suggestions that learn from confirmation** — fill in the observed fields and candidate values are suggested for the judgment fields; start typing into one and it narrows to values that begin with what you typed. People confirm; confirmations become the basis for later suggestions.
+- **Honest about what it does not know** — a field it cannot suggest for says why beside it: too few confirmed documents yet, or nothing in this one that settles it. The learning view shows how often its suggestions were taken as offered, field by field.
 
 > Status: early development. Windows builds are published on [lowline-releases](https://github.com/iyulab/lowline-releases/releases/latest).
 
