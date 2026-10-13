@@ -1,3 +1,4 @@
+mod credentials;
 mod host;
 mod navigation;
 mod report;
@@ -871,7 +872,10 @@ pub fn run() {
             list_events,
             record_presentation,
             read_presentations,
-            third_party_notices
+            third_party_notices,
+            credentials::model_key_kept,
+            credentials::keep_model_key,
+            credentials::forget_model_key
         ])
         .build(tauri::generate_context!())
         .expect("error while building Lowline")

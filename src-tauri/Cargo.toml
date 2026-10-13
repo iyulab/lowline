@@ -23,6 +23,7 @@ serde_json = "1"
 # The device id's random bytes.
 getrandom = "0.4"
 # Error reports that carry no content, sent to Application Insights by a release build.
+tauri-kit-credentials = "0.16.0"
 tauri-kit-diagnostics = { version = "0.16.0", features = ["appinsights"] }
 tauri-kit-fs = "0.16.0"
 # The sidecar as a loopback helper: a per-launch token, its port, and the blocking HTTP client to it.
@@ -35,6 +36,8 @@ tauri-plugin-updater = "2.13.1"
 tauri-plugin-opener = "2"
 
 [dev-dependencies]
+# The in-memory credential store the tests keep keys in, never the real one.
+keyring-core = "1"
 # Canonical paths without the `\\?\` prefix on Windows, to compare with what the trash reports.
 dunce = "1"
 tempfile = "3"
