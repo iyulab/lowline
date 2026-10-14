@@ -257,7 +257,7 @@ export interface ChatTurn {
 }
 
 /** The model's reply to the chat; or why there is none — never the provider's own words. */
-export interface ChatAuthorReply {
+export interface ChatReply {
   ok: boolean
   text: string | null
   failure: ModelFailure | null
@@ -281,5 +281,8 @@ export const model = {
   prepareLocal: (id: string) => invoke<LocalModelProgress>('host_local_prepare', { model: id }),
   /** A reply about `template` — its source as it stands — to the conversation, by the model set up, with the key kept for its preset. */
   author: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, turns: ChatTurn[]) =>
-    invoke<ChatAuthorReply>('host_chat_author', { request: { ...setting, template, turns } }),
+    invoke<ChatReply>('host_chat_author', { request: { ...setting, template, turns } }),
+  /** The records the model set up reads out of `text`, as values of `template`'s fields — its reply, to be read by the app. */
+  extract: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, text: string) =>
+    invoke<ChatReply>('host_chat_extract', { request: { ...setting, template, text } }),
 }

@@ -19,7 +19,13 @@ public sealed record ChatTurn(string Role, string Text);
 public sealed record ChatAuthorRequest(string Preset, string? BaseUrl, string? ApiKey, string Model, string Template, IReadOnlyList<ChatTurn> Turns);
 
 /// <summary>The model's reply; or, when there is none, why — as one of <see cref="ModelFailure"/>'s, never the provider's words.</summary>
-public sealed record ChatAuthorReply(bool Ok, string? Text, string? Failure, int? StatusCode);
+public sealed record ChatReply(bool Ok, string? Text, string? Failure, int? StatusCode);
+
+/// <summary>
+/// The model a request is for: an IronProw preset — or <see cref="ChatAuthoring.LocalPreset"/>, a model on this
+/// computer — its address when not the preset's own, the key the shell read for this one request, and the model.
+/// </summary>
+public sealed record ChatModel(string Preset, string? BaseUrl, string? ApiKey, string Model);
 
 /// <summary>
 /// The chat that writes templates: what the model is told a Lowline template is, and one reply to the conversation.
@@ -80,53 +86,61 @@ public static class ChatAuthoring
     /// One reply to <paramref name="request"/>'s conversation, as long as <paramref name="timeout"/> — on
     /// <paramref name="local"/> for <see cref="LocalPreset"/>, loading the model from what is here when it is not running.
     /// </summary>
-    public static async Task<ChatAuthorReply> ReplyAsync(ChatAuthorRequest request, LocalModels local, TimeSpan timeout, CancellationToken cancellationToken)
+    public static Task<ChatReply> ReplyAsync(ChatAuthorRequest request, LocalModels local, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Model) || request.Turns.Count == 0)
-            return new ChatAuthorReply(false, null, ModelFailure.Invalid, null);
-
+        if (request.Turns.Count == 0) return Task.FromResult(new ChatReply(false, null, ModelFailure.Invalid, null));
         List<ChatMessage> messages = [new(ChatRole.System, Instructions(request.Template))];
         messages.AddRange(request.Turns.Select(t => new ChatMessage(t.Role == "assistant" ? ChatRole.Assistant : ChatRole.User, t.Text)));
+        return SendAsync(new ChatModel(request.Preset, request.BaseUrl, request.ApiKey, request.Model), messages, local, timeout, cancellationToken);
+    }
+
+    /// <summary>
+    /// <paramref name="messages"/> to <paramref name="model"/>, as long as <paramref name="timeout"/>: its reply, or why
+    /// there is none. A model on this computer is taken from what is here; an endpoint goes through IronProw's presets.
+    /// </summary>
+    public static async Task<ChatReply> SendAsync(ChatModel model, IList<ChatMessage> messages, LocalModels local, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(model.Model)) return new ChatReply(false, null, ModelFailure.Invalid, null);
 
         using var within = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         within.CancelAfter(timeout);
         try
         {
-            if (request.Preset == LocalPreset)
+            if (model.Preset == LocalPreset)
             {
-                var (text, failure) = await local.ReplyAsync(request.Model.Trim(), messages, within.Token);
-                return new ChatAuthorReply(failure is null, text, failure, null);
+                var (text, failure) = await local.ReplyAsync(model.Model.Trim(), messages, within.Token);
+                return new ChatReply(failure is null, text, failure, null);
             }
-            return await RemoteAsync(request, messages, within.Token);
+            return await RemoteAsync(model, messages, within.Token);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new ChatAuthorReply(false, null, ModelFailure.Timeout, null);
+            return new ChatReply(false, null, ModelFailure.Timeout, null);
         }
-        catch (Exception e) when (e is not OperationCanceledException && request.Preset == LocalPreset)
+        catch (Exception e) when (e is not OperationCanceledException && model.Preset == LocalPreset)
         {
             // The model's own server is on this computer: whatever broke, it did not run the request.
-            return new ChatAuthorReply(false, null, e is ModelNotFoundException ? ModelFailure.NotDownloaded : ModelFailure.NotStarted, null);
+            return new ChatReply(false, null, e is ModelNotFoundException ? ModelFailure.NotDownloaded : ModelFailure.NotStarted, null);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             var (failure, status) = Failure(e);
-            return new ChatAuthorReply(false, null, failure, status);
+            return new ChatReply(false, null, failure, status);
         }
     }
 
     /// <summary>A reply from an endpoint the person named — a server nearby or a company's service — through IronProw's presets.</summary>
-    private static async Task<ChatAuthorReply> RemoteAsync(ChatAuthorRequest request, List<ChatMessage> messages, CancellationToken cancellationToken)
+    private static async Task<ChatReply> RemoteAsync(ChatModel model, IList<ChatMessage> messages, CancellationToken cancellationToken)
     {
-        var endpoint = new ByoEndpoint(request.Preset, Blank(request.BaseUrl), Blank(request.ApiKey));
-        if (ByoPresets.Validate(endpoint) is not null) return new ChatAuthorReply(false, null, ModelFailure.Invalid, null);
+        var endpoint = new ByoEndpoint(model.Preset, Blank(model.BaseUrl), Blank(model.ApiKey));
+        if (ByoPresets.Validate(endpoint) is not null) return new ChatReply(false, null, ModelFailure.Invalid, null);
 
         var services = new ServiceCollection();
-        services.AddIronProw().AddIronHiveByo("chat", 0, request.Model.Trim(), endpoint);
+        services.AddIronProw().AddIronHiveByo("chat", 0, model.Model.Trim(), endpoint);
         await using var provider = services.BuildServiceProvider();
         var chat = provider.GetRequiredService<IChatClient>();
         var response = await chat.GetResponseAsync(messages, cancellationToken: cancellationToken);
-        return new ChatAuthorReply(true, response.Text, null, null);
+        return new ChatReply(true, response.Text, null, null);
     }
 
     /// <summary>Why a call failed, as the probe words it: an HTTP answer by its status, a connection by what the socket said.</summary>

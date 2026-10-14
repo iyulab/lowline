@@ -307,7 +307,8 @@ export const strings = {
   chatClose: '채팅 닫기',
   chatModelChange: '모델 바꾸기',
   chatPlaceholder: '서식을 어떻게 바꿀지 말해 보세요',
-  chatEmpty: '칸을 넣거나 빼거나 고치는 것을 말로 부탁하면, 바뀐 서식을 편집기에 넣습니다. 저장은 직접 합니다.',
+  chatEmpty:
+    '이 채팅은 생성형 AI 모델이 답합니다. 칸을 넣거나 빼거나 고치는 것을 말로 부탁하면, 바뀐 서식을 편집기에 넣습니다. 쓴 것은 초안이고, 저장은 직접 합니다.',
   chatYou: '나',
   chatWriting: '쓰는 중…',
   chatStopped: '멈췄습니다.',

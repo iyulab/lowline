@@ -689,6 +689,43 @@ async fn host_chat_author(
     host_json(blocking(move || client.post_json("/chat/author", &body)).await?)
 }
 
+/// What the sidecar is asked to read records out of pasted text with (`ChatExtractRequest`).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatExtract {
+    preset: String,
+    base_url: Option<String>,
+    model: String,
+    template: String,
+    text: String,
+}
+
+fn chat_extract_body(request: &ChatExtract, key: Option<&str>) -> String {
+    serde_json::json!({
+        "preset": request.preset,
+        "baseUrl": request.base_url,
+        "apiKey": key,
+        "model": request.model,
+        "template": request.template,
+        "text": request.text,
+    })
+    .to_string()
+}
+
+/// The records the model set up reads out of text pasted to bring them in. The key kept for the preset goes to the
+/// sidecar with this request only; the window never sees it.
+#[tauri::command]
+async fn host_chat_extract(
+    app: AppHandle,
+    request: ChatExtract,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let key = credentials::model_key(&app, &request.preset).map_err(|e| e.to_string())?;
+    let client = state.client()?;
+    let body = chat_extract_body(&request, key.as_deref());
+    host_json(blocking(move || client.post_json("/chat/extract", &body)).await?)
+}
+
 /// Documents whose values hold some words, from the sidecar's text index — of one template when named.
 #[tauri::command]
 async fn host_search(
@@ -956,6 +993,7 @@ pub fn run() {
             host_local_models,
             host_local_prepare,
             host_chat_author,
+            host_chat_extract,
             credentials::model_key_kept,
             credentials::keep_model_key,
             credentials::forget_model_key
@@ -1011,6 +1049,22 @@ id: t
         let none: serde_json::Value =
             serde_json::from_str(&chat_author_body(&request, None)).unwrap();
         assert!(none["apiKey"].is_null());
+    }
+
+    #[test]
+    fn hands_the_sidecar_text_to_read_records_from_with_the_key_read_here() {
+        let request: ChatExtract = serde_json::from_value(serde_json::json!({
+            "preset": "local", "baseUrl": null, "model": "gguf:qwen3-default",
+            "template": "@요청자: [text]", "text": "김민수 님 요청"
+        }))
+        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&chat_extract_body(&request, Some("k"))).unwrap();
+        assert_eq!(body["apiKey"], "k");
+        assert!(body["baseUrl"].is_null());
+        assert_eq!(body["model"], "gguf:qwen3-default");
+        assert_eq!(body["text"], "김민수 님 요청");
+        assert_eq!(body["template"], "@요청자: [text]");
     }
 
     /// Every kind a command failure can name, as the UI's `VAULT_FAILURE_KINDS` lists them too.

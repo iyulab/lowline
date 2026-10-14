@@ -182,6 +182,10 @@ public sealed class ResponseContractTests
                 await Post("/chat/author", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong", model = "qwen3-4b", template = "", turns = new[] { new { role = "user", text = "안녕" } } }),
                 // And one on the model running on this computer.
                 localChat),
+            // Records read out of pasted text, and a key the endpoint refused: the same reply as the chat's.
+            ["chatExtract"] = new JsonArray(
+                await Post("/chat/extract", new { preset = "custom", baseUrl = listingUrl, model = "qwen3-4b", template = "# 접수", text = "김민수 님 요청" }),
+                await Post("/chat/extract", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong", model = "qwen3-4b", template = "", text = "안녕" })),
             // The models on this computer — one here, one not — as getting the one not here ready goes: before, while it is
             // fetched, once it runs; and as the recommended one will not start. Asking to get one ready answers where that
             // stands: started, already on its way, or refused for a model not offered.

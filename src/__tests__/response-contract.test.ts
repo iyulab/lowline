@@ -5,7 +5,7 @@
 // ways: nothing the UI does not know, nothing it needs missing, and every key carried at least once.
 import { describe, expect, it } from 'vitest'
 import type { Abstention, CaseHit, FieldCurve, IngestResult, ProjectionTable, Suggestion } from '../projection.js'
-import type { ChatAuthorReply, LocalModelProgress, LocalModels, ModelFailure, ModelProbeResult } from '../vault-client.js'
+import type { ChatReply, LocalModelProgress, LocalModels, ModelFailure, ModelProbeResult } from '../vault-client.js'
 import file from './sidecar-responses.json'
 
 type Item<V> = V extends readonly (infer E)[] ? E : V
@@ -72,7 +72,7 @@ const hit: Shape<CaseHit> = { path: 'required', template: 'required', text: 'req
 
 const probe: Shape<ModelProbeResult> = { ok: 'required', failure: 'required', statusCode: 'required', modelIds: 'required' }
 
-const chatAuthor: Shape<ChatAuthorReply> = { ok: 'required', text: 'required', failure: 'required', statusCode: 'required' }
+const chat: Shape<ChatReply> = { ok: 'required', text: 'required', failure: 'required', statusCode: 'required' }
 
 const localProgress: Shape<LocalModelProgress> = {
   model: 'required',
@@ -97,7 +97,8 @@ const answers = {
   search: hit,
   similar: hit,
   probe,
-  chatAuthor,
+  chatAuthor: chat,
+  chatExtract: chat,
   localModels,
   localPrepare: localProgress,
 }
