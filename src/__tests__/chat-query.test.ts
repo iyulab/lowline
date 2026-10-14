@@ -81,6 +81,17 @@ describe('what a reply asks to count', () => {
     expect(periodDays('last-month', sunday)).toEqual({ from: '2025-12-01', to: '2025-12-31' })
     expect(periodDays('yesterday', new Date(2026, 2, 1))).toEqual({ from: '2026-02-28', to: '2026-02-28' })
   })
+
+  it('knows a month or a year named by its number, and nothing else', () => {
+    const today = new Date(2026, 9, 14)
+    expect(periodDays('2025-12', today)).toEqual({ from: '2025-12-01', to: '2025-12-31' })
+    expect(periodDays('2024-02', today)).toEqual({ from: '2024-02-01', to: '2024-02-29' })
+    expect(periodDays('2025', today)).toEqual({ from: '2025-01-01', to: '2025-12-31' })
+    for (const not of ['2025-13', '2025-1', '25-12', 'last-quarter', '']) expect(periodDays(not, today)).toBeNull()
+    expect(queryPlan('{"groupBy": ["지역"], "filters": [{"field": "방문일", "op": "period", "value": "2025-12"}]}', fields, today)).toEqual({
+      plan: { groupBy: ['지역'], filters: [{ column: '방문일', op: 'atLeast', value: '2025-12-01' }, { column: '방문일', op: 'atMost', value: '2025-12-31' }] },
+    })
+  })
 })
 
 describe('what a plan counts, in words', () => {

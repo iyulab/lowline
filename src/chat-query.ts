@@ -31,8 +31,18 @@ export type Period = (typeof PERIODS)[number]
 const day = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
-/** The first and last day of `period` on this computer's calendar, `today` being the day it is. */
-export function periodDays(period: Period, today: Date): { from: string; to: string } {
+/**
+ * The first and last day of `period` on this computer's calendar, `today` being the day it is — or of a month named
+ * `YYYY-MM`, or a year `YYYY`; null for anything else.
+ */
+export function periodDays(period: string, today: Date): { from: string; to: string } | null {
+  const month = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(period)
+  if (month) return { from: day(new Date(+month[1], +month[2] - 1, 1)), to: day(new Date(+month[1], +month[2], 0)) }
+  if (/^\d{4}$/.test(period)) return { from: `${period}-01-01`, to: `${period}-12-31` }
+  return (PERIODS as readonly string[]).includes(period) ? relativeDays(period as Period, today) : null
+}
+
+function relativeDays(period: Period, today: Date): { from: string; to: string } {
   const [y, m, d] = [today.getFullYear(), today.getMonth(), today.getDate()]
   const span = (from: Date, to: Date) => ({ from: day(from), to: day(to) })
   const monday = d - ((today.getDay() + 6) % 7)
@@ -76,7 +86,8 @@ function objectOf(reply: string): Record<string, unknown> | null {
 /**
  * What a reply asks to count, checked against `fields`: each field named one the template has (by name, or by its
  * label), each condition one the vault asks, a value where it needs one — a choice field's value one of its choices.
- * A field named twice to count by counts once. A `period` of a date field becomes its first and last day from `today`;
+ * A field named twice to count by counts once. A `period` of a date field — one relative to `today`, a month, a year —
+ * becomes its first and last day;
  * of a date-and-time field, from the start of the first to the end of the last.
  */
 export function queryPlan(reply: string, fields: readonly TemplateField[], today: Date = new Date()): ReadPlan {
@@ -106,8 +117,9 @@ export function queryPlan(reply: string, fields: readonly TemplateField[], today
     const text = typeof value === 'number' ? String(value) : typeof value === 'string' ? value.trim() : ''
     if (!text) return { problem: 'bad-filter', field: field.name }
     if (op === 'period') {
-      if (!DATE_TYPES.includes(field.type) || !(PERIODS as readonly string[]).includes(text)) return { problem: 'bad-filter', field: field.name }
-      const { from, to } = periodDays(text as Period, today)
+      const days = DATE_TYPES.includes(field.type) ? periodDays(text, today) : null
+      if (!days) return { problem: 'bad-filter', field: field.name }
+      const { from, to } = days
       const timed = field.type === 'datetime-local'
       filters.push({ column: field.name, op: 'atLeast', value: timed ? `${from}T00:00` : from })
       filters.push({ column: field.name, op: 'atMost', value: timed ? `${to}T23:59:59` : to })

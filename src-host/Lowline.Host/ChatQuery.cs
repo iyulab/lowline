@@ -25,7 +25,9 @@ public static class ChatQuery
         - `groupBy`: 무엇별로 셀지 — 칸 이름의 배열(`@` 없이). 전체 건수만 물으면 `[]`.
         - `filters`: 어떤 기록만 셀지 — `{"field": 칸 이름, "op": 조건, "value": 값}`의 배열. 조건은 `equal`(같음), `contains`(글에 포함), `atLeast`(이상), `atMost`(이하), `empty`(비어 있음, 값 없이), `period`(날짜 칸의 기간).
         - 「오늘·어제·이번 주·지난주·이번 달·지난달·올해·작년」은 날짜를 계산하지 말고 `period`로 씁니다 — 값은 `today`, `yesterday`, `this-week`, `last-week`, `this-month`, `last-month`, `this-year`, `last-year` 중 하나. 날짜는 Lowline이 셉니다.
-        - 「9월 1일부터」처럼 날짜를 직접 말한 질문만 `atLeast`·`atMost`에 `YYYY-MM-DD`로 씁니다. 오늘은 {{today:yyyy-MM-dd}}입니다(연도를 말하지 않으면 이 해).
+        - 달 하나나 해 하나를 말하면 그것도 `period`로 씁니다 — 값은 달이면 `YYYY-MM`, 해면 `YYYY`. 오늘은 {{today:yyyy-MM-dd}}이니 「작년 12월」은 `{{today.Year - 1}}-12`, 「3월」은 `{{today.Year}}-03`입니다.
+        - `period`의 값은 위의 낱말 하나, `YYYY-MM` 하나, `YYYY` 하나 중 하나입니다. 둘을 섞어 쓰지 않습니다.
+        - 「9월 1일부터」처럼 날을 직접 말한 질문만 `atLeast`·`atMost`에 `YYYY-MM-DD`로 씁니다(연도를 말하지 않으면 올해).
         - `top`: 「상위 3개」처럼 몇 개만 물으면 그 수. 아니면 넣지 않습니다.
         - 칸 이름과 선택지는 서식에 있는 그대로 씁니다.
         - 질문이 서식의 어느 칸에도 적히지 않는 것을 물으면 비슷한 다른 칸으로 바꿔 세지 말고 `{"unanswerable": "이유"}`로 답합니다.
