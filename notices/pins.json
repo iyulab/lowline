@@ -27,10 +27,6 @@
     "source": "https://raw.githubusercontent.com/wravery/webview2-rs/dffa41a8a46d3f5565eefbff2de57d38d399f158/LICENSE",
     "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
   },
-  "Microsoft.Data.Sqlite.Core@10.0.12": {
-    "source": "https://raw.githubusercontent.com/dotnet/dotnet/95017c711e6afc1085133d440e42b4bd78155701/src/efcore/LICENSE.txt",
-    "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
-  },
   "Microsoft.EntityFrameworkCore@10.0.12": {
     "source": "https://raw.githubusercontent.com/dotnet/dotnet/95017c711e6afc1085133d440e42b4bd78155701/src/efcore/LICENSE.txt",
     "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
@@ -130,5 +126,9 @@
   "Tiktoken.Encodings.cl100k@3.1.5": {
     "source": "https://raw.githubusercontent.com/tryAGI/Tiktoken/871d38c16d8478faeb6d53f4fdf8a5e76c382854/LICENSE.txt",
     "sha256": "0789f2ac922216b2f1e8b4b16135b32449771d512909a492f383c54aa477f3a0"
+  },
+  "Microsoft.Data.Sqlite.Core@10.0.13": {
+    "source": "https://raw.githubusercontent.com/dotnet/dotnet/4099f83977f4d29604a9aeb971fb0a7bc1d5f699/src/efcore/LICENSE.txt",
+    "sha256": "ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b"
   }
 }
