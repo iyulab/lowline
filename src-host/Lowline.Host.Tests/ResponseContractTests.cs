@@ -115,8 +115,17 @@ public sealed class ResponseContractTests
         var ingest = await Post("/vault/ingest", snapshot);
         await factory.Services.GetRequiredService<VaultProjection>().ThresholdsSelected.WaitAsync(ct);
 
-        var (listingApp, listingUrl) = await ModelConnectionTests.StandIn(context =>
-            context.Response.WriteAsJsonAsync(new { @object = "list", data = new[] { new { id = "qwen3-4b", @object = "model" } } }));
+        // Lists its models, and answers a chat with one reply.
+        var (listingApp, listingUrl) = await ModelConnectionTests.StandIn(context => context.Request.Path.Value!.EndsWith("/models")
+            ? context.Response.WriteAsJsonAsync(new { @object = "list", data = new[] { new { id = "qwen3-4b", @object = "model" } } })
+            : context.Response.WriteAsJsonAsync(new
+            {
+                id = "c1",
+                @object = "chat.completion",
+                created = 0,
+                model = "qwen3-4b",
+                choices = new[] { new { index = 0, message = new { role = "assistant", content = "칸을 넣었습니다." }, finish_reason = "stop" } },
+            }));
         await using var _listing = listingApp;
         var (refusingApp, refusingUrl) = await ModelConnectionTests.StandIn(async context =>
         {
@@ -142,6 +151,10 @@ public sealed class ResponseContractTests
             ["probe"] = new JsonArray(
                 await Post("/model/probe", new { preset = "custom", baseUrl = listingUrl }),
                 await Post("/model/probe", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong" })),
+            // A chat reply about a template, and one the endpoint refused the key for.
+            ["chatAuthor"] = new JsonArray(
+                await Post("/chat/author", new { preset = "custom", baseUrl = listingUrl, model = "qwen3-4b", template = "# 접수", turns = new[] { new { role = "user", text = "칸을 넣어 줘" } } }),
+                await Post("/chat/author", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong", model = "qwen3-4b", template = "", turns = new[] { new { role = "user", text = "안녕" } } })),
             // The words the UI branches on, every one the sidecar can send — not only those this vault happens to draw.
             ["words"] = new JsonObject
             {

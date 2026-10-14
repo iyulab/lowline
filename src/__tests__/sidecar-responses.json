@@ -366,6 +366,20 @@
       "modelIds": []
     }
   ],
+  "chatAuthor": [
+    {
+      "ok": true,
+      "text": "칸을 넣었습니다.",
+      "failure": null,
+      "statusCode": null
+    },
+    {
+      "ok": false,
+      "text": null,
+      "failure": "unauthorized",
+      "statusCode": 0
+    }
+  ],
   "words": {
     "mode": [
       "key",

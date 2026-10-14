@@ -215,6 +215,20 @@ export interface ModelProbeResult {
   modelIds: string[]
 }
 
+/** One turn of the chat beside a template. */
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+/** The model's reply to the chat; or why there is none — never the provider's own words. */
+export interface ChatAuthorReply {
+  ok: boolean
+  text: string | null
+  failure: ModelFailure | null
+  statusCode: number | null
+}
+
 /**
  * Model endpoints and their keys. A key is kept in the system's credential store by the shell, under the provider it
  * is for: the window hands it over once and only ever learns whether one is kept.
@@ -226,4 +240,7 @@ export const model = {
   keyKept: (provider: string) => invoke<boolean>('model_key_kept', { provider }),
   keepKey: (provider: string, key: string) => invoke<void>('keep_model_key', { provider, key }),
   forgetKey: (provider: string) => invoke<void>('forget_model_key', { provider }),
+  /** A reply about `template` — its source as it stands — to the conversation, by the model set up, with the key kept for its preset. */
+  author: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, turns: ChatTurn[]) =>
+    invoke<ChatAuthorReply>('host_chat_author', { request: { ...setting, template, turns } }),
 }

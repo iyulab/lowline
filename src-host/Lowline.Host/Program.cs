@@ -60,6 +60,9 @@ app.MapPost("/similar", (SimilarQuery query, VaultProjection vault, Cancellation
 // Whether a model endpoint the person named answers, with the key the shell read from the credential store for it.
 app.MapPost("/model/probe", (ModelProbe probe, CancellationToken ct) => ModelConnection.ProbeAsync(probe, timeout: null, ct));
 
+// A reply of the chat that writes templates, with the key the shell read from the credential store for this one request.
+app.MapPost("/chat/author", (ChatAuthorRequest request, CancellationToken ct) => ChatAuthoring.ReplyAsync(request, ChatAuthoring.Deadline, ct));
+
 // Failures of work no request waited on, since the last time the shell asked.
 app.MapPost("/failures/take", (HostFailures failures) => failures.Take());
 

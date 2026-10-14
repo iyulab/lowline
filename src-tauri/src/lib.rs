@@ -632,6 +632,44 @@ async fn host_model_probe(
     host_json(blocking(move || client.post_json("/model/probe", &body)).await?)
 }
 
+/// What the chat beside a template asks the sidecar (`ChatAuthorRequest`): the model set up, the template's source,
+/// the conversation — and the key, if one is kept, read here and handed on with this one request.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatAuthor {
+    preset: String,
+    base_url: Option<String>,
+    model: String,
+    template: String,
+    turns: Vec<serde_json::Value>,
+}
+
+fn chat_author_body(request: &ChatAuthor, key: Option<&str>) -> String {
+    serde_json::json!({
+        "preset": request.preset,
+        "baseUrl": request.base_url,
+        "apiKey": key,
+        "model": request.model,
+        "template": request.template,
+        "turns": request.turns,
+    })
+    .to_string()
+}
+
+/// A reply of the chat that writes templates. The key kept for the preset goes to the sidecar with this request only;
+/// the window never sees it.
+#[tauri::command]
+async fn host_chat_author(
+    app: AppHandle,
+    request: ChatAuthor,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let key = credentials::model_key(&app, &request.preset).map_err(|e| e.to_string())?;
+    let client = state.client()?;
+    let body = chat_author_body(&request, key.as_deref());
+    host_json(blocking(move || client.post_json("/chat/author", &body)).await?)
+}
+
 /// Documents whose values hold some words, from the sidecar's text index — of one template when named.
 #[tauri::command]
 async fn host_search(
@@ -896,6 +934,7 @@ pub fn run() {
             read_presentations,
             third_party_notices,
             host_model_probe,
+            host_chat_author,
             credentials::model_key_kept,
             credentials::keep_model_key,
             credentials::forget_model_key
@@ -931,6 +970,26 @@ mod tests {
             none,
             serde_json::json!({ "preset": "ollama", "baseUrl": null, "apiKey": null })
         );
+    }
+
+    #[test]
+    fn hands_the_sidecar_a_chat_with_the_key_read_here() {
+        let request: ChatAuthor = serde_json::from_value(serde_json::json!({
+            "preset": "custom", "baseUrl": "http://127.0.0.1:1234/v1", "model": "m",
+            "template": "---
+id: t
+---
+", "turns": [{ "role": "user", "text": "안녕" }]
+        }))
+        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&chat_author_body(&request, Some("k"))).unwrap();
+        assert_eq!(body["apiKey"], "k");
+        assert_eq!(body["baseUrl"], "http://127.0.0.1:1234/v1");
+        assert_eq!(body["turns"][0]["text"], "안녕");
+        let none: serde_json::Value =
+            serde_json::from_str(&chat_author_body(&request, None)).unwrap();
+        assert!(none["apiKey"].is_null());
     }
 
     /// Every kind a command failure can name, as the UI's `VAULT_FAILURE_KINDS` lists them too.
