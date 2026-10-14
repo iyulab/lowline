@@ -421,15 +421,26 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
     assert.match(first, /^\d+$/, 'one sidecar of this app')
     await sidecar('Stop-Process -Id $_.ProcessId -Force')
 
-    // The next question finds it gone; it starts again, the vault is handed over again, and the same value is
-    // suggested once more — the person only goes on filling in.
+    // The next question finds it gone and starts it again: a sidecar of this app, not the one that ended. Waited
+    // for first — the value suggested before stays on screen until the next question is asked, so seeing it
+    // proves nothing about the sidecar started again.
     await app.choose('select[name="부서"]', '개발')
     await app.choose('select[name="부서"]', '영업')
-    await app.cdp.waitFor(`${suggestion} === '장비'`, 'a suggestion for 담당 from the sidecar started again', { timeoutMs: 60_000 })
-    assert.equal(await app.cdp.evaluate(`(async () => (await window.__TAURI_INTERNALS__.invoke('host_status')).state)()`, { timeoutMs: 15_000 }), 'ready')
-    const second = await sidecar('$_.ProcessId')
-    assert.match(second, /^\d+$/, 'one sidecar of this app again')
+    const status = `(async () => (await window.__TAURI_INTERNALS__.invoke('host_status')).state)()`
+    let second = first
+    for (const until = Date.now() + 60_000; second === first && Date.now() < until; ) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      // A status check finds it gone too, should the question have reached it while it was still ending.
+      await app.cdp.evaluate(status, { timeoutMs: 15_000 })
+      const found = await sidecar('$_.ProcessId')
+      if (found) second = found
+    }
+    assert.match(second, /^\d+$/, `one sidecar of this app again (found ${JSON.stringify(second)})`)
     assert.notEqual(second, first, 'a sidecar started again')
+    await app.cdp.waitFor(`${status}.then((state) => state === 'ready')`, 'the sidecar started again to be ready', { timeoutMs: 60_000 })
+
+    // The vault is handed over again, and the same value is suggested once more — the person only goes on filling in.
+    await app.cdp.waitFor(`${suggestion} === '장비'`, 'a suggestion for 담당 from the sidecar started again', { timeoutMs: 60_000 })
 
     // Leave the vault as it was.
     await app.learning()

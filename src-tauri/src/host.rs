@@ -225,13 +225,18 @@ impl HostState {
     /// A client for the running host, or why there is none.
     pub fn client(&self) -> Result<HostClient, String> {
         self.find_ended();
-        match self.host.lock().expect("host poisoned").as_ref() {
-            Some(host) => Ok(host.client.clone()),
-            None => Err(match self.status() {
-                HostStatus::Failed { message } => message,
-                _ => "the sidecar is still starting".into(),
-            }),
-        }
+        // The lock is let go before asking the status, which takes it again: held across that call — as a
+        // `match` on the guard holds it — the thread waits on itself for good, and every later caller with it.
+        let running = self
+            .host
+            .lock()
+            .expect("host poisoned")
+            .as_ref()
+            .map(|host| host.client.clone());
+        running.ok_or_else(|| match self.status() {
+            HostStatus::Failed { message } => message,
+            _ => "the sidecar is still starting".into(),
+        })
     }
 
     /// Stops the host if it runs, for good. Called when the app exits, and before an update replaces it.
@@ -282,6 +287,42 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    /// `f` on its own thread, failing the test should it not have returned within a few seconds.
+    fn returns_soon<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        let (done, answer) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(f());
+        });
+        answer
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("it waited on itself")
+    }
+
+    #[test]
+    fn a_request_while_the_sidecar_starts_says_so_and_leaves_the_state_usable() {
+        let state = std::sync::Arc::new(HostState::default());
+        let starting = state.clone();
+        let said = returns_soon(move || starting.client().err());
+        assert_eq!(said.as_deref(), Some("the sidecar is still starting"));
+        // Nothing stays held: the status, asked on another thread as the window asks it, still answers.
+        let asked = state.clone();
+        assert!(matches!(
+            returns_soon(move || asked.status()),
+            HostStatus::Starting
+        ));
+    }
+
+    #[test]
+    fn a_request_once_starting_failed_says_why() {
+        let state = std::sync::Arc::new(HostState::default());
+        state.set(Err("the host did not start".into()));
+        let failed = state.clone();
+        assert_eq!(
+            returns_soon(move || failed.client().err()).as_deref(),
+            Some("the host did not start")
+        );
     }
 
     #[test]
