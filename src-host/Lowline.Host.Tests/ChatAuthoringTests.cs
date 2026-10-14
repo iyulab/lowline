@@ -12,6 +12,9 @@ public sealed class ChatAuthoringTests
 
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(20);
 
+    /// <summary>The models on this computer, for requests that name an endpoint instead: never asked.</summary>
+    private static readonly LocalModels NoLocal = new(new LocalModelsTests.StandIn());
+
     private const string Template = "---\nid: intake\nversion: 1\n---\n# 접수\n\n@요청: [textarea rows=3]\n";
 
     /// <summary>An OpenAI chat completion answering <paramref name="text"/>.</summary>
@@ -38,6 +41,7 @@ public sealed class ChatAuthoringTests
 
         var reply = await ChatAuthoring.ReplyAsync(
             new ChatAuthorRequest("custom", baseUrl, null, "small-4b", Template, [new ChatTurn("user", "처리 기한 칸을 넣어 줘")]),
+            NoLocal,
             Wait,
             Ct);
 
@@ -61,7 +65,7 @@ public sealed class ChatAuthoringTests
         await using var _ = app;
 
         var reply = await ChatAuthoring.ReplyAsync(
-            new ChatAuthorRequest("custom", baseUrl, "sk-wrong", "small-4b", Template, [new ChatTurn("user", "안녕")]), Wait, Ct);
+            new ChatAuthorRequest("custom", baseUrl, "sk-wrong", "small-4b", Template, [new ChatTurn("user", "안녕")]), NoLocal, Wait, Ct);
 
         Assert.Equal((false, null, ModelFailure.Unauthorized), (reply.Ok, reply.Text, reply.Failure));
     }
@@ -75,7 +79,7 @@ public sealed class ChatAuthoringTests
         listener.Stop();
 
         var reply = await ChatAuthoring.ReplyAsync(
-            new ChatAuthorRequest("custom", $"http://127.0.0.1:{port}/v1", null, "small-4b", Template, [new ChatTurn("user", "안녕")]), Wait, Ct);
+            new ChatAuthorRequest("custom", $"http://127.0.0.1:{port}/v1", null, "small-4b", Template, [new ChatTurn("user", "안녕")]), NoLocal, Wait, Ct);
 
         Assert.False(reply.Ok);
         Assert.Contains(reply.Failure, new[] { ModelFailure.Refused, ModelFailure.Unreachable, ModelFailure.Timeout, ModelFailure.Transport });
@@ -87,7 +91,7 @@ public sealed class ChatAuthoringTests
     [InlineData("custom", "http://127.0.0.1:1/v1", " ")] // no model chosen
     public async Task Contacts_nothing_for_what_cannot_be_used(string preset, string? baseUrl, string model)
     {
-        var reply = await ChatAuthoring.ReplyAsync(new ChatAuthorRequest(preset, baseUrl, null, model, Template, [new ChatTurn("user", "안녕")]), Wait, Ct);
+        var reply = await ChatAuthoring.ReplyAsync(new ChatAuthorRequest(preset, baseUrl, null, model, Template, [new ChatTurn("user", "안녕")]), NoLocal, Wait, Ct);
 
         Assert.Equal((false, ModelFailure.Invalid), (reply.Ok, reply.Failure));
     }

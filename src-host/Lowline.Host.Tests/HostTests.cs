@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Lowline.Host;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Lowline.Host.Tests;
@@ -17,7 +18,9 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
         public Factory() => ClientOptions.BaseAddress = new Uri("http://127.0.0.1:0");
 
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder) =>
-            builder.UseSetting(HostAuth.TokenVariable, Token);
+            builder.UseSetting(HostAuth.TokenVariable, Token)
+                // Models on this computer are stand-ins: a test host fetches and starts nothing.
+                .ConfigureTestServices(services => services.AddSingleton<ILocalGenerators, LocalModelsTests.StandIn>());
     }
 
     private readonly Factory _factory;

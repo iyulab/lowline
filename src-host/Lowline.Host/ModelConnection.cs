@@ -43,6 +43,12 @@ public static class ModelFailure
 
     /// <summary>Any other failure on the way: a secure connection that failed, a reset, an answer that is not one.</summary>
     public const string Transport = "transport";
+
+    /// <summary>A model on this computer is not here — it was never got ready, or its files were removed — and is not fetched unasked.</summary>
+    public const string NotDownloaded = "not-downloaded";
+
+    /// <summary>A model on this computer did not start: too little memory, a runtime that would not run, a damaged file.</summary>
+    public const string NotStarted = "not-started";
 }
 
 /// <summary>Model endpoints a person names in the app: checked here, through IronProw's presets.</summary>

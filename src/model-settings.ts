@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { strings } from './strings.js'
-import { model as models, type ModelFailure, type ModelProbeResult } from './vault-client.js'
+import { model as models, type LocalModels, type ModelFailure, type ModelProbeResult } from './vault-client.js'
 import type { ModelSettings } from './settings.js'
 
 /** A kind of model endpoint the person can pick: an IronProw preset, and what it asks for. */
@@ -16,8 +16,12 @@ export interface ModelPreset {
   outside: string | null
 }
 
-/** The endpoints Lowline offers, servers on the person's own computers first. */
+/** The preset of a model Lowline gets and runs on this computer itself (LMSupply), rather than an endpoint. */
+export const LOCAL_PRESET = 'local'
+
+/** What the chat can run on: this computer first, then servers on the person's own computers, then companies' services. */
 export const MODEL_PRESETS: readonly ModelPreset[] = [
+  { id: LOCAL_PRESET, label: strings.modelPresetLocal, address: 'none', key: 'none', outside: null },
   { id: 'ollama', label: strings.modelPresetOllama, address: 'optional', key: 'none', outside: null },
   { id: 'gpustack', label: strings.modelPresetGpustack, address: 'required', key: 'optional', outside: null },
   { id: 'custom', label: strings.modelPresetCustom, address: 'required', key: 'optional', outside: null },
@@ -46,13 +50,43 @@ export function failureText(failure: ModelFailure | null, statusCode: number | n
       return strings.modelFailureHostNotFound
     case 'unreachable':
       return strings.modelFailureUnreachable
+    case 'not-downloaded':
+      return strings.modelFailureNotDownloaded
+    case 'not-started':
+      return strings.modelFailureNotStarted
     default:
       return strings.modelFailureTransport
   }
 }
 
+/** Bytes as gigabytes, to a tenth. */
+export const gigabytes = (bytes: number) => (bytes / 1e9).toFixed(1)
+
+/** How a model set up is named in the chat: by where it runs, and which. */
+export function modelLabel(setting: ModelSettings): string {
+  if (setting.preset === LOCAL_PRESET) return `${strings.modelLocalShort} · ${setting.model.replace(/^gguf:/, '')}`
+  return `${presetOf(setting.preset)?.label ?? setting.preset} · ${setting.model}`
+}
+
+/** What getting a model ready on this computer is doing now, in the app's words; empty when nothing is. */
+export function localProgressText(progress: LocalModels['progress']): string {
+  switch (progress.phase) {
+    case 'getting':
+      return progress.getting && progress.total
+        ? strings.modelLocalGetting(progress.getting, gigabytes(progress.received ?? 0), gigabytes(progress.total))
+        : strings.modelLocalGettingSize(progress.getting ?? 'model')
+    case 'starting':
+      return strings.modelLocalStarting
+    case 'ready':
+      return strings.modelLocalReady
+    default:
+      return ''
+  }
+}
+
 /** Where what is sent to the chat goes, for the preset and address chosen. */
 export function destinationText(preset: ModelPreset): string {
+  if (preset.id === LOCAL_PRESET) return strings.modelStaysHere
   return preset.outside ? strings.modelGoesOutside(preset.outside) : strings.modelStaysAtAddress
 }
 
@@ -116,6 +150,9 @@ export class LlModelSettings extends LitElement {
   @state() private result: ModelProbeResult | undefined
   @state() private chosen = ''
   @state() private error = ''
+  /** The models Lowline can run on this computer, and where getting one ready stands — for the local preset. */
+  @state() private local: LocalModels | undefined
+  private following: ReturnType<typeof setTimeout> | undefined
 
   connectedCallback() {
     super.connectedCallback()
@@ -125,6 +162,12 @@ export class LlModelSettings extends LitElement {
       this.chosen = this.current.model
     }
     void this.readKeyKept()
+    if (this.preset === LOCAL_PRESET) void this.follow()
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback()
+    clearTimeout(this.following)
   }
 
   private get kind(): ModelPreset {
@@ -143,6 +186,34 @@ export class LlModelSettings extends LitElement {
     this.chosen = ''
     this.error = ''
     void this.readKeyKept()
+    if (id === LOCAL_PRESET) void this.follow()
+  }
+
+  /** Reads the models on this computer, again while one is being got ready. */
+  private async follow() {
+    clearTimeout(this.following)
+    try {
+      this.local = await models.local()
+      this.error = ''
+    } catch {
+      this.error = strings.modelLocalListFailed
+      return
+    }
+    if (!this.chosen || !this.local.models.some((m) => m.id === this.chosen))
+      this.chosen = (this.local.models.find((m) => m.recommended) ?? this.local.models[0])?.id ?? ''
+    if (this.isConnected && (this.local.progress.phase === 'getting' || this.local.progress.phase === 'starting'))
+      this.following = setTimeout(() => void this.follow(), 500)
+  }
+
+  /** Gets the model chosen ready on this computer — fetching it when it is not here — and follows it. */
+  private async prepare() {
+    this.error = ''
+    try {
+      await models.prepareLocal(this.chosen)
+    } catch {
+      this.error = strings.modelCheckFailed
+    }
+    await this.follow()
   }
 
   /** Keeps a key typed in, then asks the endpoint for its models with the key kept. */
@@ -182,10 +253,56 @@ export class LlModelSettings extends LitElement {
     this.dispatchEvent(new CustomEvent<ModelSettings>('ll-model', { detail: setting, bubbles: true, composed: true }))
   }
 
+  /** The local preset's part: the models, getting the one chosen ready, and where that stands. */
+  private renderLocal() {
+    const local = this.local
+    const progress = local?.progress
+    const mine = progress?.model === this.chosen ? progress : undefined
+    const busy = progress?.phase === 'getting' || progress?.phase === 'starting'
+    const chosen = local?.models.find((m) => m.id === this.chosen)
+    return html`
+      <p class="muted">${strings.modelLocalFetch}</p>
+      ${local
+        ? html`<label>
+              ${strings.modelLocalChoose}
+              <dc-select
+                aria-label=${strings.modelLocalChoose}
+                .value=${this.chosen}
+                ?disabled=${busy}
+                .options=${local.models.map((m) => ({
+                  value: m.id,
+                  label: strings.modelLocalOption(m.name, gigabytes(m.sizeBytes), m.downloaded, m.recommended),
+                }))}
+                @change=${(e: Event) => (this.chosen = (e.target as HTMLInputElement).value)}
+              ></dc-select>
+            </label>
+            <p>${destinationText(this.kind)}</p>
+            <div class="row">
+              ${mine?.phase === 'ready'
+                ? nothing
+                : html`<dc-button size="sm" ?disabled=${busy || !chosen} @click=${this.prepare}
+                    >${strings.modelLocalPrepare(chosen?.downloaded ?? false)}</dc-button
+                  >`}
+              ${busy && progress
+                ? html`<span class="muted" role="status">${localProgressText(progress)}</span>`
+                : mine?.phase === 'ready'
+                  ? html`<span class="ok" role="status">${strings.modelLocalReady}</span>`
+                  : nothing}
+              ${mine?.phase === 'failed' ? html`<span class="error" role="alert">${failureText(mine.failure, null)}</span>` : nothing}
+              ${this.error ? html`<span class="error" role="alert">${this.error}</span>` : nothing}
+            </div>`
+        : this.error
+          ? html`<span class="error" role="alert">${this.error}</span>`
+          : nothing}
+      <div class="row">
+        <dc-button variant="primary" size="sm" ?disabled=${mine?.phase !== 'ready'} @click=${this.save}>${strings.modelSave}</dc-button>
+        ${this.current ? html`<dc-button variant="ghost" size="sm" @click=${this.stopUsing}>${strings.modelStopUsing}</dc-button>` : nothing}
+      </div>
+    `
+  }
+
   render() {
     const kind = this.kind
-    const ok = this.result?.ok === true
-    const ready = ok && this.chosen !== ''
     return html`
       <h3>${strings.modelTitle}</h3>
       <p class="muted">${strings.modelHelp}</p>
@@ -198,6 +315,15 @@ export class LlModelSettings extends LitElement {
           @change=${(e: Event) => this.pick((e.target as HTMLInputElement).value)}
         ></dc-select>
       </label>
+      ${kind.id === LOCAL_PRESET ? this.renderLocal() : this.renderEndpoint(kind)}
+    `
+  }
+
+  /** An endpoint's part: its address and key, a check that it answers, and the model chosen from those it lists. */
+  private renderEndpoint(kind: ModelPreset) {
+    const ok = this.result?.ok === true
+    const ready = ok && this.chosen !== ''
+    return html`
       ${kind.address === 'none'
         ? nothing
         : html`<label>

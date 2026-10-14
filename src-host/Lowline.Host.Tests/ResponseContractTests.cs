@@ -106,6 +106,31 @@ public sealed class ResponseContractTests
             return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct))!;
         }
 
+        // The models on this computer are a stand-in whose fetch holds until let go, and whose recommended model will not start.
+        var lmsupply = (LocalModelsTests.StandIn)factory.Services.GetRequiredService<ILocalGenerators>();
+        lmsupply.Gate = new TaskCompletionSource();
+        lmsupply.Fails["gguf:qwen3-default"] = new InvalidOperationException("llama-server exited");
+
+        // The models offered once getting one ready reaches `phase`, after doing `then`.
+        async Task<JsonNode> LocalView(string phase, Func<Task>? then = null)
+        {
+            if (then is not null) await then();
+            for (var i = 0; ; i++)
+            {
+                var view = JsonNode.Parse(await client.GetStringAsync("/model/local", ct))!;
+                if (view["progress"]!["phase"]!.GetValue<string>() == phase) return view;
+                Assert.True(i < 500, $"getting a model ready never reached {phase}");
+                await Task.Delay(10, ct);
+            }
+        }
+        var idle = JsonNode.Parse(await client.GetStringAsync("/model/local", ct))!;
+        var started = await Post("/model/local/prepare", new { model = "gguf:qwen3-balanced" });
+        var getting = await LocalView("getting");
+        var again = await Post("/model/local/prepare", new { model = "gguf:qwen3-balanced" });
+        var ready = await LocalView("ready", then: () => { lmsupply.Gate!.SetResult(); return Task.CompletedTask; });
+        var localChat = await Post("/chat/author", new { preset = "local", model = "gguf:qwen3-balanced", template = "# 접수", turns = new[] { new { role = "user", text = "칸을 넣어 줘" } } });
+        var failed = await LocalView("failed", then: () => Post("/model/local/prepare", new { model = "gguf:qwen3-default" }));
+
         // Fifteen documents that settle 담당 by 부서 and split 긴급 evenly; one with a 수량 that is not a number, one
         // of a template the vault does not have, and a suggestion for 담당 turned down on the first document.
         var snapshot = new VaultSnapshot(
@@ -154,7 +179,14 @@ public sealed class ResponseContractTests
             // A chat reply about a template, and one the endpoint refused the key for.
             ["chatAuthor"] = new JsonArray(
                 await Post("/chat/author", new { preset = "custom", baseUrl = listingUrl, model = "qwen3-4b", template = "# 접수", turns = new[] { new { role = "user", text = "칸을 넣어 줘" } } }),
-                await Post("/chat/author", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong", model = "qwen3-4b", template = "", turns = new[] { new { role = "user", text = "안녕" } } })),
+                await Post("/chat/author", new { preset = "custom", baseUrl = refusingUrl, apiKey = "sk-wrong", model = "qwen3-4b", template = "", turns = new[] { new { role = "user", text = "안녕" } } }),
+                // And one on the model running on this computer.
+                localChat),
+            // The models on this computer — one here, one not — as getting the one not here ready goes: before, while it is
+            // fetched, once it runs; and as the recommended one will not start. Asking to get one ready answers where that
+            // stands: started, already on its way, or refused for a model not offered.
+            ["localPrepare"] = new JsonArray(started, again, await Post("/model/local/prepare", new { model = "gguf:qwen3-fast" })),
+            ["localModels"] = new JsonArray(idle, getting, ready, failed),
             // The words the UI branches on, every one the sidecar can send — not only those this vault happens to draw.
             ["words"] = new JsonObject
             {
@@ -162,6 +194,8 @@ public sealed class ResponseContractTests
                 ["reason"] = Words(typeof(Abstention)),
                 ["whyNoReplay"] = Words(typeof(NoReplay), Abstention.BelowTarget),
                 ["probeFailure"] = Words(typeof(ModelFailure)),
+                ["localPhase"] = Words(typeof(LocalPhase)),
+                ["localGetting"] = Words(typeof(LocalGetting)),
             },
         };
         var written = Zeroed(responses)!.ToJsonString(Written).ReplaceLineEndings("\n") + "\n";

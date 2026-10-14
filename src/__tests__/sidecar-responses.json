@@ -378,6 +378,144 @@
       "text": null,
       "failure": "unauthorized",
       "statusCode": 0
+    },
+    {
+      "ok": true,
+      "text": "칸을 넣었습니다.",
+      "failure": null,
+      "statusCode": null
+    }
+  ],
+  "localPrepare": [
+    {
+      "model": "gguf:qwen3-balanced",
+      "phase": "starting",
+      "getting": null,
+      "received": null,
+      "total": null,
+      "failure": null
+    },
+    {
+      "model": "gguf:qwen3-balanced",
+      "phase": "getting",
+      "getting": "model",
+      "received": 0,
+      "total": 0,
+      "failure": null
+    },
+    {
+      "model": "gguf:qwen3-fast",
+      "phase": "failed",
+      "getting": null,
+      "received": null,
+      "total": null,
+      "failure": "invalid"
+    }
+  ],
+  "localModels": [
+    {
+      "models": [
+        {
+          "id": "gguf:qwen3-default",
+          "name": "Qwen 3.5 4B Instruct",
+          "sizeBytes": 0,
+          "downloaded": true,
+          "recommended": true
+        },
+        {
+          "id": "gguf:qwen3-balanced",
+          "name": "Qwen3 8B Instruct",
+          "sizeBytes": 0,
+          "downloaded": false,
+          "recommended": false
+        }
+      ],
+      "progress": {
+        "model": null,
+        "phase": "idle",
+        "getting": null,
+        "received": null,
+        "total": null,
+        "failure": null
+      }
+    },
+    {
+      "models": [
+        {
+          "id": "gguf:qwen3-default",
+          "name": "Qwen 3.5 4B Instruct",
+          "sizeBytes": 0,
+          "downloaded": true,
+          "recommended": true
+        },
+        {
+          "id": "gguf:qwen3-balanced",
+          "name": "Qwen3 8B Instruct",
+          "sizeBytes": 0,
+          "downloaded": false,
+          "recommended": false
+        }
+      ],
+      "progress": {
+        "model": "gguf:qwen3-balanced",
+        "phase": "getting",
+        "getting": "model",
+        "received": 0,
+        "total": 0,
+        "failure": null
+      }
+    },
+    {
+      "models": [
+        {
+          "id": "gguf:qwen3-default",
+          "name": "Qwen 3.5 4B Instruct",
+          "sizeBytes": 0,
+          "downloaded": true,
+          "recommended": true
+        },
+        {
+          "id": "gguf:qwen3-balanced",
+          "name": "Qwen3 8B Instruct",
+          "sizeBytes": 0,
+          "downloaded": true,
+          "recommended": false
+        }
+      ],
+      "progress": {
+        "model": "gguf:qwen3-balanced",
+        "phase": "ready",
+        "getting": null,
+        "received": null,
+        "total": null,
+        "failure": null
+      }
+    },
+    {
+      "models": [
+        {
+          "id": "gguf:qwen3-default",
+          "name": "Qwen 3.5 4B Instruct",
+          "sizeBytes": 0,
+          "downloaded": true,
+          "recommended": true
+        },
+        {
+          "id": "gguf:qwen3-balanced",
+          "name": "Qwen3 8B Instruct",
+          "sizeBytes": 0,
+          "downloaded": true,
+          "recommended": false
+        }
+      ],
+      "progress": {
+        "model": "gguf:qwen3-default",
+        "phase": "failed",
+        "getting": null,
+        "received": null,
+        "total": null,
+        "failure": "not-started"
+      }
     }
   ],
   "words": {
@@ -404,7 +542,20 @@
       "refused",
       "host-not-found",
       "unreachable",
-      "transport"
+      "transport",
+      "not-downloaded",
+      "not-started"
+    ],
+    "localPhase": [
+      "idle",
+      "getting",
+      "starting",
+      "ready",
+      "failed"
+    ],
+    "localGetting": [
+      "model",
+      "runtime"
     ]
   }
 }

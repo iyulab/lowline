@@ -19,6 +19,9 @@ builder.Services.AddLoopbackAuthentication(credentials);
 
 // Projection caches live where the shell says, outside any vault; without a place they last one run.
 builder.Services.AddSingleton<HostFailures>();
+// The model running on this computer for the chat, when the person set one up: one at a time, kept loaded.
+builder.Services.AddSingleton<ILocalGenerators, LmSupplyGenerators>();
+builder.Services.AddSingleton<LocalModels>();
 builder.Services.AddSingleton(services => new VaultProjection(
     services.GetRequiredService<IConfiguration>()[VaultProjection.CacheVariable],
     services.GetRequiredService<HostFailures>()));
@@ -60,8 +63,13 @@ app.MapPost("/similar", (SimilarQuery query, VaultProjection vault, Cancellation
 // Whether a model endpoint the person named answers, with the key the shell read from the credential store for it.
 app.MapPost("/model/probe", (ModelProbe probe, CancellationToken ct) => ModelConnection.ProbeAsync(probe, timeout: null, ct));
 
+// The models offered on this computer and where getting one ready stands; getting one ready, fetching it if it is not here.
+app.MapGet("/model/local", (LocalModels local) => local.View());
+app.MapPost("/model/local/prepare", (LocalModelPick pick, LocalModels local) => local.Prepare(pick.Model));
+
 // A reply of the chat that writes templates, with the key the shell read from the credential store for this one request.
-app.MapPost("/chat/author", (ChatAuthorRequest request, CancellationToken ct) => ChatAuthoring.ReplyAsync(request, ChatAuthoring.Deadline, ct));
+app.MapPost("/chat/author", (ChatAuthorRequest request, LocalModels local, CancellationToken ct) =>
+    ChatAuthoring.ReplyAsync(request, local, ChatAuthoring.Deadline, ct));
 
 // Failures of work no request waited on, since the last time the shell asked.
 app.MapPost("/failures/take", (HostFailures failures) => failures.Take());

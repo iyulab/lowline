@@ -5,7 +5,7 @@ import '@iyulab/chat-components/dist/components/message/UMessage.js'
 import '@iyulab/chat-components/dist/components/prompt/UPrompt.js'
 import '@iyulab/chat-components/dist/components/blocks/UMarkedBlock.js'
 import { strings } from './strings.js'
-import { failureText, presetOf } from './model-settings.js'
+import { failureText, modelLabel } from './model-settings.js'
 import { draftOf, draftProblems, fieldChanges, retryMessage, tidyDraft, wordsOf } from './chat-authoring.js'
 import { model as models, type ChatTurn } from './vault-client.js'
 import type { ModelSettings } from './settings.js'
@@ -176,7 +176,7 @@ export class LlChatPanel extends LitElement {
     }
     return html`
       <div class="model">
-        <span>${presetOf(this.model.preset)?.label ?? this.model.preset} · ${this.model.model}</span>
+        <span>${modelLabel(this.model)}</span>
         <dc-button size="sm" variant="ghost" @click=${() => (this.settingUp = true)}>${strings.chatModelChange}</dc-button>
       </div>
       <div class="log" role="log" aria-live="polite">

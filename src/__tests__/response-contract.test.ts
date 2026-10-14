@@ -5,7 +5,7 @@
 // ways: nothing the UI does not know, nothing it needs missing, and every key carried at least once.
 import { describe, expect, it } from 'vitest'
 import type { Abstention, CaseHit, FieldCurve, IngestResult, ProjectionTable, Suggestion } from '../projection.js'
-import type { ChatAuthorReply, ModelFailure, ModelProbeResult } from '../vault-client.js'
+import type { ChatAuthorReply, LocalModelProgress, LocalModels, ModelFailure, ModelProbeResult } from '../vault-client.js'
 import file from './sidecar-responses.json'
 
 type Item<V> = V extends readonly (infer E)[] ? E : V
@@ -74,8 +74,33 @@ const probe: Shape<ModelProbeResult> = { ok: 'required', failure: 'required', st
 
 const chatAuthor: Shape<ChatAuthorReply> = { ok: 'required', text: 'required', failure: 'required', statusCode: 'required' }
 
+const localProgress: Shape<LocalModelProgress> = {
+  model: 'required',
+  phase: 'required',
+  getting: 'required',
+  received: 'required',
+  total: 'required',
+  failure: 'required',
+}
+
+const localModels: Shape<LocalModels> = {
+  models: { presence: 'required', inside: { id: 'required', name: 'required', sizeBytes: 'required', downloaded: 'required', recommended: 'required' } },
+  progress: { presence: 'required', inside: localProgress },
+}
+
 /** Each answer in the file, and the shape the UI reads it by. */
-const answers = { ingest, projection, curves: curve, suggestions: suggestion, search: hit, similar: hit, probe, chatAuthor }
+const answers = {
+  ingest,
+  projection,
+  curves: curve,
+  suggestions: suggestion,
+  search: hit,
+  similar: hit,
+  probe,
+  chatAuthor,
+  localModels,
+  localPrepare: localProgress,
+}
 
 /** The words the UI branches on — every one its types allow, as the compiler holds them to. */
 const words = {
@@ -92,7 +117,11 @@ const words = {
     'host-not-found': true,
     unreachable: true,
     transport: true,
+    'not-downloaded': true,
+    'not-started': true,
   } satisfies Record<ModelFailure, true>,
+  localPhase: { idle: true, getting: true, starting: true, ready: true, failed: true } satisfies Record<LocalModelProgress['phase'], true>,
+  localGetting: { model: true, runtime: true } satisfies Record<NonNullable<LocalModelProgress['getting']>, true>,
 }
 
 type AnyShape = Record<string, string | { presence: string; inside: AnyShape | 'any keys' }>

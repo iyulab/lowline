@@ -204,7 +204,17 @@ export const host = {
 }
 
 /** Why a model endpoint did not answer, for the app to say in its own words (the sidecar's `ModelFailure`). */
-export type ModelFailure = 'invalid' | 'unauthorized' | 'http-status' | 'timeout' | 'refused' | 'host-not-found' | 'unreachable' | 'transport'
+export type ModelFailure =
+  | 'invalid'
+  | 'unauthorized'
+  | 'http-status'
+  | 'timeout'
+  | 'refused'
+  | 'host-not-found'
+  | 'unreachable'
+  | 'transport'
+  | 'not-downloaded'
+  | 'not-started'
 
 /** Whether a model endpoint answered, and the models it lists; or why not — never the endpoint's own words. */
 export interface ModelProbeResult {
@@ -213,6 +223,31 @@ export interface ModelProbeResult {
   /** The HTTP status it answered with, when it answered one. */
   statusCode: number | null
   modelIds: string[]
+}
+
+/** A model Lowline can run on this computer: its LMSupply alias, its name, how much it takes to get, and whether it is here. */
+export interface LocalModel {
+  id: string
+  name: string
+  sizeBytes: number
+  downloaded: boolean
+  recommended: boolean
+}
+
+/** Where getting a model ready on this computer stands. */
+export interface LocalModelProgress {
+  model: string | null
+  phase: 'idle' | 'getting' | 'starting' | 'ready' | 'failed'
+  /** While `getting`: what is being fetched — the model, or the runtime that runs it. */
+  getting: 'model' | 'runtime' | null
+  received: number | null
+  total: number | null
+  failure: ModelFailure | null
+}
+
+export interface LocalModels {
+  models: LocalModel[]
+  progress: LocalModelProgress
 }
 
 /** One turn of the chat beside a template. */
@@ -240,6 +275,10 @@ export const model = {
   keyKept: (provider: string) => invoke<boolean>('model_key_kept', { provider }),
   keepKey: (provider: string, key: string) => invoke<void>('keep_model_key', { provider, key }),
   forgetKey: (provider: string) => invoke<void>('forget_model_key', { provider }),
+  /** The models Lowline can run on this computer, and where getting one ready stands. */
+  local: () => invoke<LocalModels>('host_local_models'),
+  /** Starts getting a model ready on this computer, fetching what is not here; `local` follows it. */
+  prepareLocal: (id: string) => invoke<LocalModelProgress>('host_local_prepare', { model: id }),
   /** A reply about `template` — its source as it stands — to the conversation, by the model set up, with the key kept for its preset. */
   author: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, turns: ChatTurn[]) =>
     invoke<ChatAuthorReply>('host_chat_author', { request: { ...setting, template, turns } }),

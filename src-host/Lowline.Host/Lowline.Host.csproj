@@ -23,6 +23,8 @@
     <PackageReference Include="Gil" Version="0.18.0" />
     <PackageReference Include="IronProw.Core" Version="0.16.1" />
     <PackageReference Include="IronProw.IronHive" Version="0.16.1" />
+    <PackageReference Include="IronProw.LMSupply" Version="0.16.1" />
+    <PackageReference Include="LMSupply.Generator" Version="0.121.0" />
     <PackageReference Include="FluxIndex.SDK" Version="0.92.0" />
     <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.92.0" />
     <PackageReference Include="TauriKit.Sidecar.Loopback.AspNetCore" Version="0.16.1" />

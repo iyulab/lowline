@@ -245,9 +245,16 @@ export default {
     try {
       await app.templateOf(BUG)
       await app.click('dc-button', '채팅')
-      await app.cdp.waitFor(`!!${panel}?.querySelector('dc-select')`, 'the model settings in the chat panel')
-      assert.match(await app.cdp.evaluate(`${panel}.textContent`), /이 주소의 서버로만 갑니다/, 'where what is sent goes')
+      // This computer first: the models Lowline can get and run itself, the recommended one chosen, and what getting it
+      // fetches from where — nothing is fetched until the person asks.
+      await app.cdp.waitFor(`!!${panel}?.querySelector('dc-select[aria-label="모델"]')`, 'the models on this computer in the chat panel')
+      const local = await app.cdp.evaluate(`${panel}.textContent`)
+      assert.match(local, /이 컴퓨터 밖으로 나가지 않습니다/, 'what is sent stays here')
+      assert.match(local, /Hugging Face.*GitHub/s, 'where getting a model fetches from')
+      assert.equal(await app.cdp.evaluate(`${panel}.querySelector('dc-select[aria-label="모델"]').value`), 'gguf:qwen3-default', 'the recommended model')
+      assert.equal(await app.cdp.evaluate(`${panel}.querySelector('dc-button[variant="primary"]').disabled`), true, 'nothing ready to keep')
       await app.choose('dc-select[aria-label="어디에 있는 모델인가요"]', 'custom')
+      assert.match(await app.cdp.evaluate(`${panel}.textContent`), /이 주소의 서버로만 갑니다/, 'where what is sent goes')
       await app.cdp.waitFor(`!!${panel}.querySelector('dc-input[aria-label="주소"]')`, 'an address asked for')
 
       await type('주소', `http://127.0.0.1:${closedPort}/v1`)

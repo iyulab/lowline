@@ -632,6 +632,25 @@ async fn host_model_probe(
     host_json(blocking(move || client.post_json("/model/probe", &body)).await?)
 }
 
+/// The models Lowline can run on this computer for the chat, and where getting one ready stands.
+#[tauri::command]
+async fn host_local_models(state: State<'_, HostState>) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    host_json(blocking(move || client.get("/model/local")).await?)
+}
+
+/// Starts getting a model ready on this computer — fetching it, and the runtime that runs it, when they are not here.
+/// The sidecar answers at once; `host_local_models` follows it.
+#[tauri::command]
+async fn host_local_prepare(
+    model: String,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let body = serde_json::json!({ "model": model }).to_string();
+    host_json(blocking(move || client.post_json("/model/local/prepare", &body)).await?)
+}
+
 /// What the chat beside a template asks the sidecar (`ChatAuthorRequest`): the model set up, the template's source,
 /// the conversation — and the key, if one is kept, read here and handed on with this one request.
 #[derive(serde::Deserialize)]
@@ -934,6 +953,8 @@ pub fn run() {
             read_presentations,
             third_party_notices,
             host_model_probe,
+            host_local_models,
+            host_local_prepare,
             host_chat_author,
             credentials::model_key_kept,
             credentials::keep_model_key,

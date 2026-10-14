@@ -325,6 +325,8 @@ export const strings = {
   modelTitle: '채팅이 쓸 모델',
   modelHelp: '이 컴퓨터나 가까운 서버에서 돌리는 모델, 또는 키를 가진 서비스를 고릅니다. 채팅을 쓰지 않으면 아무것도 고르지 않아도 됩니다.',
   modelPreset: '어디에 있는 모델인가요',
+  modelPresetLocal: '이 컴퓨터에서(Lowline이 받아 돌림)',
+  modelLocalShort: '이 컴퓨터',
   modelPresetOllama: '내 컴퓨터의 Ollama',
   modelPresetGpustack: 'GPUStack 서버',
   modelPresetCustom: '다른 주소(OpenAI 호환)',
@@ -337,6 +339,19 @@ export const strings = {
   modelKeyForget: '키 지우기',
   modelGoesOutside: (company: string) => `채팅에 보낸 글과 지금 서식은 ${company}로 갑니다.`,
   modelStaysAtAddress: '채팅에 보낸 글과 지금 서식은 이 주소의 서버로만 갑니다.',
+  modelStaysHere: '채팅에 보낸 글과 지금 서식은 이 컴퓨터 밖으로 나가지 않습니다.',
+  modelLocalFetch:
+    '처음 준비할 때 모델 파일을 Hugging Face에서, 그것을 돌리는 프로그램(llama.cpp)을 GitHub에서 받습니다. 받을 때 보내는 것은 받을 파일의 요청뿐입니다.',
+  modelLocalChoose: '모델',
+  modelLocalOption: (name: string, gigabytes: string, here: boolean, recommended: boolean) =>
+    `${name} · ${gigabytes} GB${here ? ' · 받아 둠' : ''}${recommended ? ' · 권장' : ''}`,
+  modelLocalPrepare: (here: boolean) => (here ? '준비하기' : '받고 준비하기'),
+  modelLocalGetting: (what: 'model' | 'runtime', received: string, total: string) =>
+    `${what === 'model' ? '모델' : '실행 프로그램'}을 받는 중 ${received} / ${total} GB`,
+  modelLocalGettingSize: (what: 'model' | 'runtime') => `${what === 'model' ? '모델' : '실행 프로그램'}을 받는 중…`,
+  modelLocalStarting: '모델을 켜는 중… 처음에는 1분쯤 걸릴 수 있습니다.',
+  modelLocalReady: '준비됐습니다.',
+  modelLocalListFailed: '이 컴퓨터의 모델 목록을 읽지 못했습니다.',
   modelCheck: '연결 확인',
   modelChecking: '확인하는 중…',
   modelCheckFailed: '연결을 확인하지 못했습니다.',
@@ -353,6 +368,8 @@ export const strings = {
   modelFailureHostNotFound: '주소의 컴퓨터 이름을 찾지 못했습니다.',
   modelFailureUnreachable: '네트워크나 그 컴퓨터에 닿지 못했습니다.',
   modelFailureTransport: '연결하는 도중에 실패했습니다.',
+  modelFailureNotDownloaded: '이 컴퓨터에 그 모델이 없습니다. 모델 설정에서 다시 받아 주세요.',
+  modelFailureNotStarted: '모델을 켜지 못했습니다. 메모리가 모자라거나 파일이 손상됐을 수 있습니다.',
 } as const
 
 /**
