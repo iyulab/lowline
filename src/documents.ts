@@ -288,7 +288,7 @@ export type TemplateProblem =
   | { kind: 'duplicate-field'; name: string; lines: number[] }
   | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'invalid-condition'; field: string }
-  | { kind: 'unrecognized-field'; name: string; line?: number }
+  | { kind: 'unrecognized-field'; name: string; line?: number; fix?: string }
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
   | { kind: 'shared-id'; id: string; names: string[] }
@@ -382,7 +382,8 @@ export function templateProblems(source: string): TemplateProblem[] {
       problems.push({ kind: 'unknown-condition', field: d.field, name: d.related })
     }
     if (d.code === 'invalid-condition' && d.field !== undefined) problems.push({ kind: 'invalid-condition', field: d.field })
-    if (d.code === 'unrecognized-field' && d.field !== undefined) problems.push({ kind: 'unrecognized-field', name: d.field, line: d.span?.line })
+    if (d.code === 'unrecognized-field' && d.field !== undefined)
+      problems.push({ kind: 'unrecognized-field', name: d.field, line: d.span?.line, ...(d.fix !== undefined && { fix: d.fix }) })
   }
   const lowline = parsed.frontMatter?.data.lowline
   const suggest = typeof lowline === 'object' && lowline !== null ? (lowline as { suggest?: unknown }).suggest : undefined
