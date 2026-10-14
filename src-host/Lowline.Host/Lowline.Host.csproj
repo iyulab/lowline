@@ -25,7 +25,7 @@
     <PackageReference Include="IronProw.IronHive" Version="0.16.1" />
     <PackageReference Include="FluxIndex.SDK" Version="0.92.0" />
     <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.92.0" />
-    <PackageReference Include="TauriKit.Sidecar.Loopback.AspNetCore" Version="0.16.0" />
+    <PackageReference Include="TauriKit.Sidecar.Loopback.AspNetCore" Version="0.16.1" />
   </ItemGroup>
 
 </Project>

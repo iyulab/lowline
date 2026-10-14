@@ -125,6 +125,8 @@ export default {
       'the caret, not a selection',
     )
     await app.noAlert()
+    // Left before they go: removed while open, a document is said to be gone outside.
+    await app.learning()
     for (const name of (await documentsIn(vault)).filter((n) => !before.includes(n))) await rm(join(vault, '문서', name))
   },
 
@@ -282,6 +284,7 @@ export default {
     assert.ok(saved.부서 && saved.담당, `both choices made: ${saved.부서} · ${saved.담당}`)
     assert.ok(keys <= 12, `${keys} keys for one document`)
     await app.noAlert()
+    await app.learning()
     for (const name of made) await rm(join(vault, '문서', name))
   },
 
