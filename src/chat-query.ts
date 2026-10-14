@@ -1,7 +1,8 @@
 // Asking the vault: what a model's reply says to count — checked against the template's fields — before the vault counts
 // it. The model never writes a number: the counts, and the documents behind each, come from the vault's aggregate.
 
-import type { ColumnFilter, TemplateField } from './projection.js'
+import { DATE_TYPES, type ColumnFilter, type TemplateField } from './projection.js'
+import { strings } from './strings.js'
 
 /** What to count: by which fields, of which documents, and how many of the largest counts to show (all when unset). */
 export interface QueryPlan {
@@ -18,7 +19,42 @@ export type ReadPlan =
   | { problem: 'unknown-field'; field: string }
   | { problem: 'bad-filter'; field: string }
 
-const OPS = new Set(['equal', 'contains', 'atLeast', 'atMost', 'empty'])
+const OPS = new Set(['equal', 'contains', 'atLeast', 'atMost', 'empty', 'period'])
+
+/**
+ * The spans of time a question names relative to today. The model says which one; the app works out its days, so a
+ * small model's date arithmetic is never what is counted. A week starts on Monday.
+ */
+export const PERIODS = ['today', 'yesterday', 'this-week', 'last-week', 'this-month', 'last-month', 'this-year', 'last-year'] as const
+export type Period = (typeof PERIODS)[number]
+
+const day = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+/** The first and last day of `period` on this computer's calendar, `today` being the day it is. */
+export function periodDays(period: Period, today: Date): { from: string; to: string } {
+  const [y, m, d] = [today.getFullYear(), today.getMonth(), today.getDate()]
+  const span = (from: Date, to: Date) => ({ from: day(from), to: day(to) })
+  const monday = d - ((today.getDay() + 6) % 7)
+  switch (period) {
+    case 'today':
+      return span(today, today)
+    case 'yesterday':
+      return span(new Date(y, m, d - 1), new Date(y, m, d - 1))
+    case 'this-week':
+      return span(new Date(y, m, monday), new Date(y, m, monday + 6))
+    case 'last-week':
+      return span(new Date(y, m, monday - 7), new Date(y, m, monday - 1))
+    case 'this-month':
+      return span(new Date(y, m, 1), new Date(y, m + 1, 0))
+    case 'last-month':
+      return span(new Date(y, m - 1, 1), new Date(y, m, 0))
+    case 'this-year':
+      return span(new Date(y, 0, 1), new Date(y, 11, 31))
+    case 'last-year':
+      return span(new Date(y - 1, 0, 1), new Date(y - 1, 11, 31))
+  }
+}
 
 /** The JSON object in the reply's last fenced block — or the reply itself — or null. */
 function objectOf(reply: string): Record<string, unknown> | null {
@@ -40,9 +76,10 @@ function objectOf(reply: string): Record<string, unknown> | null {
 /**
  * What a reply asks to count, checked against `fields`: each field named one the template has (by name, or by its
  * label), each condition one the vault asks, a value where it needs one — a choice field's value one of its choices.
- * A field named twice to count by counts once.
+ * A field named twice to count by counts once. A `period` of a date field becomes its first and last day from `today`;
+ * of a date-and-time field, from the start of the first to the end of the last.
  */
-export function queryPlan(reply: string, fields: readonly TemplateField[]): ReadPlan {
+export function queryPlan(reply: string, fields: readonly TemplateField[], today: Date = new Date()): ReadPlan {
   const asked = objectOf(reply)
   if (!asked) return { problem: 'no-plan' }
   if (typeof asked.unanswerable === 'string') return { unanswerable: asked.unanswerable }
@@ -68,9 +105,46 @@ export function queryPlan(reply: string, fields: readonly TemplateField[]): Read
     }
     const text = typeof value === 'number' ? String(value) : typeof value === 'string' ? value.trim() : ''
     if (!text) return { problem: 'bad-filter', field: field.name }
+    if (op === 'period') {
+      if (!DATE_TYPES.includes(field.type) || !(PERIODS as readonly string[]).includes(text)) return { problem: 'bad-filter', field: field.name }
+      const { from, to } = periodDays(text as Period, today)
+      const timed = field.type === 'datetime-local'
+      filters.push({ column: field.name, op: 'atLeast', value: timed ? `${from}T00:00` : from })
+      filters.push({ column: field.name, op: 'atMost', value: timed ? `${to}T23:59:59` : to })
+      continue
+    }
     if (op === 'equal' && field.options.length > 0 && !field.options.includes(text)) return { problem: 'bad-filter', field: field.name }
     filters.push({ column: field.name, op: op as ColumnFilter['op'], value: text })
   }
   const top = typeof asked.top === 'number' && Number.isInteger(asked.top) && asked.top > 0 ? asked.top : undefined
   return { plan: { groupBy, filters, ...(top ? { top } : {}) } }
+}
+
+/**
+ * What `plan` counts, in words — which documents, by what, how many — shown with every answer, so a question the
+ * model took the wrong way is seen for what was counted. Fields by their labels, choices by what the form shows.
+ */
+export function planWords(plan: QueryPlan, fields: readonly TemplateField[]): string {
+  const of = (name: string) => fields.find((f) => f.name === name)
+  const label = (name: string) => of(name)?.label ?? name
+  const shown = (name: string, value: string) => of(name)?.optionLabels?.[value] ?? value
+  // A field's lower and upper bounds are one range, said where the first of them is.
+  const said: (string | { column: string; from?: string; to?: string })[] = []
+  for (const f of plan.filters) {
+    if (f.op === 'atLeast' || f.op === 'atMost') {
+      let range = said.find((s) => typeof s !== 'string' && s.column === f.column) as { column: string; from?: string; to?: string } | undefined
+      if (!range) said.push((range = { column: f.column }))
+      if (f.op === 'atLeast') range.from = f.value
+      else range.to = f.value
+    } else if (f.op === 'equal') said.push(strings.queryEqual(label(f.column), shown(f.column, f.value)))
+    else if (f.op === 'contains') said.push(strings.queryContains(label(f.column), f.value))
+    else said.push(strings.queryEmpty(label(f.column)))
+  }
+  const words = said.map((s) =>
+    typeof s === 'string' ? s : strings.queryBounds(label(s.column), s.from, s.to, DATE_TYPES.includes(of(s.column)?.type ?? '')),
+  )
+  if (words.length === 0) words.push(strings.queryAll)
+  if (plan.groupBy.length > 0) words.push(strings.queryBy(plan.groupBy.map(label)))
+  if (plan.top) words.push(strings.queryTop(plan.top))
+  return words.join(' · ')
 }

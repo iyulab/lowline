@@ -79,6 +79,9 @@ public sealed class ChatExtractionTests
         Assert.Equal(2, asked.Count);
         Assert.Contains("세는 일은 Lowline이 합니다", asked[0].Content);
         Assert.Contains(DateTime.Now.ToString("yyyy-MM-dd"), asked[0].Content);
+        // A span relative to today is named, never worked out: the app turns it into days.
+        Assert.Contains("\"op\": \"period\", \"value\": \"last-month\"", asked[0].Content);
+        Assert.Contains("unanswerable", asked[0].Content);
         Assert.Contains("@긴급도: [radio options=\"낮음,보통,높음\"]", asked[0].Content);
         Assert.Equal("긴급도별로 몇 건?", asked[1].Content);
         Assert.False((await ChatQuery.ReplyAsync(new ChatQueryRequest(ChatAuthoring.LocalPreset, null, null, "gguf:qwen3-default", Template, " "), local, TimeSpan.FromSeconds(20), Ct)).Ok);

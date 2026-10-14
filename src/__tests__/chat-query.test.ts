@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { queryPlan } from '../chat-query.ts'
+import { periodDays, planWords, queryPlan } from '../chat-query.ts'
 import { templateSnapshot } from '../projection.ts'
 
 const fence = '```'
@@ -10,6 +10,7 @@ version: 1
 @원인: [select options="부품,설정,사용자"]
 @방문일(방문한 날): [date]
 @지역: [text]
+@접수(접수 시각): [datetime-local]
 `).fields
 
 describe('what a reply asks to count', () => {
@@ -44,5 +45,59 @@ describe('what a reply asks to count', () => {
 
   it('passes on that the question cannot be counted from the template, as the model put it', () => {
     expect(queryPlan('{"unanswerable": "담당자 칸이 없습니다"}', fields)).toEqual({ unanswerable: '담당자 칸이 없습니다' })
+  })
+
+  it('turns a period of a date field into its first and last day from today: the model never works out a date', () => {
+    const wednesday = new Date(2026, 9, 14)
+    expect(queryPlan('{"groupBy": ["원인"], "filters": [{"field": "방문일", "op": "period", "value": "last-month"}]}', fields, wednesday)).toEqual({
+      plan: {
+        groupBy: ['원인'],
+        filters: [
+          { column: '방문일', op: 'atLeast', value: '2026-09-01' },
+          { column: '방문일', op: 'atMost', value: '2026-09-30' },
+        ],
+      },
+    })
+    // Of a date-and-time field, from the start of the first day to the end of the last.
+    expect(queryPlan('{"filters": [{"field": "접수", "op": "period", "value": "today"}]}', fields, wednesday)).toEqual({
+      plan: { groupBy: [], filters: [{ column: '접수', op: 'atLeast', value: '2026-10-14T00:00' }, { column: '접수', op: 'atMost', value: '2026-10-14T23:59:59' }] },
+    })
+    // Only a date field has days, and only the periods the app knows are periods.
+    expect(queryPlan('{"filters": [{"field": "지역", "op": "period", "value": "this-week"}]}', fields, wednesday)).toEqual({ problem: 'bad-filter', field: '지역' })
+    expect(queryPlan('{"filters": [{"field": "방문일", "op": "period", "value": "last-quarter"}]}', fields, wednesday)).toEqual({ problem: 'bad-filter', field: '방문일' })
+  })
+
+  it('knows each period by the calendar: weeks from Monday, months and years whole, across a year end', () => {
+    const wednesday = new Date(2026, 9, 14)
+    expect(periodDays('today', wednesday)).toEqual({ from: '2026-10-14', to: '2026-10-14' })
+    expect(periodDays('yesterday', wednesday)).toEqual({ from: '2026-10-13', to: '2026-10-13' })
+    expect(periodDays('this-week', wednesday)).toEqual({ from: '2026-10-12', to: '2026-10-18' })
+    expect(periodDays('last-week', wednesday)).toEqual({ from: '2026-10-05', to: '2026-10-11' })
+    expect(periodDays('this-month', wednesday)).toEqual({ from: '2026-10-01', to: '2026-10-31' })
+    expect(periodDays('this-year', wednesday)).toEqual({ from: '2026-01-01', to: '2026-12-31' })
+    expect(periodDays('last-year', wednesday)).toEqual({ from: '2025-01-01', to: '2025-12-31' })
+    const sunday = new Date(2026, 0, 4)
+    expect(periodDays('this-week', sunday)).toEqual({ from: '2025-12-29', to: '2026-01-04' })
+    expect(periodDays('last-month', sunday)).toEqual({ from: '2025-12-01', to: '2025-12-31' })
+    expect(periodDays('yesterday', new Date(2026, 2, 1))).toEqual({ from: '2026-02-28', to: '2026-02-28' })
+  })
+})
+
+describe('what a plan counts, in words', () => {
+  it('says which documents, by what, and how many — fields by their labels, a range as one', () => {
+    const plan = {
+      groupBy: ['원인'],
+      filters: [
+        { column: '방문일', op: 'atLeast' as const, value: '2026-09-01' },
+        { column: '지역', op: 'contains' as const, value: '서울' },
+        { column: '방문일', op: 'atMost' as const, value: '2026-09-30' },
+      ],
+      top: 3,
+    }
+    expect(planWords(plan, fields)).toBe('방문한 날 2026-09-01 ~ 2026-09-30 · 지역에 「서울」 포함 · 원인별 · 많은 것 3개')
+    expect(planWords({ groupBy: [], filters: [] }, fields)).toBe('모든 기록')
+    expect(planWords({ groupBy: ['지역'], filters: [{ column: '원인', op: 'empty', value: '' }, { column: '방문일', op: 'atMost', value: '2026-09-30' }] }, fields)).toBe(
+      '원인 비어 있음 · 방문한 날 2026-09-30까지 · 지역별',
+    )
   })
 })

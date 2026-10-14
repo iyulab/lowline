@@ -342,6 +342,18 @@ export const strings = {
   chatDraftProblems: '고친 뒤에도 남은 문제가 있습니다 — 편집기 위 목록을 보세요.',
   chatUndo: '넣기 전으로',
   chatFailed: (why: string) => `답을 받지 못했습니다. ${why}`,
+  queryAll: '모든 기록',
+  queryEqual: (field: string, value: string) => `${field} = ${value}`,
+  queryContains: (field: string, words: string) => `${field}에 「${words}」 포함`,
+  queryEmpty: (field: string) => `${field} 비어 있음`,
+  queryBounds: (field: string, from: string | undefined, to: string | undefined, dated: boolean) =>
+    from !== undefined && to !== undefined
+      ? `${field} ${from} ~ ${to}`
+      : from !== undefined
+        ? `${field} ${from}${dated ? '부터' : ' 이상'}`
+        : `${field} ${to}${dated ? '까지' : ' 이하'}`,
+  queryBy: (fields: string[]) => `${fields.join('·')}별`,
+  queryTop: (n: number) => `많은 것 ${n}개`,
   modelTitle: '채팅이 쓸 모델',
   modelHelp: '이 컴퓨터나 가까운 서버에서 돌리는 모델, 또는 키를 가진 서비스를 고릅니다. 채팅을 쓰지 않으면 아무것도 고르지 않아도 됩니다.',
   modelPreset: '어디에 있는 모델인가요',
