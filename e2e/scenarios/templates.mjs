@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -211,11 +211,25 @@ export default {
     await app.cdp.waitFor(`!__e2e.one('button.item', '새 서식 (1)')`, 'the second starter gone from the sidebar')
   },
 
-  async 'sets up the model the chat uses when the chat is first opened: says why a server does not answer, and keeps one that does'(app) {
+  async 'sets up the model the chat uses when the chat is first opened, and puts the template the chat writes into the editor for the person to save'(app, vault) {
     // A server of the person's own that speaks the OpenAI way, and a port where nothing listens: nothing leaves this computer.
+    // Asked to write, it first sends a draft with a field named twice, then — told what is wrong — one that works.
+    const fence = '```'
+    const asked = []
+    const draft = (extra) => `---\nid: bug-report\nversion: 1\n---\n# 버그 리포트\n\n제목: ___@제목\n\n@처리 기한: [date]\n${extra}`
     const server = createServer((req, res) => {
       res.setHeader('content-type', 'application/json')
-      res.end(req.url?.endsWith('/models') ? JSON.stringify({ object: 'list', data: [{ id: 'small-4b', object: 'model' }, { id: 'large-8b', object: 'model' }] }) : '{}')
+      if (req.url?.endsWith('/models')) {
+        res.end(JSON.stringify({ object: 'list', data: [{ id: 'small-4b', object: 'model' }, { id: 'large-8b', object: 'model' }] }))
+        return
+      }
+      let body = ''
+      req.on('data', (chunk) => (body += chunk))
+      req.on('end', () => {
+        asked.push(JSON.parse(body))
+        const text = asked.length === 1 ? `넣었습니다.\n\n${fence}formdown\n${draft('@제목: [text]\n')}${fence}` : `고쳤습니다.\n\n${fence}formdown\n${draft('')}${fence}`
+        res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'large-8b', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }))
+      })
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const closed = createServer()
@@ -251,12 +265,36 @@ export default {
         await new Promise((r) => setTimeout(r, 100))
       }
       assert.deepEqual((await settingsNow()).model, { preset: 'custom', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: 'large-8b' })
-      await app.cdp.waitFor(`__e2e.all('ll-chat-panel')[0]?.shadowRoot.textContent.includes('large-8b')`, 'the panel on the model kept')
+      const chat = `__e2e.all('ll-chat-panel')[0]?.shadowRoot`
+      await app.cdp.waitFor(`${chat}?.textContent.includes('large-8b') && !!${chat}.querySelector('u-prompt')`, 'the chat on the model kept')
+
+      // Asked in words; the draft is checked, asked again once, tidied, and put into the editor unsaved.
+      const before = await app.value('textarea')
+      await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = '처리 기한 칸을 날짜로 넣어 줘'; p.submit(); return true })()`)
+      await app.cdp.waitFor(`${chat}.querySelector('.note[role=status]')?.textContent.includes('넣은 칸: 처리_기한')`, 'the draft put into the editor', { timeoutMs: 30_000 })
+      assert.equal(asked.length, 2, 'asked once more after a draft with a problem')
+      assert.match(asked[0].messages[0].content, /id: bug-report/, 'the template as it stood went with the question')
+      assert.match(asked[1].messages.at(-1).content, /다시 보내/, 'and what was wrong with the first draft')
+      const drafted = await app.value('textarea')
+      assert.match(drafted, /^@처리_기한: \[date\]$/m, 'a field name made one word')
+      assert.equal(await readFile(join(vault, TEMPLATE), 'utf8'), before, 'nothing saved: the person saves')
+      assert.equal(await app.cdp.evaluate(`__e2e.one('dc-button', '저장').disabled`), false, 'the draft is there to save')
+
+      // What the editor held before can be put back.
+      await app.cdp.evaluate(`${chat}.querySelector('.note[role=status] dc-button').click()`)
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value === ${JSON.stringify(before)}`, 'the source as it was')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
       await app.noAlert()
     } finally {
       server.close()
       // Leave this device without a model, and the chat closed.
-      await writeFile(SETTINGS, JSON.stringify({ ...(await settingsNow()), model: null }))
+      if (await app.cdp.evaluate(`!!__e2e.all('ll-chat-panel')[0]?.shadowRoot.querySelector('u-prompt')`)) {
+        await app.cdp.evaluate(`__e2e.all('ll-chat-panel')[0].shadowRoot.querySelector('.model dc-button').click()`)
+        await app.cdp.waitFor(`!!${panel}?.querySelector('dc-select')`, 'the model settings again')
+      }
+      if (await app.cdp.evaluate(`!!${panel}`)) await app.click('dc-button', '모델 쓰지 않기').catch(() => {})
+      for (let tries = 0; (await settingsNow()).model && tries < 50; tries++) await new Promise((r) => setTimeout(r, 100))
       if (await app.cdp.evaluate(`!!__e2e.all('ll-chat-panel')[0]`)) await app.click('dc-button', '채팅')
     }
   },

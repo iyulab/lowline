@@ -59,7 +59,7 @@ export function destinationText(preset: ModelPreset): string {
 /**
  * Sets up the model the chat uses: the kind of endpoint, its address, its key — kept by the shell in the system's
  * credential store, never here — a check that it answers, and the model chosen from those it lists. Saving tells
- * `ll-model` with the setting; the app keeps it.
+ * `ll-model` with the setting, and stopping using one tells it with null; the app keeps it.
  */
 @customElement('ll-model-settings')
 export class LlModelSettings extends LitElement {
@@ -172,6 +172,11 @@ export class LlModelSettings extends LitElement {
     this.result = undefined
   }
 
+  /** Stops using a model: the chat asks for one again when next opened. The key stays until it is forgotten. */
+  private stopUsing() {
+    this.dispatchEvent(new CustomEvent<ModelSettings | null>('ll-model', { detail: null, bubbles: true, composed: true }))
+  }
+
   private save() {
     const setting: ModelSettings = { preset: this.preset, baseUrl: this.address.trim() || null, model: this.chosen }
     this.dispatchEvent(new CustomEvent<ModelSettings>('ll-model', { detail: setting, bubbles: true, composed: true }))
@@ -245,6 +250,7 @@ export class LlModelSettings extends LitElement {
         : nothing}
       <div class="row">
         <dc-button variant="primary" size="sm" ?disabled=${!ready} @click=${this.save}>${strings.modelSave}</dc-button>
+        ${this.current ? html`<dc-button variant="ghost" size="sm" @click=${this.stopUsing}>${strings.modelStopUsing}</dc-button>` : nothing}
       </div>
     `
   }

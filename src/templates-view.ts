@@ -273,6 +273,14 @@ export class LlTemplates extends LitElement {
     this.message = ''
   }
 
+  /** A draft the chat wrote, or what the editor held before it: in the editor, unsaved — the person saves it. */
+  private takeDraft(source: string) {
+    if (source === this.source) return
+    this.source = source
+    this.dirty = true
+    this.message = ''
+  }
+
   /**
    * The source's fields: whether each is a judgment field, and a choice field's options (a select, or
    * a radio or checkbox group). Nothing while the source does not parse.
@@ -606,7 +614,14 @@ export class LlTemplates extends LitElement {
                 <formdown-ui .content=${this.source}></formdown-ui>
               </div>
             </section>
-            ${this.chatting ? html`<ll-chat-panel aria-label=${strings.chat} .model=${this.model}></ll-chat-panel>` : nothing}
+            ${this.chatting
+              ? html`<ll-chat-panel
+                  aria-label=${strings.chat}
+                  .model=${this.model}
+                  .template=${this.source}
+                  @ll-chat-draft=${(e: CustomEvent<{ source: string }>) => this.takeDraft(e.detail.source)}
+                ></ll-chat-panel>`
+              : nothing}
           `
         : nothing}
     `

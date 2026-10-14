@@ -538,7 +538,7 @@ export class LlApp extends LitElement {
       <dp-shell
         ?sidebar-open=${this.sidebarOpen}
         @dp-shell-sidebar-close=${() => (this.sidebarOpen = false)}
-        @ll-model=${(e: CustomEvent<ModelSettings>) => this.settings && this.changeSettings({ ...this.settings, model: e.detail })}
+        @ll-model=${(e: CustomEvent<ModelSettings | null>) => this.settings && this.changeSettings({ ...this.settings, model: e.detail })}
       >
         <dp-sidebar
           slot="sidebar"

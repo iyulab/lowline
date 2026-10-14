@@ -303,6 +303,24 @@ export const strings = {
   chat: '채팅',
   chatClose: '채팅 닫기',
   chatModelChange: '모델 바꾸기',
+  chatPlaceholder: '서식을 어떻게 바꿀지 말해 보세요',
+  chatEmpty: '칸을 넣거나 빼거나 고치는 것을 말로 부탁하면, 바뀐 서식을 편집기에 넣습니다. 저장은 직접 합니다.',
+  chatYou: '나',
+  chatWriting: '쓰는 중…',
+  chatStopped: '멈췄습니다.',
+  chatRetry: '이 초안은 서식으로 쓸 수 없는 곳이 있습니다. 고친 서식 전체를 다시 보내 주세요.',
+  chatDraftPut: (added: string[], removed: string[]) =>
+    [
+      '바뀐 서식을 편집기에 넣었습니다.',
+      added.length ? `넣은 칸: ${added.join(', ')}.` : '',
+      removed.length ? `뺀 칸: ${removed.join(', ')}.` : '',
+      '확인하고 저장하세요.',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  chatDraftProblems: '고친 뒤에도 남은 문제가 있습니다 — 편집기 위 목록을 보세요.',
+  chatUndo: '넣기 전으로',
+  chatFailed: (why: string) => `답을 받지 못했습니다. ${why}`,
   modelTitle: '채팅이 쓸 모델',
   modelHelp: '이 컴퓨터나 가까운 서버에서 돌리는 모델, 또는 키를 가진 서비스를 고릅니다. 채팅을 쓰지 않으면 아무것도 고르지 않아도 됩니다.',
   modelPreset: '어디에 있는 모델인가요',
@@ -324,6 +342,7 @@ export const strings = {
   modelAnswered: (count: number) => (count > 0 ? `연결됐습니다. 모델 ${count}개` : '연결됐지만 고를 모델이 없습니다.'),
   modelChoose: '모델',
   modelSave: '이 모델로 쓰기',
+  modelStopUsing: '모델 쓰지 않기',
   modelFailureInvalid: '이 값으로는 연결할 수 없습니다. 주소와 키를 확인하세요.',
   modelFailureUnauthorized: '키가 거절됐습니다. 키를 다시 확인하세요.',
   modelFailureHttpStatus: (status: number | null) =>

@@ -1,5 +1,8 @@
+@import '@iyulab/components/styles/tokens.css';
 @import '@iyulab/desktop-compact/tokens.css';
 @import '@iyulab/desktop-patterns/tokens.css';
+/* The chat's parts paint with the u tokens: desktop-compact's, through its bridge. */
+@import '@iyulab/desktop-compact/u-bridge.css';
 
 /* Brand palette: ink on paper, and ink blue for the caret — the only accent. */
 :root {
