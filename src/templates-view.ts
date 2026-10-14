@@ -9,6 +9,8 @@ import type { TemplateItem } from './template-scope.js'
 import './rename-control.js'
 import './delete-control.js'
 import './keep-copy-control.js'
+import './chat-panel.js'
+import type { ModelSettings } from './settings.js'
 import { conflictNoticeFor, conflictOf, isCopy } from './conflicts.js'
 import { describeError } from './errors.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
@@ -29,9 +31,13 @@ export class LlTemplates extends LitElement {
     :host {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      grid-template-rows: minmax(0, 1fr);
       gap: var(--dc-space-4);
       height: 100%;
       min-height: 0;
+    }
+    :host([chatting]) {
+      grid-template-columns: 1fr 1fr minmax(16rem, 22rem);
     }
     section {
       display: flex;
@@ -129,6 +135,8 @@ export class LlTemplates extends LitElement {
   @property({ attribute: false }) vaultInfo!: VaultInfo
   /** The template's file. The app asks before leaving unsaved edits, so a new one is simply shown. */
   @property({ attribute: false }) path!: string
+  /** The model the chat uses, if one is set up. */
+  @property({ attribute: false }) model: ModelSettings | null = null
 
   /** The template files, conflict copies included: what tells whether this one has a copy. */
   @state() private entries: VaultEntry[] = []
@@ -149,6 +157,8 @@ export class LlTemplates extends LitElement {
   @state() private originalUntrashable = false
   @state() private message = ''
   @state() private error = ''
+  /** Whether the chat is open beside the template — reflected, so the layout makes room for it. */
+  @property({ type: Boolean, reflect: true }) chatting = false
   /** A completion is being inserted: its own input is not completed again. */
   private completing = false
 
@@ -564,6 +574,13 @@ export class LlTemplates extends LitElement {
                 ${this.changedOutside
                   ? html`<dc-button size="sm" variant="secondary" @click=${this.readOutside}>${strings.readOutside}</dc-button>`
                   : nothing}
+                <dc-button
+                  size="sm"
+                  variant=${this.chatting ? 'secondary' : 'ghost'}
+                  aria-pressed=${this.chatting ? 'true' : 'false'}
+                  @click=${() => (this.chatting = !this.chatting)}
+                  >${strings.chat}</dc-button
+                >
               </div>
               ${conflictNoticeFor(this.selected, this.entries, TEMPLATE_SUFFIX, strings.conflictedTemplate, {
                 view: (copy) => void this.viewCopy(copy),
@@ -589,6 +606,7 @@ export class LlTemplates extends LitElement {
                 <formdown-ui .content=${this.source}></formdown-ui>
               </div>
             </section>
+            ${this.chatting ? html`<ll-chat-panel aria-label=${strings.chat} .model=${this.model}></ll-chat-panel>` : nothing}
           `
         : nothing}
     `

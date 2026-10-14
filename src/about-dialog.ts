@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { getVersion } from '@tauri-apps/api/app'
 import { strings } from './strings.js'
 import { about } from './vault-client.js'
-import type { Settings } from './updates.js'
+import type { Settings } from './settings.js'
 
 /**
  * What Lowline is and under which terms: its version, its copyright and license, where its source is, and the

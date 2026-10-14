@@ -17,7 +17,8 @@ import { NEW_TEMPLATE, documentsOf, placeId, placeOf, sidebarEntries, templatesA
 import { onNavigationRefused, onWritten, openLink, vault, type VaultInfo } from './vault-client.js'
 import { openVault, readVault, resumeVault, onVaultChanged } from './vault-snapshot.js'
 import { confirmDiscard, hasUnsaved, setDiscardQuestion } from './unsaved.js'
-import { DEFAULT_SETTINGS, UpdateWatch, settings as deviceSettings, update, type AvailableUpdate, type Settings } from './updates.js'
+import { UpdateWatch, update, type AvailableUpdate } from './updates.js'
+import { DEFAULT_SETTINGS, settings as deviceSettings, type ModelSettings, type Settings } from './settings.js'
 import './templates-view.js'
 import './documents-view.js'
 import type { LlDocuments } from './documents-view.js'
@@ -526,7 +527,7 @@ export class LlApp extends LitElement {
       ${this.tab === 'table'
         ? html`<ll-table .vaultInfo=${info} .template=${template.ref}></ll-table>`
         : this.tab === 'template'
-          ? html`<ll-templates .vaultInfo=${info} .path=${template.path}></ll-templates>`
+          ? html`<ll-templates .vaultInfo=${info} .path=${template.path} .model=${this.settings?.model ?? null}></ll-templates>`
           : html`<ll-documents .vaultInfo=${info} .scope=${template} .openPath=${this.openPath}></ll-documents>`}
     </div>`
   }
@@ -534,7 +535,11 @@ export class LlApp extends LitElement {
   render() {
     const info = this.vaultInfo
     return html`
-      <dp-shell ?sidebar-open=${this.sidebarOpen} @dp-shell-sidebar-close=${() => (this.sidebarOpen = false)}>
+      <dp-shell
+        ?sidebar-open=${this.sidebarOpen}
+        @dp-shell-sidebar-close=${() => (this.sidebarOpen = false)}
+        @ll-model=${(e: CustomEvent<ModelSettings>) => this.settings && this.changeSettings({ ...this.settings, model: e.detail })}
+      >
         <dp-sidebar
           slot="sidebar"
           ?collapsed=${this.sidebarCollapsed && this.wide}

@@ -1,34 +1,7 @@
-// Updates, and the settings of this device they hang on. The shell checks and installs; the UI says
-// when, and the person says whether — nothing is installed without them.
+// Updates. The shell checks and installs; the UI says when, and the person says whether — nothing is
+// installed without them. Whether to look at all is a setting of this device (settings.ts).
 
 import { invoke } from '@tauri-apps/api/core'
-
-/** How Lowline is set up on this device — kept by the shell, outside any vault. */
-export interface Settings {
-  /** Whether to look for a newer release when the app starts and once a day while it runs. */
-  checkForUpdates: boolean
-  /** Whether the person has been told, once, what leaves this computer. */
-  outboundToldOnce: boolean
-}
-
-export const DEFAULT_SETTINGS: Settings = { checkForUpdates: true, outboundToldOnce: false }
-
-/** The settings as written, over the defaults: a missing or unreadable file is the defaults. */
-export function settingsFrom(written: string | null): Settings {
-  if (!written) return { ...DEFAULT_SETTINGS }
-  try {
-    const parsed = JSON.parse(written) as Partial<Record<keyof Settings, unknown>>
-    const flag = (key: keyof Settings) => (typeof parsed[key] === 'boolean' ? (parsed[key] as boolean) : DEFAULT_SETTINGS[key])
-    return { checkForUpdates: flag('checkForUpdates'), outboundToldOnce: flag('outboundToldOnce') }
-  } catch {
-    return { ...DEFAULT_SETTINGS }
-  }
-}
-
-export const settings = {
-  read: async () => settingsFrom(await invoke<string | null>('read_settings')),
-  write: (s: Settings) => invoke<void>('write_settings', { settings: JSON.stringify(s) }),
-}
 
 /** A newer release than this one. */
 export interface AvailableUpdate {

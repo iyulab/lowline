@@ -1,8 +1,10 @@
-import { readdir, readFile, rm } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { parseFormdown } from '@formdown/core'
 import { TEMPLATE, BUG } from '../shared.mjs'
+import { SETTINGS } from '../app.mjs'
 
 export default {
   async 'starts the sidecar with the app'(app) {
@@ -207,5 +209,55 @@ export default {
     await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('id: bug-report')`, 'the fixture template')
     await rm(join(vault, '서식', '새 서식 (1).fd.md'))
     await app.cdp.waitFor(`!__e2e.one('button.item', '새 서식 (1)')`, 'the second starter gone from the sidebar')
+  },
+
+  async 'sets up the model the chat uses when the chat is first opened: says why a server does not answer, and keeps one that does'(app) {
+    // A server of the person's own that speaks the OpenAI way, and a port where nothing listens: nothing leaves this computer.
+    const server = createServer((req, res) => {
+      res.setHeader('content-type', 'application/json')
+      res.end(req.url?.endsWith('/models') ? JSON.stringify({ object: 'list', data: [{ id: 'small-4b', object: 'model' }, { id: 'large-8b', object: 'model' }] }) : '{}')
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const closed = createServer()
+    await new Promise((resolve) => closed.listen(0, '127.0.0.1', resolve))
+    const closedPort = closed.address().port
+    await new Promise((resolve) => closed.close(resolve))
+    const settingsNow = async () => JSON.parse(await readFile(SETTINGS, 'utf8').catch(() => '{}'))
+    const panel = `__e2e.all('ll-model-settings')[0]?.shadowRoot`
+    const type = (label, text) =>
+      app.cdp.evaluate(`(() => { const el = ${panel}.querySelector('dc-input[aria-label="${label}"]'); el.value = ${JSON.stringify(text)}
+        el.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+    const said = `[...${panel}.querySelectorAll('[role=alert], [role=status]')].map((el) => el.textContent.trim()).join(' / ')`
+    try {
+      await app.templateOf(BUG)
+      await app.click('dc-button', '채팅')
+      await app.cdp.waitFor(`!!${panel}?.querySelector('dc-select')`, 'the model settings in the chat panel')
+      assert.match(await app.cdp.evaluate(`${panel}.textContent`), /이 주소의 서버로만 갑니다/, 'where what is sent goes')
+      await app.choose('dc-select[aria-label="어디에 있는 모델인가요"]', 'custom')
+      await app.cdp.waitFor(`!!${panel}.querySelector('dc-input[aria-label="주소"]')`, 'an address asked for')
+
+      await type('주소', `http://127.0.0.1:${closedPort}/v1`)
+      await app.click('dc-button', '연결 확인')
+      await app.cdp.waitFor(`${said}.includes('듣고 있는 서버가 없습니다')`, 'why the closed port does not answer', { timeoutMs: 30_000 })
+      assert.equal(await app.cdp.evaluate(`${panel}.querySelector('dc-button[variant="primary"]').disabled`), true, 'nothing to keep yet')
+
+      await type('주소', `http://127.0.0.1:${server.address().port}/v1`)
+      await app.click('dc-button', '연결 확인')
+      await app.cdp.waitFor(`${said}.includes('모델 2개')`, 'the models the server lists', { timeoutMs: 30_000 })
+      await app.choose('dc-select[aria-label="모델"]', 'large-8b')
+      await app.click('dc-button', '이 모델로 쓰기')
+      for (let tries = 0; !(await settingsNow()).model; tries++) {
+        assert.ok(tries < 50, 'the model written to this device')
+        await new Promise((r) => setTimeout(r, 100))
+      }
+      assert.deepEqual((await settingsNow()).model, { preset: 'custom', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: 'large-8b' })
+      await app.cdp.waitFor(`__e2e.all('ll-chat-panel')[0]?.shadowRoot.textContent.includes('large-8b')`, 'the panel on the model kept')
+      await app.noAlert()
+    } finally {
+      server.close()
+      // Leave this device without a model, and the chat closed.
+      await writeFile(SETTINGS, JSON.stringify({ ...(await settingsNow()), model: null }))
+      if (await app.cdp.evaluate(`!!__e2e.all('ll-chat-panel')[0]`)) await app.click('dc-button', '채팅')
+    }
   },
 }

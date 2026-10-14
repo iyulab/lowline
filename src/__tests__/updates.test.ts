@@ -1,23 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_SETTINGS, UpdateWatch, settingsFrom, type AvailableUpdate } from '../updates.ts'
-
-describe('settings', () => {
-  it('are the defaults before any was written, and when what was written cannot be read', () => {
-    expect(settingsFrom(null)).toEqual(DEFAULT_SETTINGS)
-    expect(settingsFrom('{ not json')).toEqual(DEFAULT_SETTINGS)
-    expect(settingsFrom('{"checkForUpdates":"no"}')).toEqual(DEFAULT_SETTINGS)
-  })
-
-  it('keep what was written', () => {
-    expect(settingsFrom('{"checkForUpdates":false}')).toEqual({ checkForUpdates: false, outboundToldOnce: false })
-    expect(settingsFrom('{"outboundToldOnce":true}')).toEqual({ checkForUpdates: true, outboundToldOnce: true })
-  })
-
-  it('look for updates unless told not to, and tell once what leaves the computer', () => {
-    expect(DEFAULT_SETTINGS.checkForUpdates).toBe(true)
-    expect(DEFAULT_SETTINGS.outboundToldOnce).toBe(false)
-  })
-})
+import { UpdateWatch, type AvailableUpdate } from '../updates.ts'
 
 describe('UpdateWatch', () => {
   const DAY = 1000

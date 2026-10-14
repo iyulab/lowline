@@ -33,6 +33,8 @@
   "dependencies": {
     "@formdown/core": "^0.16.0",
     "@formdown/ui": "^0.16.0",
+    "@iyulab/chat-components": "^0.26.0",
+    "@iyulab/components": "^2.26.0",
     "@iyulab/desktop-compact": "^0.13.1",
     "@iyulab/desktop-patterns": "^0.11.1",
     "@tauri-apps/api": "^2.12.0",
