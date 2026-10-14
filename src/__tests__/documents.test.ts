@@ -25,7 +25,7 @@ import {
   hasFields,
   withTemplateBody,
 } from '../documents.js'
-import { starterTemplate } from '../strings.js'
+import { starterTemplate, strings } from '../strings.js'
 
 const template = `---
 id: bug-report
@@ -286,6 +286,12 @@ describe('templateProblems from what the parser could not read', () => {
   it('says a condition that is not one, and a line that looks like a field but is not one', () => {
     expect(templateProblems(`${head}@부서: [select options="영업,개발"]\n@비고: [text visible-if="부서 == 영업"]\n`)).toContainEqual({ kind: 'invalid-condition', field: '비고' })
     expect(templateProblems(`${head}@경로: r{전화,메일}[]\n`)).toContainEqual({ kind: 'unrecognized-field', name: '경로', line: 5 })
+  })
+
+  it('says how to write a field written without its brackets', () => {
+    const [problem] = templateProblems(`${head}@처리_기한: date\n`)
+    expect(problem).toEqual({ kind: 'unrecognized-field', name: '처리_기한', line: 5, fix: '@처리_기한: [date]' })
+    expect(strings.templateProblem(problem)).toContain('대괄호 안에 씁니다: @처리_기한: [date]')
   })
 })
 
