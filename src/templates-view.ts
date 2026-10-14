@@ -29,15 +29,39 @@ export class LlTemplates extends LitElement {
     formdownTheme,
     css`
     :host {
+      display: block;
+      height: 100%;
+      min-height: 0;
+      container-type: inline-size;
+    }
+    .page {
       display: grid;
       grid-template-columns: 1fr 1fr;
       grid-template-rows: minmax(0, 1fr);
       gap: var(--dc-space-4);
       height: 100%;
-      min-height: 0;
     }
-    :host([chatting]) {
+    .page.chatting {
       grid-template-columns: 1fr 1fr minmax(16rem, 22rem);
+    }
+    /* The chat keeps its input in view however long the preview beside it grows: as tall as the window below the
+       page's heading and tabs, held there while the page scrolls. */
+    ll-chat-panel {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: max(20rem, calc(100vh - 9rem));
+      box-sizing: border-box;
+    }
+    /* Too narrow for three — the source and the preview at least 20rem each beside the chat: the chat takes the place
+       of the fields and the preview while it is open. */
+    @container (max-width: 60rem) {
+      .page.chatting {
+        grid-template-columns: 1fr minmax(16rem, 1fr);
+      }
+      .page.chatting > .side {
+        display: none;
+      }
     }
     section {
       display: flex;
@@ -157,8 +181,8 @@ export class LlTemplates extends LitElement {
   @state() private originalUntrashable = false
   @state() private message = ''
   @state() private error = ''
-  /** Whether the chat is open beside the template — reflected, so the layout makes room for it. */
-  @property({ type: Boolean, reflect: true }) chatting = false
+  /** Whether the chat is open beside the template. */
+  @state() private chatting = false
   /** A completion is being inserted: its own input is not completed again. */
   private completing = false
 
@@ -559,7 +583,7 @@ export class LlTemplates extends LitElement {
   render() {
     return html`
       ${this.selected
-        ? html`
+        ? html`<div class="page ${this.chatting ? 'chatting' : ''}">
             <section>
               <div class="bar">
                 <h3>${strings.templateSource}</h3>
@@ -607,7 +631,7 @@ export class LlTemplates extends LitElement {
                 @input=${this.onSourceInput}
               ></textarea>
             </section>
-            <section>
+            <section class="side">
               ${this.renderFields()}
               <h3>${strings.preview}</h3>
               <div class="preview">
@@ -622,7 +646,7 @@ export class LlTemplates extends LitElement {
                   @ll-chat-draft=${(e: CustomEvent<{ source: string }>) => this.takeDraft(e.detail.source)}
                 ></ll-chat-panel>`
               : nothing}
-          `
+          </div>`
         : nothing}
     `
   }

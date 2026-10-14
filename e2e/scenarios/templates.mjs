@@ -286,6 +286,18 @@ export default {
       await app.click('dc-button', '저장')
       await app.status('저장했습니다')
       await app.noAlert()
+
+      // In a window too narrow for three columns, the chat takes the place of the fields and the preview.
+      const side = `getComputedStyle(__e2e.all('ll-templates')[0].shadowRoot.querySelector('section.side')).display`
+      try {
+        await app.cdp.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false })
+        await app.cdp.waitFor(`innerWidth === 1600 && ${side} !== 'none'`, 'all three in a wide window')
+        await app.cdp.send('Emulation.setDeviceMetricsOverride', { width: 800, height: 560, deviceScaleFactor: 1, mobile: false })
+        await app.cdp.waitFor(`innerWidth === 800 && ${side} === 'none'`, 'the chat in the place of the preview')
+        assert.ok(await app.cdp.evaluate(`__e2e.all('ll-chat-panel')[0].getBoundingClientRect().width >= 256`), 'the chat as wide as it needs')
+      } finally {
+        await app.cdp.send('Emulation.clearDeviceMetricsOverride')
+      }
     } finally {
       server.close()
       // Leave this device without a model, and the chat closed.

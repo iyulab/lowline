@@ -495,6 +495,12 @@ export class LlApp extends LitElement {
     return !!this.vaultInfo && (place?.kind === 'orphans' || (place?.kind === 'template' && this.tab === 'documents'))
   }
 
+  /** How wide the page may grow: a template's documents and its source are workspaces of columns, the rest is read. */
+  private pageWidth(): 'full' | 'xl' | 'md' {
+    if (this.showsDocuments()) return 'full'
+    return this.place?.kind === 'template' && this.tab === 'template' ? 'xl' : 'md'
+  }
+
   private heading(): string {
     const place = this.place
     if (place?.kind === 'learning') return strings.navLearning
@@ -581,7 +587,7 @@ export class LlApp extends LitElement {
         >
           <dc-button slot="actions" variant="secondary" size="sm" @click=${this.openVault}>${strings.openVault}</dc-button>
         </dp-toolbar>
-        <dp-page ?fill=${this.showsDocuments()} max-width=${this.showsDocuments() ? 'full' : 'md'}>
+        <dp-page ?fill=${this.showsDocuments()} max-width=${this.pageWidth()}>
           ${this.settings && !this.settings.outboundToldOnce
             ? html`<p class="notice-bar outbound-once" role="status">
                 ${strings.outboundOnce}
