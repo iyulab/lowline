@@ -76,6 +76,27 @@ export function recordsFromReply(reply: string): Record<string, unknown>[] | nul
   return null
 }
 
+/**
+ * Text cut into pieces of about `size` characters for a model to read one at a time, so each is read within one
+ * request's time and its answer is not cut short: at blank lines first — a mail or a note stays whole — then, for a
+ * paragraph longer than that, at line ends. A line longer than `size` is a piece of its own; nothing is cut inside one.
+ */
+export function textPieces(text: string, size: number): string[] {
+  const lines = (paragraph: string) => paragraph.split(/\r?\n/)
+  const units = text
+    .split(/\r?\n\s*\r?\n/)
+    .flatMap((paragraph) => (paragraph.length > size ? lines(paragraph) : [paragraph]))
+    .map((unit) => unit.trim())
+    .filter(Boolean)
+  const pieces: string[] = []
+  for (const unit of units) {
+    const last = pieces.length - 1
+    if (last >= 0 && pieces[last].length + 1 + unit.length <= size) pieces[last] += `\n${unit}`
+    else pieces.push(unit)
+  }
+  return pieces
+}
+
 /** A value as a spreadsheet cell holds it: a list as its items joined, a yes or no as 예 or 아니오, anything else as nothing. */
 function cellOf(value: unknown): string {
   if (typeof value === 'string') return value

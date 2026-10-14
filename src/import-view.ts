@@ -4,7 +4,7 @@ import { createDocumentFile } from './document-files.js'
 import { documentTitle, newDocument } from './documents.js'
 import { newDocumentId } from './identity.js'
 import { describeError } from './errors.js'
-import { importFields, planImport, recordsFromReply, rowsFromRecords, type ColumnUse, type ImportField, type ImportPlan } from './import.js'
+import { importFields, planImport, recordsFromReply, rowsFromRecords, textPieces, type ColumnUse, type ImportField, type ImportPlan } from './import.js'
 import { failureText } from './model-settings.js'
 import { templateSnapshot } from './projection.js'
 import type { ModelSettings } from './settings.js'
@@ -15,8 +15,14 @@ import { model as models, vault, type VaultInfo } from './vault-client.js'
 /** How many values that do not fit are listed; the rest are counted. */
 const PROBLEMS_SHOWN = 10
 
-/** The most text read at once: the model reads it, with its instructions and its answer, within one request's time. */
-export const TEXT_LIMIT = 2000
+/** The most text taken at once — read piece by piece, which on a computer without a graphics card takes minutes. */
+export const TEXT_LIMIT = 4000
+
+/**
+ * The text one request reads: a model running on a computer's processor alone reads a few records of it — with its
+ * instructions, and its answer — well within one request's time.
+ */
+export const PIECE_SIZE = 300
 
 /**
  * Brings existing records in: rows copied from a spreadsheet, the first naming the columns, become documents of the
@@ -114,6 +120,10 @@ export class LlImport extends LitElement {
   /** Text pasted for the model to read, and whether it is reading it. */
   @state() private text = ''
   @state() private reading = false
+  /** How far reading has got: pieces read of all, and records found so far. */
+  @state() private read = { done: 0, of: 0, found: 0 }
+  /** Set to stop reading after the piece being read. */
+  private stopReading = false
   /** Who the judgment values of the planned records are suggestions of — the model that read them — or none. */
   @state() private proposedBy = ''
 
@@ -144,34 +154,47 @@ export class LlImport extends LitElement {
   }
 
   /**
-   * Has the model read the text into records — asking once more when its answer holds none it can read — and plans
-   * them as rows are planned. The judgment values it gave are its suggestions.
+   * Has the model read the text into records, a piece at a time — asking once more for a piece whose answer holds none
+   * it can read — and plans them as rows are planned. The judgment values it gave are its suggestions. Stopping keeps
+   * what was read so far.
    */
   private async readText() {
     const model = this.model
     if (!model || !this.text.trim() || this.text.length > TEXT_LIMIT) return
+    const pieces = textPieces(this.text, PIECE_SIZE)
     this.error = ''
     this.plan = undefined
     this.reading = true
+    this.stopReading = false
+    this.read = { done: 0, of: pieces.length, found: 0 }
+    const records: Record<string, unknown>[] = []
     try {
-      for (let tries = 0; tries < 2; tries++) {
-        const reply = await models.extract(model, this.templateSource, this.text)
-        if (!reply.ok) {
-          this.error = strings.importTextFailed(failureText(reply.failure, reply.statusCode))
-          return
+      for (const piece of pieces) {
+        if (this.stopReading) break
+        let read: Record<string, unknown>[] | null = null
+        for (let tries = 0; tries < 2 && read === null; tries++) {
+          const reply = await models.extract(model, this.templateSource, piece)
+          if (!reply.ok) {
+            this.error = strings.importTextFailed(failureText(reply.failure, reply.statusCode))
+            break
+          }
+          read = recordsFromReply(reply.text ?? '')
         }
-        const records = recordsFromReply(reply.text ?? '')
-        if (!records) continue
-        if (records.length === 0) {
-          this.error = strings.importTextNone
-          return
+        if (this.error) break
+        if (read === null) {
+          this.error = strings.importTextUnread
+          break
         }
-        this.rows = rowsFromRecords(records, this.fields)
-        this.proposedBy = strings.importProposedBy(model.model.replace(/^gguf:/, ''))
-        this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined))
+        records.push(...read)
+        this.read = { done: this.read.done + 1, of: pieces.length, found: records.length }
+      }
+      if (records.length === 0) {
+        if (!this.error) this.error = strings.importTextNone
         return
       }
-      this.error = strings.importTextUnread
+      this.rows = rowsFromRecords(records, this.fields)
+      this.proposedBy = strings.importProposedBy(model.model.replace(/^gguf:/, ''))
+      this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined))
     } catch (e) {
       this.error = describeError(e)
     } finally {
@@ -259,7 +282,12 @@ export class LlImport extends LitElement {
           >${strings.importTextRead}</dc-button
         >
         <span class=${over ? 'error' : 'message'}>${strings.importTextCount(this.text.length, TEXT_LIMIT)}</span>
-        ${this.reading ? html`<span class="message" role="status">${strings.importTextReading}</span>` : nothing}
+        ${this.reading
+          ? html`<span class="message" role="status">${strings.importTextReading(this.read.done, this.read.of, this.read.found)}</span>
+              <dc-button size="sm" variant="ghost" ?disabled=${this.stopReading} @click=${() => (this.stopReading = true)}
+                >${strings.importTextStop}</dc-button
+              >`
+          : nothing}
       </div>
     `
   }

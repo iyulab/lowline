@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cellValue, importFields, matchColumns, parseRecordDate, planImport, recordsFromReply, rowsFromRecords } from '../import.js'
+import { cellValue, importFields, matchColumns, parseRecordDate, planImport, recordsFromReply, rowsFromRecords, textPieces } from '../import.js'
 
 const template = `---
 id: bug-report
@@ -181,5 +181,17 @@ ${fence}`)).toBeNull()
       { 심각도: '아주 높음', 재현_절차: '1. 연다' },
     ])
     expect(plan.problems).toEqual([{ row: 3, field: '심각도', value: '아주 높음' }]) // not one of its choices: shown
+  })
+})
+
+describe('text cut into pieces for a model to read one at a time', () => {
+  it('keeps a mail or a note whole, joining short ones up to the size', () => {
+    expect(textPieces('가나다\n라마\n\n바사아\n\n\n자차', 12)).toEqual(['가나다\n라마\n바사아', '자차'])
+  })
+
+  it('cuts a paragraph longer than the size at its line ends, never inside a line', () => {
+    const long = ['첫째 줄입니다', '둘째 줄입니다', '아주 긴 셋째 줄은 크기보다 길어도 자르지 않습니다'].join('\n')
+    expect(textPieces(long, 16)).toEqual(['첫째 줄입니다\n둘째 줄입니다', '아주 긴 셋째 줄은 크기보다 길어도 자르지 않습니다'])
+    expect(textPieces('  \n\n ', 10)).toEqual([])
   })
 })
