@@ -282,6 +282,14 @@ export default {
       assert.equal(asked.length, 2, 'asked once more after a draft with a problem')
       assert.match(asked[0].messages[0].content, /id: bug-report/, 'the template as it stood went with the question')
       assert.match(asked[1].messages.at(-1).content, /다시 보내/, 'and what was wrong with the first draft')
+      // The chat's words and the box to write in are in the type the rest of the window uses.
+      const typeIn = `((sel) => { const find = (root) => root.querySelector(sel) ?? [...root.querySelectorAll('*')].map((el) => el.shadowRoot && find(el.shadowRoot)).find(Boolean)
+        const el = find(${chat}); const s = getComputedStyle(el); return s.fontSize + ' ' + s.fontFamily })`
+      const appType = await app.cdp.evaluate(`(() => { const probe = document.createElement('span')
+        probe.style.cssText = 'font-size: var(--dc-font-size-md); font-family: var(--dc-font-family)'; document.body.append(probe)
+        const s = getComputedStyle(probe); const type = s.fontSize + ' ' + s.fontFamily; probe.remove(); return type })()`)
+      assert.equal(await app.cdp.evaluate(`${typeIn}('u-marked-block')`), appType, "the answer in the window's type")
+      assert.equal(await app.cdp.evaluate(`${typeIn}('textarea')`), appType, "the box to write in in the window's type")
       const drafted = await app.value('textarea')
       assert.match(drafted, /^@처리_기한: \[date\]$/m, 'a field name made one word')
       assert.equal(await readFile(join(vault, TEMPLATE), 'utf8'), before, 'nothing saved: the person saves')
@@ -302,6 +310,13 @@ export default {
         await app.cdp.send('Emulation.setDeviceMetricsOverride', { width: 800, height: 560, deviceScaleFactor: 1, mobile: false })
         await app.cdp.waitFor(`innerWidth === 800 && ${side} === 'none'`, 'the chat in the place of the preview')
         assert.ok(await app.cdp.evaluate(`__e2e.all('ll-chat-panel')[0].getBoundingClientRect().width >= 256`), 'the chat as wide as it needs')
+        // A long line in the box folds at its width rather than running past it.
+        const box = `(() => { const find = (root) => root.querySelector('textarea') ?? [...root.querySelectorAll('*')].map((el) => el.shadowRoot && find(el.shadowRoot)).find(Boolean); return find(${chat}) })()`
+        const oneLine = await app.cdp.evaluate(`${box}.clientHeight`)
+        await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = ${q('처리 기한 칸을 날짜로 넣고, 담당 부서 칸은 선택지로 바꾸고, 접수 경로 칸 아래에 메모 칸을 하나 더 넣어 줘')}; return true })()`)
+        await app.cdp.waitFor(`${box}.clientHeight > ${oneLine}`, 'the long line folded onto more lines')
+        assert.ok(await app.cdp.evaluate(`${box}.scrollWidth <= ${box}.clientWidth`), 'nothing past the width of the box')
+        await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = ''; return true })()`)
       } finally {
         await app.cdp.send('Emulation.clearDeviceMetricsOverride')
       }
