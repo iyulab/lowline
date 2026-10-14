@@ -10,7 +10,15 @@ In the app's local data, one file each per vault:
 - The strength each judgment field's replay chose for the values saved together, so the next launch starts from them instead of replaying its history again. They are chosen again from the vault if the file is gone, after an update of what measures them, or when a field's choices change.
 - A record of the suggestions this device showed for the vault: when, for which template and field, and from where — never the value. Nothing learns from it; it is counted, so decisions can be read against what was shown, including suggestions whose document was never saved.
 
-In the app's settings: this install's id, where the app was when last used (see [Working in the app](working.md)), whether to check for updates, and whether the first launch's line about what leaves this computer was answered.
+In the app's settings: this install's id, where the app was when last used (see [Working in the app](working.md)), whether to check for updates, whether the first launch's line about what leaves this computer was answered, and the model the chat uses — its kind, its address and the model chosen.
+
+A model's key is kept in the operating system's credential store (Windows Credential Manager), never in the settings, the vault or the window: the app's window only learns whether one is kept.
+
+## The chat
+
+The chat beside a template sends nothing until the person sets up a model and writes to it. Then, with each message, it sends what was written in the chat so far and the template's source as it stands in the editor — nothing else of the vault: no document, no value, no file name. It goes where the person chose: to the server at the address given — on this computer or nearby — or, for a company's service (OpenAI, Anthropic, Google, xAI), to that company, with the key kept for it. The settings say which before anything is sent. What that company keeps of it is under its own terms.
+
+The model's own error text is not shown or kept: a failure is told by its kind (the key refused, nothing listening at the address, no answer in time, …).
 
 ## Error reports
 
