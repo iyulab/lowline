@@ -700,6 +700,43 @@ async fn host_chat_author(
     host_json(blocking(move || client.post_json("/chat/author", &body)).await?)
 }
 
+/// What the sidecar is asked to turn a question about a template's documents into a count with (`ChatQueryRequest`).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatQuery {
+    preset: String,
+    base_url: Option<String>,
+    model: String,
+    template: String,
+    question: String,
+}
+
+fn chat_query_body(request: &ChatQuery, key: Option<&str>) -> String {
+    serde_json::json!({
+        "preset": request.preset,
+        "baseUrl": request.base_url,
+        "apiKey": key,
+        "model": request.model,
+        "template": request.template,
+        "question": request.question,
+    })
+    .to_string()
+}
+
+/// What the model set up says to count for a question about a template's documents — never the counts. The key kept
+/// for the preset goes to the sidecar with this request only; the window never sees it.
+#[tauri::command]
+async fn host_chat_query(
+    app: AppHandle,
+    request: ChatQuery,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let key = credentials::model_key(&app, &request.preset).map_err(|e| e.to_string())?;
+    let client = state.client()?;
+    let body = chat_query_body(&request, key.as_deref());
+    host_json(blocking(move || client.post_json("/chat/query", &body)).await?)
+}
+
 /// What the sidecar is asked to read records out of pasted text with (`ChatExtractRequest`).
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1006,6 +1043,7 @@ pub fn run() {
             host_local_prepare,
             host_chat_author,
             host_chat_extract,
+            host_chat_query,
             credentials::model_key_kept,
             credentials::keep_model_key,
             credentials::forget_model_key
@@ -1061,6 +1099,20 @@ id: t
         let none: serde_json::Value =
             serde_json::from_str(&chat_author_body(&request, None)).unwrap();
         assert!(none["apiKey"].is_null());
+    }
+
+    #[test]
+    fn hands_the_sidecar_a_question_with_the_key_read_here() {
+        let request: ChatQuery = serde_json::from_value(serde_json::json!({
+            "preset": "local", "baseUrl": null, "model": "gguf:qwen3-default",
+            "template": "@원인: [select options=\"부품,설정\"]", "question": "지난달 원인 상위 2개?"
+        }))
+        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&chat_query_body(&request, None)).unwrap();
+        assert!(body["apiKey"].is_null());
+        assert_eq!(body["question"], "지난달 원인 상위 2개?");
+        assert_eq!(body["model"], "gguf:qwen3-default");
     }
 
     #[test]

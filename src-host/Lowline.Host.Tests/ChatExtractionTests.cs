@@ -65,4 +65,22 @@ public sealed class ChatExtractionTests
 
         Assert.Equal((false, ModelFailure.Invalid), (reply.Ok, reply.Failure));
     }
+
+    [Fact]
+    public async Task A_question_goes_to_the_model_with_the_template_and_today_never_a_document()
+    {
+        var lmsupply = new LocalModelsTests.StandIn { Reply = "```json\n{\"groupBy\": [\"긴급도\"]}\n```" };
+        await using var local = new LocalModels(lmsupply);
+
+        var reply = await ChatQuery.ReplyAsync(new ChatQueryRequest(ChatAuthoring.LocalPreset, null, null, "gguf:qwen3-default", Template, "긴급도별로 몇 건?"), local, TimeSpan.FromSeconds(20), Ct);
+
+        Assert.True(reply.Ok);
+        var asked = lmsupply.Loaded.Single().Asked;
+        Assert.Equal(2, asked.Count);
+        Assert.Contains("세는 일은 Lowline이 합니다", asked[0].Content);
+        Assert.Contains(DateTime.Now.ToString("yyyy-MM-dd"), asked[0].Content);
+        Assert.Contains("@긴급도: [radio options=\"낮음,보통,높음\"]", asked[0].Content);
+        Assert.Equal("긴급도별로 몇 건?", asked[1].Content);
+        Assert.False((await ChatQuery.ReplyAsync(new ChatQueryRequest(ChatAuthoring.LocalPreset, null, null, "gguf:qwen3-default", Template, " "), local, TimeSpan.FromSeconds(20), Ct)).Ok);
+    }
 }

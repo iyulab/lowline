@@ -84,6 +84,10 @@ app.MapPost("/model/local/prepare", (LocalModelPick pick, LocalModels local) => 
 app.MapPost("/chat/author", (ChatAuthorRequest request, LocalModels local, CancellationToken ct) =>
     ChatAuthoring.ReplyAsync(request, local, ChatAuthoring.Deadline, ct));
 
+// What to count for a question about a template's documents — never the counts, which /aggregate makes.
+app.MapPost("/chat/query", (ChatQueryRequest request, LocalModels local, CancellationToken ct) =>
+    ChatQuery.ReplyAsync(request, local, ChatAuthoring.Deadline, ct));
+
 // The records the model reads out of text pasted to bring them in, as values of the template's fields.
 app.MapPost("/chat/extract", (ChatExtractRequest request, LocalModels local, CancellationToken ct) =>
     ChatExtraction.ReplyAsync(request, local, ChatAuthoring.Deadline, ct));
