@@ -423,4 +423,89 @@ export default {
       )
     }
   },
+
+  async 'asks a template\'s records in words: the model says what to count, the vault counts it, each count with the documents it is made of'(app, vault) {
+    // A server of the person's own that speaks the OpenAI way: it answers each question with what to count.
+    const fence = '```'
+    const asked = []
+    let plan = ''
+    const server = createServer((req, res) => {
+      let body = ''
+      req.on('data', (chunk) => (body += chunk))
+      req.on('end', () => {
+        asked.push(JSON.parse(body))
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'small-4b', choices: [{ index: 0, message: { role: 'assistant', content: plan }, finish_reason: 'stop' }] }))
+      })
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const useModel = (setting) =>
+      app.cdp.evaluate(`__e2e.all('dp-shell')[0].dispatchEvent(new CustomEvent('ll-model', { detail: ${q(setting)}, bubbles: true, composed: true }))`)
+    const chat = `__e2e.all('ll-chat-panel')[0]?.shadowRoot`
+    const ask = async (question, reply) => {
+      plan = reply
+      const lines = await app.cdp.evaluate(`${chat}.querySelectorAll('u-message').length`)
+      await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = ${q(question)}; p.submit(); return true })()`)
+      await app.cdp.waitFor(`${chat}.querySelectorAll('u-message:not([loading])').length >= ${lines + 2}`, `the answer to ${question}`, { timeoutMs: 30_000 })
+      return app.cdp.evaluate(`${chat}.querySelector('u-message:last-of-type').textContent.replace(/\\s+/g, ' ').trim()`)
+    }
+    // What the vault holds, read from its files: what the counts are checked against.
+    const intake = []
+    for (const name of await readdir(join(vault, '문서'))) {
+      if (!name.endsWith('.md')) continue
+      const data = readFrontMatter(await readFile(join(vault, '문서', name), 'utf8'))?.frontMatter.data
+      if (data?.template === INTAKE.ref) intake.push(data)
+    }
+    const by = (key, of = intake) => Object.entries(Object.groupBy(of, (d) => d[key])).map(([value, ds]) => [value, ds.length])
+    try {
+      await useModel({ preset: 'custom', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: 'small-4b' })
+      await app.templateOf(INTAKE)
+      await app.click('dc-button', '채팅')
+      await app.cdp.waitFor(`!!${chat}?.querySelector('u-prompt')`, 'the chat on the model set up')
+      await app.cdp.evaluate(`[...${chat}.querySelector('dc-segmented-control').shadowRoot.querySelectorAll('[role=radio]')].find((b) => b.textContent.includes('기록에 묻기')).click()`)
+      await app.cdp.waitFor(`${chat}.textContent.includes('기록의 값은 모델에 가지 않습니다')`, 'what asking the records sends')
+
+      // Counted by a field: a row per value, the largest first, each with the documents it is made of.
+      const answer = await ask('부서별로 몇 건이야?', `${fence}json\n{"groupBy": ["부서"]}\n${fence}`)
+      assert.match(answer, /센 것: 모든 기록 · 부서별/, `what was counted, in words: ${answer}`)
+      assert.match(answer, new RegExp(`모두 ${intake.length}건`))
+      const rows = await app.cdp.evaluate(
+        `[...${chat}.querySelectorAll('u-message:last-of-type tbody tr')].map((tr) => [tr.cells[0].textContent.trim(), Number(tr.cells[1].textContent)])`,
+      )
+      const byName = (a, b) => a[0].localeCompare(b[0])
+      assert.deepEqual([...rows].sort(byName), by('부서').sort(byName), 'the counts the vault holds')
+      assert.ok(rows.every((row, i) => i === 0 || rows[i - 1][1] >= row[1]), `the largest first: ${JSON.stringify(rows)}`)
+      // The model was given the template and the question — no document's value.
+      const sent = asked.at(-1).messages
+      assert.match(sent[0].content, /@부서: \[select options="영업,개발,인사"\]/)
+      assert.ok(!sent.some((m) => m.content.includes(intake[0].요청)), 'no value of a record went to the model')
+      assert.equal(sent.at(-1).content, '부서별로 몇 건이야?')
+
+      // Narrowed, counted by another field, only the largest: said as counted.
+      const narrowed = await ask('영업 부서 일은 누가 제일 많이 맡았어?', '{"groupBy": ["담당"], "filters": [{"field": "부서", "op": "equal", "value": "영업"}], "top": 1}')
+      assert.match(narrowed, /센 것: 부서 = 영업 · 담당별 · 많은 것 1개/)
+      assert.equal(await app.cdp.evaluate(`${chat}.querySelectorAll('u-message:last-of-type tbody tr').length`), 1, 'only the largest')
+      // The conversation shows its newest answer.
+      await app.cdp.waitFor(`(() => { const log = ${chat}.querySelector('.log'); return log.scrollHeight - log.scrollTop - log.clientHeight < 2 })()`, 'scrolled to the newest answer')
+
+      // A question the fields cannot count is said to be one, not counted as something else.
+      assert.match(await ask('고객이 제일 많이 불평한 건 뭐야?', '{"unanswerable": "불평을 적는 칸이 없습니다"}'), /이 서식의 칸으로는 셀 수 없습니다 — 불평을 적는 칸이 없습니다/)
+      // Nor is a plan the template's fields cannot hold.
+      assert.match(await ask('지역별로?', '{"groupBy": ["지역"]}'), /서식에 없는 칸\(지역\)으로 세려 했습니다/)
+
+      // A count's document opens where documents are.
+      const first = await app.cdp.evaluate(`${chat}.querySelector('u-message:nth-last-of-type(5) tbody tr .evidence dc-button').textContent.trim()`)
+      await app.cdp.evaluate(`${chat}.querySelector('u-message:nth-last-of-type(5) tbody tr .evidence dc-button').click()`)
+      await app.cdp.waitFor(
+        `__e2e.all('ll-documents').some((d) => [...d.shadowRoot.querySelectorAll("nav button[aria-current='true']")].some((b) => b.textContent.includes(${q(first)})))`,
+        `the document ${first} open`,
+      )
+      await app.noAlert()
+    } finally {
+      server.close()
+      await useModel(null)
+      for (let tries = 0; JSON.parse(await readFile(SETTINGS, 'utf8').catch(() => '{}')).model && tries < 50; tries++)
+        await new Promise((r) => setTimeout(r, 100))
+    }
+  },
 }

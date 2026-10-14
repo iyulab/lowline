@@ -643,6 +643,7 @@ export class LlTemplates extends LitElement {
                   aria-label=${strings.chat}
                   .model=${this.model}
                   .template=${this.source}
+                  .saved=${this.loaded}
                   @ll-chat-draft=${(e: CustomEvent<{ source: string }>) => this.takeDraft(e.detail.source)}
                 ></ll-chat-panel>`
               : nothing}
