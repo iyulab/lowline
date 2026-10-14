@@ -122,6 +122,8 @@ export class LlImport extends LitElement {
   @state() private reading = false
   /** How far reading has got: pieces read of all, and records found so far. */
   @state() private read = { done: 0, of: 0, found: 0 }
+  /** When reading ended before the last piece: how far it got, said beside what was read. */
+  @state() private partial = ''
   /** Set to stop reading after the piece being read. */
   private stopReading = false
   /** Who the judgment values of the planned records are suggestions of — the model that read them — or none. */
@@ -148,6 +150,7 @@ export class LlImport extends LitElement {
 
   private onRows(e: CustomEvent<{ rows: string[][] }>) {
     this.error = ''
+    this.partial = ''
     this.proposedBy = ''
     this.rows = e.detail.rows
     this.plan = planImport(this.rows, this.fields)
@@ -155,14 +158,15 @@ export class LlImport extends LitElement {
 
   /**
    * Has the model read the text into records, a piece at a time — asking once more for a piece whose answer holds none
-   * it can read — and plans them as rows are planned. The judgment values it gave are its suggestions. Stopping keeps
-   * what was read so far.
+   * it can read — and plans them as rows are planned. The judgment values it gave are its suggestions. Stopping, or a
+   * piece that could not be read, keeps what was read before it, and says how far reading got.
    */
   private async readText() {
     const model = this.model
     if (!model || !this.text.trim() || this.text.length > TEXT_LIMIT) return
     const pieces = textPieces(this.text, PIECE_SIZE)
     this.error = ''
+    this.partial = ''
     this.plan = undefined
     this.reading = true
     this.stopReading = false
@@ -172,13 +176,10 @@ export class LlImport extends LitElement {
       for (const piece of pieces) {
         if (this.stopReading) break
         let read: Record<string, unknown>[] | null = null
-        for (let tries = 0; tries < 2 && read === null; tries++) {
+        for (let tries = 0; tries < 2 && read === null && !this.error; tries++) {
           const reply = await models.extract(model, this.templateSource, piece)
-          if (!reply.ok) {
-            this.error = strings.importTextFailed(failureText(reply.failure, reply.statusCode))
-            break
-          }
-          read = recordsFromReply(reply.text ?? '')
+          if (reply.ok) read = recordsFromReply(reply.text ?? '')
+          else this.error = strings.importTextFailed(failureText(reply.failure, reply.statusCode))
         }
         if (this.error) break
         if (read === null) {
@@ -188,18 +189,19 @@ export class LlImport extends LitElement {
         records.push(...read)
         this.read = { done: this.read.done + 1, of: pieces.length, found: records.length }
       }
-      if (records.length === 0) {
-        if (!this.error) this.error = strings.importTextNone
-        return
-      }
-      this.rows = rowsFromRecords(records, this.fields)
-      this.proposedBy = strings.importProposedBy(model.model.replace(/^gguf:/, ''))
-      this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined))
     } catch (e) {
       this.error = describeError(e)
     } finally {
       this.reading = false
     }
+    if (records.length === 0) {
+      if (!this.error) this.error = strings.importTextNone
+      return
+    }
+    if (this.read.done < pieces.length) this.partial = strings.importTextPartial(this.read.done, pieces.length)
+    this.rows = rowsFromRecords(records, this.fields)
+    this.proposedBy = strings.importProposedBy(model.model.replace(/^gguf:/, ''))
+    this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined))
   }
 
   /** A column that fills no field is kept for `use` — one column for each use. */
@@ -308,7 +310,8 @@ export class LlImport extends LitElement {
         </tbody>
       </table>
     </div>
-    <p class="message">${strings.importProposedNote(this.proposedBy)}</p>`
+    <p class="message">${strings.importProposedNote(this.proposedBy)}</p>
+    ${this.partial ? html`<p class="message" role="status">${this.partial}</p>` : nothing}`
   }
 
   /** Which field each pasted column fills — or, for one that fills none, what it is kept for. */

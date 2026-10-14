@@ -206,6 +206,7 @@ export const strings = {
   importTextRead: '모델로 읽기',
   importTextReading: (done: number, of: number, found: number) => `모델이 읽는 중… ${done} / ${of} 조각 · 기록 ${found}건`,
   importTextStop: '여기까지만 읽기',
+  importTextPartial: (done: number, of: number) => `${of}조각 중 ${done}조각까지 읽은 기록입니다. 나머지는 가져오지 않습니다.`,
   importTextCount: (n: number, limit: number) => `${n.toLocaleString('ko-KR')} / ${limit.toLocaleString('ko-KR')}자`,
   importTextUnread: '모델의 답에서 기록을 읽지 못했습니다. 다시 읽거나, 글을 줄여 보세요.',
   importTextNone: '글에서 기록을 찾지 못했습니다.',
@@ -381,7 +382,7 @@ export const strings = {
   modelFailureInvalid: '이 값으로는 연결할 수 없습니다. 주소와 키를 확인하세요.',
   modelFailureUnauthorized: '키가 거절됐습니다. 키를 다시 확인하세요.',
   modelFailureHttpStatus: (status: number | null) =>
-    `서버는 답했지만 모델 목록을 주지 않았습니다${status ? `(HTTP ${status})` : ''}. 주소의 경로를 확인하세요.`,
+    `서버가 오류로 답했습니다${status ? `(HTTP ${status})` : ''}. 주소의 경로와 모델 이름을 확인하세요.`,
   modelFailureTimeout: '시간 안에 답이 없습니다.',
   modelFailureRefused: '그 주소에서 듣고 있는 서버가 없습니다. 서버가 켜져 있는지 확인하세요.',
   modelFailureHostNotFound: '주소의 컴퓨터 이름을 찾지 못했습니다.',

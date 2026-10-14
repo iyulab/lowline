@@ -331,8 +331,14 @@ export default {
       req.on('data', (chunk) => (body += chunk))
       req.on('end', () => {
         asked.push(JSON.parse(body))
-        const text = `${fence}json\n${JSON.stringify(records)}\n${fence}`
         res.setHeader('content-type', 'application/json')
+        // A piece of the long text that fails: the server errs on it.
+        if (asked.at(-1).messages[1].content.includes('[실패]')) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: { message: 'boom' } }))
+          return
+        }
+        const text = `${fence}json\n${JSON.stringify(records)}\n${fence}`
         res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'small-4b', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }))
       })
     })
@@ -353,6 +359,20 @@ export default {
       await app.cdp.waitFor(`!!${imp}?.querySelector('textarea[aria-label="붙여 넣은 글"]')`, 'the text for the model to read')
       await app.cdp.evaluate(`(() => { const t = ${imp}.querySelector('textarea[aria-label="붙여 넣은 글"]'); t.value = ${q(pasted)}
         t.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+      // Text long enough to be read in three pieces, the last failing: what the first two read is kept, and how far
+      // reading got is said.
+      const long = `${pasted}\n\n${'[메모] 다른 기록이 이어집니다. '.repeat(12)}\n\n[실패] ${'이 조각은 읽지 못합니다. '.repeat(12)}`
+      await app.cdp.evaluate(`(() => { const t = ${imp}.querySelector('textarea[aria-label="붙여 넣은 글"]'); t.value = ${q(long)}
+        t.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+      await app.click('dc-button', '모델로 읽기')
+      await app.cdp.waitFor(`${imp}.textContent.includes('조각까지 읽은 기록입니다')`, 'how far reading got', { timeoutMs: 30_000 })
+      assert.match(await app.cdp.evaluate(`${imp}.querySelector('[role=alert]')?.textContent ?? ''`), /모델이 읽지 못했습니다/, 'why it stopped')
+      assert.ok(await app.cdp.evaluate(`!!${imp}.querySelector('table[aria-label="모델이 읽은 기록"]')`), 'the records read before it')
+      assert.match(await app.cdp.evaluate(`${imp}.textContent`), /3조각 중 2조각까지/)
+      await app.status('문서 4건을 만듭니다') // two records read out of each piece read
+      // Then the short text alone, read whole.
+      await app.cdp.evaluate(`(() => { const t = ${imp}.querySelector('textarea[aria-label="붙여 넣은 글"]'); t.value = ${q(pasted)}
+        t.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
       await app.click('dc-button', '모델로 읽기')
       await app.status('문서 2건을 만듭니다')
       // What the model read is shown before anything is written: each record, its judgment field marked.
@@ -360,9 +380,9 @@ export default {
       for (const value of ['스캐너에 용지가 걸렸어요', '회의실 의자 다리가 부러졌어요', '총무', '장비', '담당 *']) assert.ok(table.includes(value), `${value} in ${table}`)
       assert.match(await app.cdp.evaluate(`${imp}.textContent`), /채팅\(small-4b\)의 제안으로 들어가고/, 'whose suggestion the judgment values are')
       // The model was given the template and the text — nothing else of the vault.
-      assert.equal(asked.length, 1)
-      assert.match(asked[0].messages[0].content, /@담당: \[select options="장비,인사,총무"\]/)
-      assert.equal(asked[0].messages[1].content, pasted)
+      const last = asked.at(-1)
+      assert.match(last.messages[0].content, /@담당: \[select options="장비,인사,총무"\]/)
+      assert.equal(last.messages[1].content, pasted)
 
       await app.click('dc-button', '2건 가져오기')
       await app.status('2건을 가져왔습니다')
