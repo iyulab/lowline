@@ -171,6 +171,8 @@ public sealed class ResponseContractTests
                 await Post("/suggest", new { template = "intake@1", field = "담당", values = observed, document = "문서/1.md" })),
             ["search"] = await Post("/search", new CaseQuery("모니터", Max: 1)),
             ["similar"] = await Post("/similar", new SimilarQuery("문서/3.md", Max: 1)),
+            // 담당 counted per 부서 value among the fifteen intake documents, each count with its first two documents.
+            ["aggregate"] = await Post("/aggregate", new AggregateQuery("intake@1", ["부서"], Evidence: 2)),
             // A model endpoint on this computer that lists its models, and one that refuses the key: what a failed check
             // carries is the kind and the status, never the endpoint's words.
             ["probe"] = new JsonArray(

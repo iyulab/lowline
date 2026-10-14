@@ -53,6 +53,19 @@ app.MapPost("/projection", async (ProjectionQuery query, VaultProjection vault, 
 
 app.MapGet("/curves", (VaultProjection vault, CancellationToken ct) => vault.CurvesAsync(ct));
 
+// Counts of a template's documents, per value of some fields, each with the documents it is made of.
+app.MapPost("/aggregate", async (AggregateQuery query, VaultProjection vault, CancellationToken ct) =>
+{
+    try
+    {
+        return await vault.AggregateAsync(query, ct) is { } answer ? Results.Ok(answer) : Results.NotFound();
+    }
+    catch (ArgumentException)
+    {
+        return Results.BadRequest();
+    }
+});
+
 app.MapPost("/suggest", async (SuggestRequest request, VaultProjection vault, CancellationToken ct) =>
     await vault.SuggestAsync(request, ct) is { } suggestion ? Results.Ok(suggestion) : Results.NotFound());
 

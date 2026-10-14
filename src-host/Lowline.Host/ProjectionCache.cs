@@ -181,6 +181,30 @@ internal sealed class ProjectionCache : IAsyncDisposable
     }
 
     /// <summary>
+    /// The documents of <paramref name="template"/> that <paramref name="filters"/> keep, counted per distinct combination
+    /// of the <paramref name="groupBy"/> fields, each count with the vault paths of up to <paramref name="evidence"/> of
+    /// its documents — the largest count first; of a tie, a group with a blank value after the others, the rest in the
+    /// order Formbase gives its keys.
+    /// </summary>
+    public async Task<AggregateAnswer> AggregateAsync(
+        TemplateSnapshot template, IReadOnlyList<string> groupBy, IReadOnlyList<FieldFilter> filters, int evidence, CancellationToken cancellationToken)
+    {
+        var result = await _engine.AggregateAsync(FormTypeRef.Create(template.Ref), new AggregateSpec(groupBy, filters, evidence), cancellationToken);
+        var fields = template.Fields.ToDictionary(f => f.Name);
+        var groups = result.Groups
+            .Select((g, order) => (Order: order, Group: new CountGroup(
+                groupBy.ToDictionary(c => c, c => g.Key.TryGetValue(c, out var v) && fields.TryGetValue(c, out var f) ? AsWritten(f, v) : null),
+                g.Count,
+                [.. (g.Records ?? []).Select(r => r.Key?.Value).OfType<string>()])))
+            .OrderByDescending(x => x.Group.Count)
+            .ThenBy(x => x.Group.Key.Values.Any(v => v is null) ? 1 : 0)
+            .ThenBy(x => x.Order)
+            .Select(x => x.Group)
+            .ToList();
+        return new AggregateAnswer(template.Ref, groupBy, groups);
+    }
+
+    /// <summary>
     /// A cell as the field writes it. A date or date-and-time comes back from the table as an instant in
     /// UTC — which is how its zone-less text was read — so its UTC parts are exactly what was written.
     /// </summary>

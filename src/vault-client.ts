@@ -1,7 +1,7 @@
 // The UI's only way to the vault: commands handled by the shell, which owns every file.
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import type { CaseHit, ColumnFilter, FieldCurve, IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
+import type { AggregateAnswer, CaseHit, ColumnFilter, FieldCurve, IngestResult, ProjectionTable, Suggestion, VaultSnapshot } from './projection.js'
 
 export interface VaultInfo {
   root: string
@@ -191,6 +191,12 @@ export const host = {
   /** A template's table: the rows that match every filter, all of them without. */
   projection: (template: string, filters: ColumnFilter[] = []) => invoke<ProjectionTable>('host_projection', { template, filters }),
   curves: () => invoke<FieldCurve[]>('host_curves'),
+  /**
+   * Counts of a template's documents matching every filter, per value of the `groupBy` fields — or all as one — each
+   * with up to `evidence` of its documents.
+   */
+  aggregate: (template: string, groupBy: string[] = [], filters: ColumnFilter[] = [], evidence?: number) =>
+    invoke<AggregateAnswer>('host_aggregate', { request: { template, groupBy, filters, evidence } }),
   /**
    * `document` is the draft's vault path once it has been saved; a rejection there is not offered again. `typed` is what
    * the person has typed into the field so far: only a value that begins with it is offered.

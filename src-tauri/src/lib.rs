@@ -557,6 +557,17 @@ async fn host_projection(
     host_json(blocking(move || client.post_json("/projection", &body)).await?)
 }
 
+/// Counts of a template's documents per value of some fields, each with the documents it is made of.
+#[tauri::command]
+async fn host_aggregate(
+    request: serde_json::Value,
+    state: State<'_, HostState>,
+) -> Result<serde_json::Value, String> {
+    let client = state.client()?;
+    let body = request.to_string();
+    host_json(blocking(move || client.post_json("/aggregate", &body)).await?)
+}
+
 /// How the suggestions of each judgment field have fared, from the vault's event files.
 #[tauri::command]
 async fn host_curves(state: State<'_, HostState>) -> Result<serde_json::Value, String> {
@@ -983,6 +994,7 @@ pub fn run() {
             host_suggest,
             host_search,
             host_similar,
+            host_aggregate,
             report_error,
             record_event,
             list_events,

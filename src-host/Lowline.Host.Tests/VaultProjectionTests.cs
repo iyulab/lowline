@@ -47,6 +47,46 @@ public sealed class VaultProjectionTests
     }
 
     [Fact]
+    public async Task Counts_documents_per_value_the_largest_first_each_with_the_documents_it_is_made_of()
+    {
+        var visits = new TemplateSnapshot("visit@1", [new TemplateField("원인", "select"), new TemplateField("방문일", "date"), new TemplateField("제목", "text")]);
+        static DocumentSnapshot Visit(string path, string json) =>
+            new(path, "visit@1", JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)!);
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([visits],
+        [
+            Visit("문서/1.md", """{"원인": "부품", "방문일": "2026-09-03"}"""),
+            Visit("문서/2.md", """{"원인": "설정", "방문일": "2026-09-10"}"""),
+            Visit("문서/3.md", """{"원인": "부품", "방문일": "2026-09-21"}"""),
+            Visit("문서/4.md", """{"원인": "부품", "방문일": "2026-10-01"}"""),
+            Visit("문서/5.md", """{"방문일": "2026-09-30"}"""),
+        ]), Ct);
+
+        // 지난달(9월)의 원인별 건수: the largest first, a blank value its own group, each with its documents.
+        var september = new AggregateQuery("visit@1", ["원인"],
+            [new ColumnFilter("방문일", "atLeast", "2026-09-01"), new ColumnFilter("방문일", "atMost", "2026-09-30")]);
+        var answer = await vault.AggregateAsync(september, Ct);
+        Assert.Equal(["원인"], answer!.GroupBy);
+        Assert.Equal([("부품", 2L), ("설정", 1L), (null, 1L)], answer.Groups.Select(g => ((string?)g.Key["원인"], g.Count)));
+        Assert.Equal(["문서/1.md", "문서/3.md"], answer.Groups[0].Evidence);
+        Assert.Equal(["문서/5.md"], answer.Groups[2].Evidence);
+
+        // No grouping: one count of every kept document; at most as much evidence as asked.
+        var all = await vault.AggregateAsync(new AggregateQuery("visit@1", Evidence: 2), Ct);
+        Assert.Equal(5L, Assert.Single(all!.Groups).Count);
+        Assert.Equal(2, all.Groups[0].Evidence.Count);
+
+        // A date grouped by reads as it was written.
+        var byDay = await vault.AggregateAsync(new AggregateQuery("visit@1", ["방문일"], [new ColumnFilter("원인", "equal", "설정")]), Ct);
+        Assert.Equal("2026-09-10", Assert.Single(byDay!.Groups).Key["방문일"]);
+
+        // A template the vault does not have answers nothing; a field the template does not have is refused.
+        Assert.Null(await vault.AggregateAsync(new AggregateQuery("gone@1", ["원인"]), Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => vault.AggregateAsync(new AggregateQuery("visit@1", ["담당"]), Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => vault.AggregateAsync(new AggregateQuery("visit@1", ["원인", "원인"]), Ct));
+    }
+
+    [Fact]
     public async Task Answers_the_rows_that_match_every_filter()
     {
         await using var vault = new VaultProjection();

@@ -104,6 +104,22 @@ public sealed record CaseQuery(string Query, string? Template = null, int? Max =
 /// <summary>What the UI asks for the documents most like the one at <see cref="Path"/>.</summary>
 public sealed record SimilarQuery(string Path, int? Max = null);
 
+/// <summary>
+/// What the UI asks to count of a template's documents: those matching every filter, per distinct combination of the
+/// <see cref="GroupBy"/> fields — or all of them as one count — each count with up to <see cref="Evidence"/> of the
+/// documents it is made of.
+/// </summary>
+public sealed record AggregateQuery(string Template, IReadOnlyList<string>? GroupBy = null, IReadOnlyList<ColumnFilter>? Filters = null, int? Evidence = null);
+
+/// <summary>
+/// One count: the value of each grouping field (as the field writes it; null when blank), how many documents, and the
+/// vault paths of the first of them — the documents the count is made of, read in the same read as the count.
+/// </summary>
+public sealed record CountGroup(IReadOnlyDictionary<string, object?> Key, long Count, IReadOnlyList<string> Evidence);
+
+/// <summary>The counts of an <see cref="AggregateQuery"/>, the largest first — of a tie, a blank value last.</summary>
+public sealed record AggregateAnswer(string Template, IReadOnlyList<string> GroupBy, IReadOnlyList<CountGroup> Groups);
+
 /// <summary>What the UI asks of a template's table: the rows that match every filter.</summary>
 public sealed record ProjectionQuery(string Template, IReadOnlyList<ColumnFilter>? Filters = null);
 
@@ -363,6 +379,34 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             return _cache is not null && _templates?.TryGetValue(template, out var snapshot) == true
                 ? await _cache.TableAsync(snapshot, [.. filters.Select(f => f.ToFieldFilter())], cancellationToken)
                 : null;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>The most documents a count carries as its evidence, and how many when the query does not say.</summary>
+    public const int MaxEvidence = 20, DefaultEvidence = 5;
+
+    /// <summary>
+    /// The counts <paramref name="query"/> asks for — Formbase counts the projection, the documents behind each count
+    /// read with it — or null when the vault has no such template. A grouping or filter column that is not one of the
+    /// template's fields is refused (<see cref="ArgumentException"/>): a count of a field that is not there answers nothing.
+    /// </summary>
+    public async Task<AggregateAnswer?> AggregateAsync(AggregateQuery query, CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_cache is null || _templates?.TryGetValue(query.Template, out var snapshot) != true) return null;
+            var known = snapshot.Fields.Select(f => f.Name).ToHashSet();
+            var groupBy = query.GroupBy ?? [];
+            var filters = query.Filters ?? [];
+            if (groupBy.Distinct().Count() != groupBy.Count || groupBy.Concat(filters.Select(f => f.Column)).Any(c => !known.Contains(c) && c != PathColumn))
+                throw new ArgumentException("a column that is not one of the template's fields", nameof(query));
+            var evidence = Math.Clamp(query.Evidence ?? DefaultEvidence, 1, MaxEvidence);
+            return await _cache.AggregateAsync(snapshot, groupBy, [.. filters.Select(f => f.ToFieldFilter())], evidence, cancellationToken);
         }
         finally
         {

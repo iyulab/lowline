@@ -4,7 +4,7 @@
 // to the type — every key, nothing more, optional exactly where the type says — and the file has to match it both
 // ways: nothing the UI does not know, nothing it needs missing, and every key carried at least once.
 import { describe, expect, it } from 'vitest'
-import type { Abstention, CaseHit, FieldCurve, IngestResult, ProjectionTable, Suggestion } from '../projection.js'
+import type { AggregateAnswer, Abstention, CaseHit, FieldCurve, IngestResult, ProjectionTable, Suggestion } from '../projection.js'
 import type { ChatReply, LocalModelProgress, LocalModels, ModelFailure, ModelProbeResult } from '../vault-client.js'
 import file from './sidecar-responses.json'
 
@@ -88,6 +88,12 @@ const localModels: Shape<LocalModels> = {
   progress: { presence: 'required', inside: localProgress },
 }
 
+const aggregate: Shape<AggregateAnswer> = {
+  template: 'required',
+  groupBy: 'required',
+  groups: { presence: 'required', inside: { key: { presence: 'required', inside: 'any keys' }, count: 'required', evidence: 'required' } },
+}
+
 /** Each answer in the file, and the shape the UI reads it by. */
 const answers = {
   ingest,
@@ -96,6 +102,7 @@ const answers = {
   suggestions: suggestion,
   search: hit,
   similar: hit,
+  aggregate,
   probe,
   chatAuthor: chat,
   chatExtract: chat,
