@@ -507,10 +507,11 @@ fn device_id(app: &tauri::AppHandle) -> std::io::Result<String> {
     Ok(std::fs::read_to_string(&path)?.trim().to_string())
 }
 
-/// Whether the sidecar is starting, ready, or failed to start.
+/// Whether the sidecar is starting, ready, or failed to start. Async, so off the main thread: the window asks it
+/// often, and a status that ever had to wait on the sidecar's state would hold the whole window with it.
 #[tauri::command]
-fn host_status(state: State<HostState>) -> HostStatus {
-    state.status()
+async fn host_status(state: State<'_, HostState>) -> Result<HostStatus, String> {
+    Ok(state.status())
 }
 
 /// Hands the sidecar a snapshot of the open vault, as the UI parsed it. Returns what it changed.
