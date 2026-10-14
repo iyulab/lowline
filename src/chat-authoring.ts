@@ -24,12 +24,27 @@ export function wordsOf(reply: string): string {
 
 /**
  * A draft with what small models get wrong mechanically put right: a field name with spaces in it (`@처리 기한: [date]`)
- * — a field's name is one word, so the spaces become underscores, as the template's rules say.
+ * — a field's name is one word, so the spaces become underscores, as the template's rules say — and each fix the
+ * parser offers for a line it could not read, such as a field written without its brackets (`@처리_기한: date`).
  */
 export function tidyDraft(draft: string): string {
-  return draft.replace(/^(\s*)@([^:@\n\[\]]*\S)(\s*):(\s*\[)/gm, (whole, indent: string, name: string, _gap: string, rest: string) =>
+  const named = draft.replace(/^(\s*)@([^:@\n\[\]]*\S)(\s*):(\s*\[)/gm, (whole, indent: string, name: string, _gap: string, rest: string) =>
     /\s/.test(name) ? `${indent}@${name.trim().replace(/\s+/g, '_')}:${rest}` : whole,
   )
+  return withFixes(named)
+}
+
+/** `source` with each fix the parser offers put in place of what it is for, the last first so the earlier spans hold. */
+function withFixes(source: string): string {
+  let fixes
+  try {
+    fixes = (parseFormdown(source).diagnostics ?? []).filter((d) => d.fix !== undefined && d.span !== undefined)
+  } catch {
+    return source
+  }
+  return fixes
+    .sort((a, b) => b.span!.start - a.span!.start)
+    .reduce((text, d) => text.slice(0, d.span!.start) + d.fix + text.slice(d.span!.end), source)
 }
 
 /** What stands in the way of the draft working as a template, in the words the template's page uses. */

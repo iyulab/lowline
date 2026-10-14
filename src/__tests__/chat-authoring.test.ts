@@ -22,6 +22,14 @@ describe('the chat that writes templates', () => {
     expect(tidyDraft('@처리 기한: [date]\n제목: ___@제목\n@요청: [textarea]\n')).toBe('@처리_기한: [date]\n제목: ___@제목\n@요청: [textarea]\n')
   })
 
+  it('puts a field written without its brackets in them, as the parser says to, and leaves text that only starts like one', () => {
+    const draft = '---\nid: t\nversion: 1\n---\n# 접수\n\n@고객_이름: text\n@문의_유형: select options="배송,환불"\n@연락처: [email]\n@김: text me later\n'
+    expect(tidyDraft(draft)).toBe(
+      '---\nid: t\nversion: 1\n---\n# 접수\n\n@고객_이름: [text]\n@문의_유형: [select options="배송,환불"]\n@연락처: [email]\n@김: text me later\n',
+    )
+    expect(fieldChanges(before, tidyDraft(draft)).added).toEqual(['고객_이름', '문의_유형', '연락처'])
+  })
+
   it('says what stands in the way of a draft, as the template page says it', () => {
     expect(draftProblems(after)).toEqual([])
     expect(draftProblems('# 접수\n\n@요청: [text]\n').length).toBeGreaterThan(0) // no id, no version
