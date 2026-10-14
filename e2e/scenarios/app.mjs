@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import assert from 'node:assert/strict'
 import { parseFormdown } from '@formdown/core'
-import { IDENTIFIER, SETTINGS, command, q, updates } from '../app.mjs'
-import { here, INTAKE, documentsIn, fileValues, fileBody, longTasks, thresholdsChosenSince, sidecarQuiet, sidecarCpuOver, SMB, deleteForGoodOverSmb, trashed } from '../shared.mjs'
+import { SETTINGS, command, q, updates } from '../app.mjs'
+import { here, REPORTS, reportsCaused, INTAKE, documentsIn, fileValues, fileBody, longTasks, thresholdsChosenSince, sidecarQuiet, sidecarCpuOver, SMB, deleteForGoodOverSmb, trashed } from '../shared.mjs'
 
 export default {
   async 'writes an error report with the kind of failure and nothing of what was on screen'(app) {
-    const reports = join(process.env.LOCALAPPDATA ?? tmpdir(), IDENTIFIER, 'logs', 'reports.jsonl')
+    const reports = REPORTS
     const before = existsSync(reports) ? (await readFile(reports, 'utf8')).split('\n').filter(Boolean).length : 0
     await app.cdp.evaluate(`setTimeout(() => { throw new RangeError('문서/비밀 회의록.md — 담당: 장비') }), true`)
     await app.cdp.evaluate(`Promise.reject({ kind: 'outside-vault', message: 'C:\\\\Users\\\\홍길동' }), true`)
@@ -29,6 +29,8 @@ export default {
     const host = written.find((r) => r.layer === 'host')
     assert.ok(host && host.kind !== 'Unrecognized' && host.frames.length > 0, `the sidecar's failure: ${JSON.stringify(host)}`)
     assert.ok(!lines.join('\n').match(/비밀|회의록|장비|홍길동|Users/), `nothing of the page: ${lines.join(' ')}`)
+    // These three were asked for: a later failure does not print them as if they told what went wrong.
+    await reportsCaused()
     await app.noAlert()
   },
 
@@ -444,6 +446,8 @@ ${(await fileBody(join(vault, INTAKE.path))).trimStart()}`)
 
     // The vault is handed over again, and the same value is suggested once more — the person only goes on filling in.
     await app.cdp.waitFor(`${suggestion} === '장비'`, 'a suggestion for 담당 from the sidecar started again', { timeoutMs: 60_000 })
+    // The sidecar's end was this scenario's doing: a later failure does not print it.
+    await reportsCaused()
 
     // Leave the vault as it was.
     await app.learning()
