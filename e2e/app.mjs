@@ -210,10 +210,25 @@ export class App extends Window {
   }
 }
 
+/**
+ * Runs a program and answers what it wrote — or fails, naming it, when it has not finished within
+ * `timeoutMs`. Never a blocking call: one that hangs would stop this whole process, the runner's own
+ * deadline for a scenario with it, and the run would end only when something outside ended it.
+ */
+export async function command(file, args, { timeoutMs = 30_000, env } = {}) {
+  const { execFile } = await import('node:child_process')
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL', env, windowsHide: true }, (error, stdout) => {
+      if (!error) return resolve(stdout)
+      const what = `${file} ${args[0] ?? ''}`.trim()
+      reject(new Error(error.killed ? `${what} did not finish within ${timeoutMs / 1000} s` : `${what} failed: ${error.message}`))
+    })
+  })
+}
+
 export async function sidecarsRunning() {
-  const { execFileSync } = await import('node:child_process')
   for (let i = 0; i < 20; i++) {
-    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq Lowline.Host.exe', '/NH'], { encoding: 'utf8' })
+    const out = await command('tasklist', ['/FI', 'IMAGENAME eq Lowline.Host.exe', '/NH'])
     if (!out.includes('Lowline.Host.exe')) return 0
     await new Promise((resolve) => setTimeout(resolve, 250))
   }

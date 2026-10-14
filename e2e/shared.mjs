@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import assert from 'node:assert/strict'
 import { parseFormdown } from '@formdown/core'
-import { IDENTIFIER } from './app.mjs'
+import { IDENTIFIER, command } from './app.mjs'
 
 export const here = dirname(fileURLToPath(import.meta.url))
 export const TEMPLATE = '서식/버그 리포트.fd.md'
@@ -97,12 +97,11 @@ export async function sidecarQuiet(timeoutMs = 180_000) {
 
 /** The CPU time the sidecar spends over the next `ms`, in milliseconds. */
 export async function sidecarCpuOver(ms) {
-  const { execFileSync } = await import('node:child_process')
-  const cpu = () =>
-    Number(execFileSync('powershell', ['-NoProfile', '-Command', `(Get-Process Lowline.Host).TotalProcessorTime.TotalMilliseconds`], { encoding: 'utf8' }).trim())
-  const before = cpu()
+  const cpu = async () =>
+    Number((await command('powershell', ['-NoProfile', '-Command', `(Get-Process Lowline.Host).TotalProcessorTime.TotalMilliseconds`])).trim())
+  const before = await cpu()
   await new Promise((resolve) => setTimeout(resolve, ms))
-  return Math.round(cpu() - before)
+  return Math.round((await cpu()) - before)
 }
 
 /**
@@ -156,7 +155,6 @@ export function trashed(folder) {
  * checks that a file went to the trash (and was not just deleted) and leaves nothing behind there.
  */
 export async function takeFromRecycleBin(folder) {
-  const { execFileSync } = await import('node:child_process')
   const script = `[Console]::OutputEncoding = [Text.Encoding]::UTF8
     $bin = (New-Object -ComObject Shell.Application).NameSpace(10)
     $names = @()
@@ -168,8 +166,7 @@ export async function takeFromRecycleBin(folder) {
       Remove-Item -LiteralPath (Join-Path (Split-Path $item.Path) ('$I' + (Split-Path $item.Path -Leaf).Substring(2))) -Force -ErrorAction SilentlyContinue
     }
     ConvertTo-Json -InputObject @($names) -Compress`
-  const out = execFileSync('powershell', ['-NoProfile', '-Command', script], {
-    encoding: 'utf8',
+  const out = await command('powershell', ['-NoProfile', '-Command', script], {
     env: { ...process.env, E2E_TRASHED_FROM: folder },
   })
   return JSON.parse(out.trim() || '[]')
