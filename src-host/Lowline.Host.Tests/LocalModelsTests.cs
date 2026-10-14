@@ -115,21 +115,24 @@ public sealed class LocalModelsTests
     }
 
     [Fact]
-    public async Task Getting_a_model_ready_fetches_it_when_it_is_not_here_then_the_chat_answers_on_it()
+    public async Task Getting_a_model_ready_fetches_it_when_it_is_not_here_then_the_chat_answers_on_it_and_lets_it_go()
     {
         var lmsupply = new StandIn();
         await using var local = new LocalModels(lmsupply);
 
         Assert.Equal("starting", local.Prepare(Larger).Phase);
         Assert.Equal(new LocalModelProgress(Larger, "ready"), await Settled(local, Larger));
-        Assert.Equal([(Larger, true)], lmsupply.Loads);
         Assert.True(local.View().Models.Single(m => m.Id == Larger).Downloaded);
 
         var reply = await ChatAuthoring.ReplyAsync(Ask(Larger), local, TimeSpan.FromSeconds(20), Ct);
 
         Assert.Equal((true, "칸을 넣었습니다.", null), (reply.Ok, reply.Text, reply.Failure));
-        Assert.Single(lmsupply.Loads); // the model running answered; nothing was loaded again
-        var asked = lmsupply.Loaded.Single().Asked;
+        // Fetched once when got ready; taken from what is here for the reply.
+        Assert.Equal([(Larger, true), (Larger, false)], lmsupply.Loads);
+        // Each let go after use: its server stays warm for LMSupply's idle time, then ends.
+        Assert.All(lmsupply.Loaded, g => Assert.True(g.Disposed));
+        Assert.Equal(0, lmsupply.Releases);
+        var asked = lmsupply.Loaded[^1].Asked;
         Assert.Contains("lowline:", asked[0].Content); // the rules and the template, before the conversation
         Assert.Equal("처리 기한 칸을 넣어 줘", asked[^1].Content);
     }
@@ -150,20 +153,20 @@ public sealed class LocalModelsTests
     }
 
     [Fact]
-    public async Task Switching_models_lets_the_one_running_go()
+    public async Task Choosing_another_model_lets_the_first_ones_server_go_at_once()
     {
-        var lmsupply = new StandIn();
+        var lmsupply = new StandIn { Here = { Larger } };
         await using var local = new LocalModels(lmsupply);
         local.Prepare(Recommended);
         await Settled(local, Recommended);
+        await ChatAuthoring.ReplyAsync(Ask(Recommended), local, TimeSpan.FromSeconds(20), Ct);
+        Assert.Equal(0, lmsupply.Releases); // the same model again keeps its warm server
 
         local.Prepare(Larger);
         await Settled(local, Larger);
 
-        Assert.Equal([true, false], lmsupply.Loaded.Select(g => g.Disposed));
         Assert.Equal(1, lmsupply.Releases);
-        await local.DisposeAsync();
-        Assert.True(lmsupply.Loaded[1].Disposed);
+        Assert.All(lmsupply.Loaded, g => Assert.True(g.Disposed));
     }
 
     [Fact]

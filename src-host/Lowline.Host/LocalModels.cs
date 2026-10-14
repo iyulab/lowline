@@ -74,8 +74,9 @@ public interface ILocalGenerators
 }
 
 /// <summary>
-/// LMSupply's GGUF models. Its llama.cpp server is fetched from llama.cpp's releases the first time a model is got
-/// ready, and never again on its own: no background version checks or updates.
+/// LMSupply's GGUF models. Nothing is fetched or checked on its own: the model, llama.cpp's server that runs it — and
+/// a newer build of that server, if there is one — only when the person gets a model ready. A model let go keeps its
+/// server warm for LMSupply's idle time (ten minutes), then the server ends.
 /// </summary>
 public sealed class LmSupplyGenerators : ILocalGenerators
 {
@@ -85,15 +86,16 @@ public sealed class LmSupplyGenerators : ILocalGenerators
         await LocalGenerator.LoadAsync(model, new GeneratorOptions
         {
             DisableAutoDownload = !mayFetch,
-            ServerUpdateOptions = new LlamaServerUpdateOptions { AutoDownloadUpdates = false },
+            ServerUpdateOptions = new LlamaServerUpdateOptions { AutoDownloadUpdates = false, UpdateOnWarmup = mayFetch },
         }, progress, cancellationToken);
 
     public Task ReleaseIdleAsync() => LlamaServerPool.Instance.ReleaseIdleAsync();
 }
 
 /// <summary>
-/// The model running on this computer for the chat: one at a time, loaded when the person gets it ready — fetching
-/// it then if it is not here — or, after a restart, on the first chat from what is already here, never fetching.
+/// The model on this computer the chat runs on. Getting one ready fetches what is not here and starts it once; each
+/// reply then takes the model from what is here and lets it go again, so a model nobody chats with stops holding
+/// memory once LMSupply's idle time has passed. Choosing another model lets the first one's server go at once.
 /// </summary>
 public sealed class LocalModels(ILocalGenerators generators) : IAsyncDisposable
 {
@@ -109,8 +111,10 @@ public sealed class LocalModels(ILocalGenerators generators) : IAsyncDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Lock _progressLock = new();
     private LocalModelProgress _progress = LocalModelProgress.Idle;
-    private ITextGenerator? _generator;
     private Task? _preparing;
+
+    /// <summary>The model last started, whose server may still be warm.</summary>
+    private string? _last;
 
     public LocalModelsView View()
     {
@@ -130,37 +134,44 @@ public sealed class LocalModels(ILocalGenerators generators) : IAsyncDisposable
         {
             if (_progress.Model == model && _progress.Phase is LocalPhase.Getting or LocalPhase.Starting or LocalPhase.Ready) return _progress;
             _progress = new LocalModelProgress(model, LocalPhase.Starting);
-            _preparing = Task.Run(() => LoadAsync(model, mayFetch: true, CancellationToken.None));
+            _preparing = Task.Run(async () =>
+            {
+                var (generator, _) = await LoadAsync(model, mayFetch: true, CancellationToken.None);
+                if (generator is not null) await generator.DisposeAsync();
+            });
             return _progress;
         }
     }
 
     /// <summary>
-    /// The chat on <paramref name="model"/>, loading it from what is here when it is not running; null with why when
-    /// it cannot run.
+    /// The reply of <paramref name="model"/> to <paramref name="messages"/>, the model taken from what is here — never
+    /// fetched — and let go after; or why it cannot run.
     /// </summary>
-    public async Task<(IChatClient? Chat, string? Failure)> ChatAsync(string model, CancellationToken cancellationToken)
+    public async Task<(string? Text, string? Failure)> ReplyAsync(string model, IList<ChatMessage> messages, CancellationToken cancellationToken)
     {
         if (!Offered.Contains(model)) return (null, ModelFailure.Invalid);
         if (_preparing is { } preparing) await preparing.WaitAsync(cancellationToken);
         var (generator, failure) = await LoadAsync(model, mayFetch: false, cancellationToken);
         if (generator is null) return (null, failure);
-        var ready = new LazyReadinessProbe(() => true, [generator.ModelId]);
-        return (LMSupplyExtensions.BuildLocalSafeClient(generator, ready, new LocalSafetyOptions { DefaultMaxOutputTokens = MaxOutputTokens }), null);
+        await using (generator)
+        {
+            var ready = new LazyReadinessProbe(() => true, [generator.ModelId]);
+            var chat = LMSupplyExtensions.BuildLocalSafeClient(generator, ready, new LocalSafetyOptions { DefaultMaxOutputTokens = MaxOutputTokens });
+            return ((await chat.GetResponseAsync(messages, cancellationToken: cancellationToken)).Text, null);
+        }
     }
 
-    /// <summary>Makes <paramref name="model"/> the one running, unless it is: the model running, or why it is not.</summary>
+    /// <summary>Takes <paramref name="model"/>, letting the last one's server go when it is another: the model, or why not.</summary>
     private async Task<(ITextGenerator? Generator, string? Failure)> LoadAsync(string model, bool mayFetch, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (_generator is not null && Running == model)
+            if (_last is not null && _last != model)
             {
-                Report(new LocalModelProgress(model, LocalPhase.Ready));
-                return (_generator, null);
+                await generators.ReleaseIdleAsync();
+                _last = null;
             }
-            await UnloadAsync();
             Report(new LocalModelProgress(model, LocalPhase.Starting));
             var progress = new Progress<DownloadProgress>(p => Report(new LocalModelProgress(model, LocalPhase.Getting,
                 Getting: p.Kind == DownloadKind.Runtime ? LocalGetting.Runtime : LocalGetting.Model,
@@ -168,10 +179,10 @@ public sealed class LocalModels(ILocalGenerators generators) : IAsyncDisposable
                 Total: p.OverallTotalBytes ?? p.TotalBytes)));
             try
             {
-                _generator = await generators.LoadAsync(model, mayFetch, progress, cancellationToken);
-                Running = model;
+                var generator = await generators.LoadAsync(model, mayFetch, progress, cancellationToken);
+                _last = model;
                 Report(new LocalModelProgress(model, LocalPhase.Ready));
-                return (_generator, null);
+                return (generator, null);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -190,9 +201,6 @@ public sealed class LocalModels(ILocalGenerators generators) : IAsyncDisposable
             _gate.Release();
         }
     }
-
-    /// <summary>Which model <see cref="_generator"/> runs, by the alias it was loaded with.</summary>
-    private string? Running { get; set; }
 
     /// <summary>Why a model did not get ready: not here and not to be fetched now, nothing to fetch it from, or it would not start.</summary>
     public static string Failure(Exception e)
@@ -215,25 +223,10 @@ public sealed class LocalModels(ILocalGenerators generators) : IAsyncDisposable
         }
     }
 
-    private async Task UnloadAsync()
-    {
-        if (_generator is null) return;
-        await _generator.DisposeAsync();
-        _generator = null;
-        Running = null;
-        await generators.ReleaseIdleAsync();
-    }
-
+    /// <summary>Lets every model's server go, warm or not.</summary>
     public async ValueTask DisposeAsync()
     {
-        await _gate.WaitAsync();
-        try
-        {
-            await UnloadAsync();
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        if (_preparing is { } preparing) await preparing.ContinueWith(_ => { }, TaskScheduler.Default);
+        await generators.ReleaseIdleAsync();
     }
 }

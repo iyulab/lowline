@@ -76,9 +76,8 @@ public static class ChatAuthoring
         {
             if (request.Preset == LocalPreset)
             {
-                var (chat, failure) = await local.ChatAsync(request.Model.Trim(), within.Token);
-                if (chat is null) return new ChatAuthorReply(false, null, failure, null);
-                return new ChatAuthorReply(true, (await chat.GetResponseAsync(messages, cancellationToken: within.Token)).Text, null, null);
+                var (text, failure) = await local.ReplyAsync(request.Model.Trim(), messages, within.Token);
+                return new ChatAuthorReply(failure is null, text, failure, null);
             }
             return await RemoteAsync(request, messages, within.Token);
         }
