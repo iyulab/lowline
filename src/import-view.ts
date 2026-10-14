@@ -4,18 +4,25 @@ import { createDocumentFile } from './document-files.js'
 import { documentTitle, newDocument } from './documents.js'
 import { newDocumentId } from './identity.js'
 import { describeError } from './errors.js'
-import { importFields, planImport, type ColumnUse, type ImportField, type ImportPlan } from './import.js'
+import { importFields, planImport, recordsFromReply, rowsFromRecords, type ColumnUse, type ImportField, type ImportPlan } from './import.js'
+import { failureText } from './model-settings.js'
+import { templateSnapshot } from './projection.js'
+import type { ModelSettings } from './settings.js'
 import { strings } from './strings.js'
 import type { TemplateItem } from './template-scope.js'
-import { vault, type VaultInfo } from './vault-client.js'
+import { model as models, vault, type VaultInfo } from './vault-client.js'
 
 /** How many values that do not fit are listed; the rest are counted. */
 const PROBLEMS_SHOWN = 10
 
+/** The most text read at once: the model reads it, with its instructions and its answer, within one request's time. */
+export const TEXT_LIMIT = 2000
+
 /**
- * Brings existing records in: rows copied from a spreadsheet, the first naming the columns,
- * become documents of the template. Nothing is written until the person confirms what the
- * preview shows.
+ * Brings existing records in: rows copied from a spreadsheet, the first naming the columns, become documents of the
+ * template — or, with a model set up, text that is not a table (mail, notes), which the model reads into the
+ * template's fields. Nothing is written until the person confirms what the preview shows; a value the model gave a
+ * judgment field comes in as its suggestion, for a person to decide.
  */
 @customElement('ll-import')
 export class LlImport extends LitElement {
@@ -68,15 +75,35 @@ export class LlImport extends LitElement {
     .error {
       color: var(--dc-color-danger);
     }
+    h3 {
+      margin: var(--dc-space-2) 0 0;
+      font-size: 13px;
+    }
+    textarea {
+      font: inherit;
+      min-height: 7em;
+      padding: var(--dc-space-2);
+      resize: vertical;
+    }
+    .records {
+      overflow-x: auto;
+    }
+    .records td {
+      vertical-align: top;
+    }
   `
 
   @property({ attribute: false }) vaultInfo!: VaultInfo
   /** The template the rows become documents of. */
   @property({ attribute: false }) template!: TemplateItem
+  /** The model set up for the chat, if any: it can read records out of text. */
+  @property({ attribute: false }) model: ModelSettings | null = null
 
   @state() private templatePath = ''
   @state() private templateSource = ''
   @state() private fields: ImportField[] = []
+  /** The template's judgment fields: what a model's values come in as suggestions for. */
+  @state() private judgment: string[] = []
   @state() private plan?: ImportPlan
   /** The pasted rows, kept to plan again when the person changes what a column is kept for. */
   private rows: string[][] = []
@@ -84,6 +111,11 @@ export class LlImport extends LitElement {
   /** Documents created so far in the running import. */
   @state() private created = 0
   @state() private error = ''
+  /** Text pasted for the model to read, and whether it is reading it. */
+  @state() private text = ''
+  @state() private reading = false
+  /** Who the judgment values of the planned records are suggestions of — the model that read them — or none. */
+  @state() private proposedBy = ''
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has('template') && this.template.path !== this.templatePath) void this.readTemplate(this.template.path)
@@ -94,9 +126,11 @@ export class LlImport extends LitElement {
     this.plan = undefined
     this.templatePath = path
     this.fields = []
+    this.judgment = []
     try {
       this.templateSource = await vault.read(path)
       this.fields = importFields(this.templateSource)
+      this.judgment = templateSnapshot(this.templateSource).suggest
     } catch (e) {
       this.error = describeError(e)
     }
@@ -104,8 +138,45 @@ export class LlImport extends LitElement {
 
   private onRows(e: CustomEvent<{ rows: string[][] }>) {
     this.error = ''
+    this.proposedBy = ''
     this.rows = e.detail.rows
     this.plan = planImport(this.rows, this.fields)
+  }
+
+  /**
+   * Has the model read the text into records — asking once more when its answer holds none it can read — and plans
+   * them as rows are planned. The judgment values it gave are its suggestions.
+   */
+  private async readText() {
+    const model = this.model
+    if (!model || !this.text.trim() || this.text.length > TEXT_LIMIT) return
+    this.error = ''
+    this.plan = undefined
+    this.reading = true
+    try {
+      for (let tries = 0; tries < 2; tries++) {
+        const reply = await models.extract(model, this.templateSource, this.text)
+        if (!reply.ok) {
+          this.error = strings.importTextFailed(failureText(reply.failure, reply.statusCode))
+          return
+        }
+        const records = recordsFromReply(reply.text ?? '')
+        if (!records) continue
+        if (records.length === 0) {
+          this.error = strings.importTextNone
+          return
+        }
+        this.rows = rowsFromRecords(records, this.fields)
+        this.proposedBy = strings.importProposedBy(model.model.replace(/^gguf:/, ''))
+        this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined))
+        return
+      }
+      this.error = strings.importTextUnread
+    } catch (e) {
+      this.error = describeError(e)
+    } finally {
+      this.reading = false
+    }
   }
 
   /** A column that fills no field is kept for `use` — one column for each use. */
@@ -130,7 +201,9 @@ export class LlImport extends LitElement {
     try {
       const today = new Date()
       for (const record of plan.documents) {
-        const source = newDocument(this.templateSource, record.values, newDocumentId())
+        // A judgment value the model read is its suggestion: shown in the field, learned from once a person decides it.
+        const proposed = this.proposedBy ? Object.fromEntries(this.judgment.map((f) => [f, this.proposedBy])) : {}
+        const source = newDocument(this.templateSource, record.values, newDocumentId(), proposed)
         // Named as the record was: its own day, and its code before the title the fields give.
         const title = [record.name, documentTitle(this.templateSource, record.values)].filter(Boolean).join(' ') || undefined
         await createDocumentFile(this.vaultInfo.documentsDir, source, title, record.date ?? today)
@@ -161,14 +234,57 @@ export class LlImport extends LitElement {
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       ${this.templatePath && this.fields.length
         ? html`<p class="message">${strings.importHint}</p>
-            <dc-paste-rows-zone placeholder=${strings.importPaste} @rows=${this.onRows}></dc-paste-rows-zone>`
+            <dc-paste-rows-zone placeholder=${strings.importPaste} @rows=${this.onRows}></dc-paste-rows-zone>
+            ${this.renderText()}`
         : nothing}
       ${plan ? this.renderPlan(plan) : nothing}
     `
   }
 
-  private renderPlan(plan: ImportPlan) {
-    const problems = plan.problems
+  /** Text that is not a table, for the model set up to read — or, without one, where to set one up. */
+  private renderText() {
+    if (!this.model) return html`<h3>${strings.importTextTitle}</h3><p class="message">${strings.importTextNoModel}</p>`
+    const over = this.text.length > TEXT_LIMIT
+    return html`
+      <h3>${strings.importTextTitle}</h3>
+      <p class="message">${strings.importTextHint(TEXT_LIMIT)}</p>
+      <textarea
+        aria-label=${strings.importTextLabel}
+        .value=${this.text}
+        ?disabled=${this.reading}
+        @input=${(e: Event) => (this.text = (e.target as HTMLTextAreaElement).value)}
+      ></textarea>
+      <div class="bar">
+        <dc-button size="sm" ?disabled=${this.reading || this.busy || !this.text.trim() || over} @click=${this.readText}
+          >${strings.importTextRead}</dc-button
+        >
+        <span class=${over ? 'error' : 'message'}>${strings.importTextCount(this.text.length, TEXT_LIMIT)}</span>
+        ${this.reading ? html`<span class="message" role="status">${strings.importTextReading}</span>` : nothing}
+      </div>
+    `
+  }
+
+  /** The records the model read, field by field — what the person checks before they come in. */
+  private renderRecords(plan: ImportPlan) {
+    const shown = this.fields.filter((f) => plan.documents.some((d) => d.values[f.name] !== undefined))
+    const cell = (v: unknown) => (Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? '예' : '아니오') : String(v ?? ''))
+    return html`<div class="records">
+      <table aria-label=${strings.importRecords}>
+        <thead>
+          <tr>
+            ${shown.map((f) => html`<th scope="col">${f.label}${this.judgment.includes(f.name) ? ' *' : ''}</th>`)}
+          </tr>
+        </thead>
+        <tbody>
+          ${plan.documents.map((d) => html`<tr>${shown.map((f) => html`<td>${cell(d.values[f.name])}</td>`)}</tr>`)}
+        </tbody>
+      </table>
+    </div>
+    <p class="message">${strings.importProposedNote(this.proposedBy)}</p>`
+  }
+
+  /** Which field each pasted column fills — or, for one that fills none, what it is kept for. */
+  private renderColumns(plan: ImportPlan) {
     return html`
       <table>
         <thead>
@@ -198,6 +314,13 @@ export class LlImport extends LitElement {
           )}
         </tbody>
       </table>
+    `
+  }
+
+  private renderPlan(plan: ImportPlan) {
+    const problems = plan.problems
+    return html`
+      ${this.proposedBy ? this.renderRecords(plan) : this.renderColumns(plan)}
       <p class="message" role="status">${strings.importSummary(plan.documents.length, plan.skipped)}</p>
       ${problems.length
         ? html`<p>${strings.importProblems(problems.length)}</p>

@@ -55,6 +55,48 @@ export interface ImportPlan {
   skipped: number
 }
 
+/**
+ * The records a model read out of text, from its reply: the JSON array in the reply's last fenced block — or the reply
+ * itself — each an object of field → value. Null when the reply holds no such array.
+ */
+export function recordsFromReply(reply: string): Record<string, unknown>[] | null {
+  const blocks = [...reply.matchAll(/```[ \t]*(?:json)?[ \t]*\r?\n([\s\S]*?)```/g)].map((m) => m[1])
+  for (const text of [...blocks.reverse(), reply]) {
+    const start = text.indexOf('[')
+    const end = text.lastIndexOf(']')
+    if (start < 0 || end < start) continue
+    try {
+      const parsed: unknown = JSON.parse(text.slice(start, end + 1))
+      if (Array.isArray(parsed) && parsed.every((r) => typeof r === 'object' && r !== null && !Array.isArray(r)))
+        return parsed as Record<string, unknown>[]
+    } catch {
+      // Not JSON: the next candidate, if any.
+    }
+  }
+  return null
+}
+
+/** A value as a spreadsheet cell holds it: a list as its items joined, a yes or no as 예 or 아니오, anything else as nothing. */
+function cellOf(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'boolean') return value ? '예' : '아니오'
+  if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' || typeof v === 'number').join(', ')
+  return ''
+}
+
+/**
+ * Records as rows to plan, as pasted rows are planned: the template's field names as headings, then one row per record
+ * with the value each holds for a field — keyed by the field's name or its label.
+ */
+export function rowsFromRecords(records: Record<string, unknown>[], fields: ImportField[]): string[][] {
+  const keyed = (record: Record<string, unknown>, field: ImportField) => {
+    const key = Object.keys(record).find((k) => normalize(k) === normalize(field.name) || normalize(k) === normalize(field.label))
+    return key === undefined ? '' : cellOf(record[key])
+  }
+  return [fields.map((f) => f.name), ...records.map((record) => fields.map((f) => keyed(record, f)))]
+}
+
 /** The fields of a template, as an import can fill them. */
 export function importFields(templateSource: string): ImportField[] {
   return parseFormdown(templateSource).forms.map((f) => {

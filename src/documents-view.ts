@@ -35,6 +35,7 @@ import { failureKind, host, removedBy, touches, vault, type VaultChanged, type V
 import { readVault, syncVault, onVaultChanged } from './vault-snapshot.js'
 import { documentsOf, newestFirst, type TemplateItem } from './template-scope.js'
 import { createDocumentFile } from './document-files.js'
+import type { ModelSettings } from './settings.js'
 import { conflictLabels, conflictNoticeFor, conflictOf, isCopy, noteFor } from './conflicts.js'
 import { found, matchingLine, shownName, type Found } from './cases.js'
 import { confirmDiscard, markUnsaved } from './unsaved.js'
@@ -214,6 +215,8 @@ export class LlDocuments extends LitElement {
   @property({ attribute: false }) scope: TemplateItem | null = null
   /** A document to open as soon as the view shows. */
   @property({ attribute: false }) openPath?: string
+  /** The model set up for the chat, if any: importing can have it read records out of text. */
+  @property({ attribute: false }) model: ModelSettings | null = null
 
   /** This template's documents, their conflict copies included. */
   @state() private documents: VaultEntry[] = []
@@ -992,6 +995,7 @@ export class LlDocuments extends LitElement {
           ? html`<ll-import
               .vaultInfo=${this.vaultInfo}
               .template=${this.scope}
+              .model=${this.model}
               @ll-imported=${(e: CustomEvent<{ created: number }>) => void this.imported(e.detail.created)}
               @ll-import-cancel=${() => (this.importing = false)}
             ></ll-import>`

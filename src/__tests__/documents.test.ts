@@ -100,6 +100,17 @@ describe('document id', () => {
     expect(documentFrontMatter(updateDocument(doc, { title: 'B' })).id).toBe('doc-1')
   })
 
+  it('marks values a person has not decided as suggestions of who wrote them — a field holding none, not', () => {
+    const doc = newDocument(template, { title: 'A', severity: 'high' }, 'doc-1', { severity: '채팅(qwen3-default)', owner: '채팅(qwen3-default)' })
+    expect(documentFrontMatter(doc)).toEqual({
+      template: 'bug-report@1',
+      id: 'doc-1',
+      values: { title: 'A', severity: 'high' },
+      proposed: { severity: '채팅(qwen3-default)' },
+    })
+    expect(documentFrontMatter(newDocument(template, { title: 'A' }, 'doc-1', { severity: '채팅(m)' })).proposed).toBeUndefined()
+  })
+
   it('takes the marks off values a person decided, leaving the rest', () => {
     const doc = '---\ntemplate: bug-report@1\nseverity: high\nowner: 총무\nlowline:\n  id: doc-1\n  proposed:\n    severity: 메일 분류기\n    owner: 메일 분류기\n---\n'
     const one = settleProposed(doc, ['severity'])

@@ -534,7 +534,12 @@ export class LlApp extends LitElement {
         ? html`<ll-table .vaultInfo=${info} .template=${template.ref}></ll-table>`
         : this.tab === 'template'
           ? html`<ll-templates .vaultInfo=${info} .path=${template.path} .model=${this.settings?.model ?? null}></ll-templates>`
-          : html`<ll-documents .vaultInfo=${info} .scope=${template} .openPath=${this.openPath}></ll-documents>`}
+          : html`<ll-documents
+              .vaultInfo=${info}
+              .scope=${template}
+              .openPath=${this.openPath}
+              .model=${this.settings?.model ?? null}
+            ></ll-documents>`}
     </div>`
   }
 

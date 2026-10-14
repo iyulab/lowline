@@ -2,9 +2,9 @@ import { readdir, readFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
-import { parseFormdown } from '@formdown/core'
-import { TEMPLATE, BUG } from '../shared.mjs'
-import { SETTINGS } from '../app.mjs'
+import { parseFormdown, readFrontMatter } from '@formdown/core'
+import { TEMPLATE, BUG, INTAKE, documentsIn } from '../shared.mjs'
+import { SETTINGS, q } from '../app.mjs'
 
 export default {
   async 'starts the sidecar with the app'(app) {
@@ -315,6 +315,77 @@ export default {
       if (await app.cdp.evaluate(`!!${panel}`)) await app.click('dc-button', '모델 쓰지 않기').catch(() => {})
       for (let tries = 0; (await settingsNow()).model && tries < 50; tries++) await new Promise((r) => setTimeout(r, 100))
       if (await app.cdp.evaluate(`!!__e2e.all('ll-chat-panel')[0]`)) await app.click('dc-button', '채팅')
+    }
+  },
+
+  async 'reads records out of pasted text with the model set up, its judgment values coming in as its suggestions'(app, vault) {
+    // A server of the person's own that speaks the OpenAI way: it reads two records out of the text it is given.
+    const fence = '```'
+    const asked = []
+    const records = [
+      { 요청: '스캐너에 용지가 걸렸어요', 부서: '영업', 담당: '총무' },
+      { 요청: '회의실 의자 다리가 부러졌어요', 부서: '개발', 담당: '장비' },
+    ]
+    const server = createServer((req, res) => {
+      let body = ''
+      req.on('data', (chunk) => (body += chunk))
+      req.on('end', () => {
+        asked.push(JSON.parse(body))
+        const text = `${fence}json\n${JSON.stringify(records)}\n${fence}`
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'small-4b', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }))
+      })
+    })
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const model = { preset: 'custom', baseUrl: `http://127.0.0.1:${server.address().port}/v1`, model: 'small-4b' }
+    const useModel = (setting) =>
+      app.cdp.evaluate(`__e2e.all('dp-shell')[0].dispatchEvent(new CustomEvent('ll-model', { detail: ${q(setting)}, bubbles: true, composed: true }))`)
+    const pasted = '[메일] 영업팀 김민수: 스캐너에 용지가 걸렸어요. 총무팀에서 처리 부탁드려요.\n[메모] 개발팀 — 회의실 의자 다리가 부러짐, 장비 담당 확인 필요'
+    const imp = `__e2e.all('ll-import')[0]?.shadowRoot`
+    const before = new Set(await documentsIn(vault))
+    let created = []
+    try {
+      await app.documentsOf(INTAKE)
+      await app.click('dc-button', '가져오기')
+      // Without a model, the import says where one is set up.
+      await app.cdp.waitFor(`${imp}?.textContent.includes('모델을 정하면')`, 'where to set a model up')
+      await useModel(model)
+      await app.cdp.waitFor(`!!${imp}?.querySelector('textarea[aria-label="붙여 넣은 글"]')`, 'the text for the model to read')
+      await app.cdp.evaluate(`(() => { const t = ${imp}.querySelector('textarea[aria-label="붙여 넣은 글"]'); t.value = ${q(pasted)}
+        t.dispatchEvent(new Event('input', { bubbles: true, composed: true })); return true })()`)
+      await app.click('dc-button', '모델로 읽기')
+      await app.status('문서 2건을 만듭니다')
+      // What the model read is shown before anything is written: each record, its judgment field marked.
+      const table = await app.cdp.evaluate(`${imp}.querySelector('table[aria-label="모델이 읽은 기록"]').textContent.replace(/\\s+/g, ' ')`)
+      for (const value of ['스캐너에 용지가 걸렸어요', '회의실 의자 다리가 부러졌어요', '총무', '장비', '담당 *']) assert.ok(table.includes(value), `${value} in ${table}`)
+      assert.match(await app.cdp.evaluate(`${imp}.textContent`), /채팅\(small-4b\)의 제안으로 들어가고/, 'whose suggestion the judgment values are')
+      // The model was given the template and the text — nothing else of the vault.
+      assert.equal(asked.length, 1)
+      assert.match(asked[0].messages[0].content, /@담당: \[select options="장비,인사,총무"\]/)
+      assert.equal(asked[0].messages[1].content, pasted)
+
+      await app.click('dc-button', '2건 가져오기')
+      await app.status('2건을 가져왔습니다')
+      await app.noAlert()
+      created = (await documentsIn(vault)).filter((n) => !before.has(n))
+      assert.equal(created.length, 2, 'one document per record')
+      for (const name of created) {
+        const data = readFrontMatter(await readFile(join(vault, '문서', name), 'utf8')).frontMatter.data
+        assert.deepEqual(data.lowline.proposed, { 담당: '채팅(small-4b)' }, `the judgment value of ${name} is a suggestion`)
+        assert.ok(['영업', '개발'].includes(data.부서), 'the other values are the document\'s own')
+      }
+    } finally {
+      server.close()
+      await useModel(null)
+      for (let tries = 0; JSON.parse(await readFile(SETTINGS, 'utf8').catch(() => '{}')).model && tries < 50; tries++)
+        await new Promise((r) => setTimeout(r, 100))
+      // Leave the vault as it was for the scenarios that follow.
+      for (const name of created) await rm(join(vault, '문서', name))
+      await app.cdp.waitFor(
+        `!__e2e.all('button.item').some((b) => /스캐너에 용지가|의자 다리가/.test(b.textContent))`,
+        'the imported documents gone from the list',
+        { timeoutMs: 15_000 },
+      )
     }
   },
 }

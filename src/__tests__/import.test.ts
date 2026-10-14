@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cellValue, importFields, matchColumns, parseRecordDate, planImport } from '../import.js'
+import { cellValue, importFields, matchColumns, parseRecordDate, planImport, recordsFromReply, rowsFromRecords } from '../import.js'
 
 const template = `---
 id: bug-report
@@ -141,5 +141,45 @@ describe('keeping who the imported records were', () => {
     expect(day('2026-02-30')).toBeUndefined()
     expect(day('C-1001')).toBeUndefined()
     expect(day('')).toBeUndefined()
+  })
+})
+
+describe('records a model read out of text', () => {
+  it('are the JSON array in its reply — in its last block, or bare — and nothing else', () => {
+    const fence = '```'
+    expect(recordsFromReply(`읽었습니다.
+${fence}json
+[{"제목": "A"}]
+${fence}`)).toEqual([{ 제목: 'A' }])
+    expect(recordsFromReply('[{"제목": "A"}, {"제목": "B"}]')).toEqual([{ 제목: 'A' }, { 제목: 'B' }])
+    expect(recordsFromReply(`${fence}json
+[]
+${fence}`)).toEqual([])
+    expect(recordsFromReply('기록이 없습니다.')).toBeNull()
+    expect(recordsFromReply('[1, 2]')).toBeNull()
+    expect(recordsFromReply(`${fence}json
+[{"제목": "A",}]
+${fence}`)).toBeNull()
+  })
+
+  it('become rows planned as pasted rows are: a field by its name or label, a list as its items, a yes as 예', () => {
+    const rows = rowsFromRecords(
+      [
+        { 제목: '저장이 멈춤', 심각도: '높음', 재현됨: true, 태그: ['저장', '성능'], 없는칸: 'x' },
+        { '재현 절차': '1. 연다', 심각도: '아주 높음' },
+      ],
+      fields,
+    )
+    expect(rows).toEqual([
+      ['제목', '심각도', '재현_절차', '재현됨', '태그'],
+      ['저장이 멈춤', '높음', '', '예', '저장, 성능'],
+      ['', '아주 높음', '1. 연다', '', ''],
+    ])
+    const plan = planImport(rows, fields, rows[0].map(() => undefined))
+    expect(plan.documents.map((d) => d.values)).toEqual([
+      { 제목: '저장이 멈춤', 심각도: '높음', 재현됨: true, 태그: ['저장', '성능'] },
+      { 심각도: '아주 높음', 재현_절차: '1. 연다' },
+    ])
+    expect(plan.problems).toEqual([{ row: 3, field: '심각도', value: '아주 높음' }]) // not one of its choices: shown
   })
 })

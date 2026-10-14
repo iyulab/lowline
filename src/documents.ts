@@ -89,10 +89,16 @@ export function holdsValue(value: unknown): boolean {
   return value !== undefined && value !== null && !isEmpty(value as FieldValues[string])
 }
 
-/** A new document filled in from `templateSource`, named by `id`. */
-export function newDocument(templateSource: string, values: FieldValues, id: string): string {
+/**
+ * A new document filled in from `templateSource`, named by `id`. `proposed` marks values a person has not decided —
+ * judgment field → who wrote it — under `lowline.proposed`, so they are suggested in the field and not learned from
+ * until a person settles them; a field it names that holds no value is not marked.
+ */
+export function newDocument(templateSource: string, values: FieldValues, id: string, proposed: Record<string, string> = {}): string {
   const { ref } = templateInfo(templateSource)
-  return updateFrontMatter(templateBody(templateSource), { template: ref, lowline: { id }, ...valueChanges(values) })
+  const marked = Object.fromEntries(Object.entries(proposed).filter(([field]) => holdsValue(values[field])))
+  const lowline = Object.keys(marked).length > 0 ? { id, proposed: marked } : { id }
+  return updateFrontMatter(templateBody(templateSource), { template: ref, lowline, ...valueChanges(values) })
 }
 
 /**
