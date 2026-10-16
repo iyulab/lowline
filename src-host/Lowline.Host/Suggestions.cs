@@ -33,6 +33,12 @@ public static class SuggestionMode
 
     /// <summary>The person turned down this field's suggestion for this document; it is not offered again.</summary>
     public const string Rejected = "rejected";
+
+    /// <summary>
+    /// No value, but its class: the leading characters (<see cref="Suggestion.Value"/>) of the values settled alongside one
+    /// the document has, kept to the same promise as a value — for a field whose template names its class length.
+    /// </summary>
+    public const string Coarse = "coarse";
 }
 
 /// <summary>Where a suggestion a person decided came from, as events record it.</summary>
@@ -156,7 +162,7 @@ public sealed class Suggestions
                 // no longer has is no threshold: its strength was chosen on scores those fields gave.
                 thresholds[(template.Ref, field)] = kept?.GetValueOrDefault((template.Ref, field)) is { } threshold
                     && threshold.RestsWithin([.. template.Fields.Select(f => f.Name)])
-                    ? threshold.ChosenOver(DomainOf(template, field))
+                    ? threshold.ChosenOver(DomainOf(template, field)) && threshold.CoarsePrefix == CoarseOf(template, field)
                         ? threshold with { Confirmed = confirmed }
                         : threshold with { Confirmed = confirmed, SelectedAt = null }
                     : new FieldThreshold(null, confirmed, SelectedAt: null);
@@ -185,7 +191,7 @@ public sealed class Suggestions
     /// replaying its confirmed documents in the order they were saved. It runs apart from building memory and its
     /// result is applied with <see cref="Apply"/>.
     /// </summary>
-    public IReadOnlyDictionary<(string Template, string Field), FieldThreshold> SelectThresholds(CancellationToken cancellationToken)
+    public async Task<IReadOnlyDictionary<(string Template, string Field), FieldThreshold>> SelectThresholdsAsync(CancellationToken cancellationToken)
     {
         var chosen = new Dictionary<(string, string), FieldThreshold>();
         foreach (var ((template, field), current) in _thresholds)
@@ -203,9 +209,21 @@ public sealed class Suggestions
                 () => new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered,
                 typedLongest: typeable ? TypedLongest : 0);
             var key = keyed.Chosen;
-            chosen[(template, field)] = new FieldThreshold(
+            var threshold = new FieldThreshold(
                 key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
-                keyed.KeyFields, keyed.Typed?.ByLength.Select(r => r.Chosen).ToList());
+                keyed.KeyFields, keyed.Typed?.ByLength.Select(r => r.Chosen).ToList(), CoarseOf(_templates[template], field));
+            // A class is offered where the value is not, so its strength is replayed on the lookups the value's leaves.
+            if (threshold.CoarsePrefix is not null)
+            {
+                var valued = Form(_templates[template], f => f == field ? threshold : new FieldThreshold(null, 0, 0))!;
+                // TODO(upstream: Gil — a coarse replay for a resolver with no document memory): the resolver here keeps
+                // none, so the similar document half of this replay is never used; only its key threshold is read.
+                var layers = await ThresholdSelection.SelectCoarseAsync(
+                    new FieldMemory(), new Gil.Memory.LexicalMemory(), valued, field, _settled[template], TargetPrecision,
+                    MinimumAnswered, cancellationToken);
+                threshold = threshold with { Coarse = layers.Key.Chosen };
+            }
+            chosen[(template, field)] = threshold;
         }
         return chosen;
     }
@@ -269,6 +287,16 @@ public sealed class Suggestions
     private static IReadOnlyList<string>? DomainOf(TemplateSnapshot template, string field) =>
         template.Fields.FirstOrDefault(f => f.Name == field) is { } f ? DomainOf(f) : null;
 
+    /// <summary>
+    /// How many leading characters of a field's values name their class, as its template says; null when it says none,
+    /// or for a field that takes several values.
+    /// </summary>
+    private static int? CoarseOf(TemplateSnapshot template, string field) =>
+        template.Coarse?.GetValueOrDefault(field) is > 0 and var prefix
+        && template.Fields.FirstOrDefault(f => f.Name == field) is { Multiple: false }
+            ? prefix
+            : null;
+
     /// <summary>A template as a Gil form, or null when its author turned suggestions on for no field.</summary>
     private static FormDefinition? Form(TemplateSnapshot template, Func<string, FieldThreshold> threshold)
     {
@@ -289,6 +317,9 @@ public sealed class Suggestions
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
                 Candidates = DomainOf(f),
+                Coarse = CoarseOf(template, f.Name) is { } prefix
+                    ? new CoarseLevel(prefix) { KeyThreshold = threshold(f.Name).Coarse?.Threshold }
+                    : null,
             }
             : new FieldDefinition(f.Name, FieldRole.Observed));
         // No model is called, so the language is never used.
@@ -340,6 +371,9 @@ public sealed class Suggestions
         // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
         if (suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SettledFieldMemory } answer, ..] })
             return new Suggestion(answer.Value, SuggestionMode.Key, answer.Evidence);
+        // Where the value is not, its class may be — on the same layer, at the strength its own replay chose.
+        if (suggestion?.Coarse is { Trusted: true, Source: FieldSource.SettledFieldMemory } coarse)
+            return new Suggestion(coarse.Value, SuggestionMode.Coarse, coarse.Evidence);
         return Abstain(request.Template, request.Field);
     }
 
@@ -394,9 +428,15 @@ public sealed class Suggestions
 /// How the field's replay did with one, two, three characters typed, and the strength chosen for each (null where none was
 /// right often enough); null for a field whose value is not typed, or not yet chosen.
 /// </param>
+/// <param name="CoarsePrefix">How many leading characters named the field's class when its thresholds were chosen; null for none.</param>
+/// <param name="Coarse">
+/// How the class did on the lookups the value left, and the strength chosen for it; null when none was right often enough,
+/// or the field has no class.
+/// </param>
 public sealed record FieldThreshold(
     ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
-    IReadOnlyList<string>? KeyFields = null, IReadOnlyList<ThresholdChoice?>? Typed = null)
+    IReadOnlyList<string>? KeyFields = null, IReadOnlyList<ThresholdChoice?>? Typed = null, int? CoarsePrefix = null,
+    ThresholdChoice? Coarse = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>

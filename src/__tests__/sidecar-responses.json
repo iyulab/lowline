@@ -558,7 +558,8 @@
     "mode": [
       "key",
       "abstain",
-      "rejected"
+      "rejected",
+      "coarse"
     ],
     "reason": [
       "no-history",

@@ -65,6 +65,17 @@ describe('templateSnapshot', () => {
     expect(templateSnapshot(template.replace(/lowline:\n  suggest: .*\n/, '')).suggest).toEqual([])
     expect(templateSnapshot(template.replace('suggest: [심각도, 없는칸]', 'suggest: 심각도')).suggest).toEqual([])
   })
+
+  it('carries how many leading characters name the class of a judgment field taking one value, and nothing else', () => {
+    const coarse = (line: string) => templateSnapshot(template.replace('suggest: [심각도, 없는칸]', `suggest: [심각도, 태그]\n  coarse: ${line}`)).coarse
+    expect(coarse('{ 심각도: 1 }')).toEqual({ 심각도: 1 })
+    // Not a judgment field, several values, no whole number of characters, not a map: none of it counts.
+    expect(coarse('{ 제목: 2, 태그: 1, 심각도: 0 }')).toBeUndefined()
+    expect(coarse('{ 심각도: 1.5 }')).toBeUndefined()
+    expect(coarse('{ 심각도: "2" }')).toBeUndefined()
+    expect(coarse('[심각도]')).toBeUndefined()
+    expect(templateSnapshot(template)).not.toHaveProperty('coarse')
+  })
 })
 
 describe('documentSnapshot', () => {

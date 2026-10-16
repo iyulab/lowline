@@ -21,6 +21,7 @@ id: intake
 version: 2
 lowline:
   suggest: [담당]
+  coarse: { 담당: 1 }
 ---
 # 접수
 

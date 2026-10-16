@@ -193,7 +193,7 @@ public sealed class SuggestionsTests
         var many = await Suggestions.BuildAsync(Many(15), Ct);
         Assert.True(many.NeedsSelection);
         Assert.Null(many.Choice("intake@1", "담당")); // chosen apart from building memory
-        many.Apply(many.SelectThresholds(Ct));
+        many.Apply(await many.SelectThresholdsAsync(Ct));
         Assert.False(many.NeedsSelection);
         var choice = many.Choice("intake@1", "담당");
         Assert.NotNull(choice);
@@ -211,7 +211,7 @@ public sealed class SuggestionsTests
     public async Task A_kept_threshold_resting_on_a_field_the_template_no_longer_has_is_none()
     {
         var many = await Suggestions.BuildAsync(Many(15), Ct);
-        many.Apply(many.SelectThresholds(Ct));
+        many.Apply(await many.SelectThresholdsAsync(Ct));
         var chosen = many.Thresholds[("intake@1", "담당")];
         Assert.NotNull(chosen.Choice);
 
@@ -298,7 +298,7 @@ public sealed class SuggestionsTests
                 Values($$"""{"요청": "{{words[i % 10]}} {{words[i / 10 * 3 % 10]}} {{i}}", "고객": "{{customers[i % 3]}}", "담당": "{{owners[customers[i % 3]]}}"}"""),
                 Modified: i))]);
         var suggestions = await Suggestions.BuildAsync(vault, Ct);
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
 
         var request = new SuggestRequest("inquiry@1", "담당", Values($$"""{"요청": "전혀 다른 요청", "고객": "{{customers[1]}}"}"""));
         Assert.Equal(new Suggestion("인사", "key", $"고객: {customers[1]}"), await suggestions.SuggestAsync(request, Ct));
@@ -314,7 +314,7 @@ public sealed class SuggestionsTests
         // Until replay shows 부서 decides it, a value settled alongside it is only a guess.
         Assert.Equal(new Suggestion(null, "abstain", null, Abstention.BelowTarget), await suggestions.SuggestAsync(request, Ct));
 
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
         Assert.Equal(new Suggestion("인사", "key", "부서: 개발"), await suggestions.SuggestAsync(request, Ct));
     }
 
@@ -334,7 +334,7 @@ public sealed class SuggestionsTests
                 Values($$"""{"요청": "{{Words[i % 10]}} {{i}}", "담당": "{{Owners[Departments[i % 3]]}}", "승인": "{{approvers[Owners[Departments[i % 3]]]}}"}"""),
                 Modified: i))]);
         var suggestions = await Suggestions.BuildAsync(vault, Ct);
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
 
         var asked = new SuggestRequest("routed@1", "승인", Values("""{"요청": "전혀 다른 요청"}"""));
         Assert.Equal(new Suggestion(null, "abstain", null, Abstention.Undecided), await suggestions.SuggestAsync(asked, Ct));
@@ -352,7 +352,7 @@ public sealed class SuggestionsTests
         var suggestions = await Suggestions.BuildAsync(vault, Ct);
         Assert.Equal(NoReplay.Pending, suggestions.WhyNoReplay("intake@1", "담당"));
 
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
         Assert.Null(suggestions.Choice("intake@1", "담당"));
         Assert.Equal(Abstention.BelowTarget, suggestions.WhyNoReplay("intake@1", "담당"));
         var suggestion = await suggestions.SuggestAsync(
@@ -371,12 +371,12 @@ public sealed class SuggestionsTests
         Assert.Equal(NoReplay.Few, empty.WhyNoReplay("intake@1", "담당"));
 
         var few = await Suggestions.BuildAsync(Many(5), Ct);
-        few.Apply(few.SelectThresholds(Ct));
+        few.Apply(await few.SelectThresholdsAsync(Ct));
         Assert.Equal(NoReplay.Few, few.WhyNoReplay("intake@1", "담당"));
 
         var many = await Suggestions.BuildAsync(Many(15), Ct);
         Assert.Equal(NoReplay.Pending, many.WhyNoReplay("intake@1", "담당"));
-        many.Apply(many.SelectThresholds(Ct));
+        many.Apply(await many.SelectThresholdsAsync(Ct));
         Assert.Null(many.WhyNoReplay("intake@1", "담당"));
         Assert.Null(many.WhyNoReplay("intake@1", "부서")); // not a judgment field
     }
@@ -401,7 +401,7 @@ public sealed class SuggestionsTests
     public async Task Typing_narrows_a_field_no_strength_answers_on_its_own()
     {
         var suggestions = await Suggestions.BuildAsync(TwoEach(), Ct);
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
         var asked = new SuggestRequest("assigned@1", "담당자", Values("""{"요청": "전혀 다른 요청", "부서": "영업"}"""));
 
         // 부서 leaves two people: a value it was settled with is right half the time, so none is offered.
@@ -432,7 +432,7 @@ public sealed class SuggestionsTests
     public async Task A_field_whose_value_is_picked_has_no_strengths_for_typing()
     {
         var suggestions = await Suggestions.BuildAsync(Many(15), Ct);
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
         // 담당 is a select: there is no typing into it, and text said to be typed there asks nothing.
         Assert.Null(suggestions.Thresholds[("intake@1", "담당")].Typed);
         var typed = new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리 문제", "부서": "영업"}"""), Typed: "장");
@@ -698,12 +698,89 @@ public sealed class SuggestionsTests
         Assert.Equal("배송", byPhone.GroupBy(d => d.Values["분류"].GetString()).MaxBy(g => g.Count())!.Key);
 
         var suggestions = await Suggestions.BuildAsync(vault, Ct);
-        suggestions.Apply(suggestions.SelectThresholds(Ct));
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
 
         var suggestion = await suggestions.SuggestAsync(new SuggestRequest("support@1", "분류",
             Values("""{"문의": "정수기에서 물이 조금씩 흘러나와요", "채널": "전화", "제품": "정수기"}""")), Ct);
         Assert.NotNull(suggestion);
         Assert.NotEqual("key", suggestion.Mode);
         Assert.NotEqual("배송", suggestion.Value);
+    }
+
+    /// <summary>
+    /// A fault form whose code's first two characters name its chapter: each 설비 has five codes of one chapter, so the
+    /// settled values under a 설비 never decide the code, and always decide its chapter.
+    /// </summary>
+    private static TemplateSnapshot Fault(IReadOnlyDictionary<string, int>? coarse) => new("fault@1",
+    [
+        new TemplateField("설비", "text"),
+        new TemplateField("코드", "text"),
+    ], Suggest: ["코드"], Coarse: coarse);
+
+    private static readonly Dictionary<string, string> Chapters = new() { ["압축기"] = "21", ["펌프"] = "32", ["밸브"] = "52" };
+
+    private static DocumentSnapshot[] Faults() =>
+    [
+        .. Enumerable.Range(0, 60).Select(i =>
+        {
+            var unit = Chapters.Keys.ElementAt(i % 3);
+            return new DocumentSnapshot($"결함/{i}.md", "fault@1", Values($$"""{"설비": "{{unit}}", "코드": "{{Chapters[unit]}}{{i / 3 % 5:D2}}"}"""), Modified: i);
+        }),
+    ];
+
+    [Fact]
+    public async Task Offers_a_fields_class_where_its_value_is_undecided_when_the_template_names_the_class()
+    {
+        await using var vault = await Selected(new VaultSnapshot([Fault(new Dictionary<string, int> { ["코드"] = 2 })], Faults()));
+
+        var suggestion = await vault.SuggestAsync(new SuggestRequest("fault@1", "코드", Values("""{"설비": "펌프"}""")), Ct);
+        Assert.NotNull(suggestion);
+        Assert.Equal(SuggestionMode.Coarse, suggestion.Mode);
+        Assert.Equal("32", suggestion.Value);
+        Assert.Equal("설비: 펌프", suggestion.Source);
+
+        // Nothing settled under a 설비 never seen: no class either.
+        var unknown = await vault.SuggestAsync(new SuggestRequest("fault@1", "코드", Values("""{"설비": "냉각탑"}""")), Ct);
+        Assert.Equal(SuggestionMode.Abstain, unknown!.Mode);
+    }
+
+    [Fact]
+    public async Task Offers_no_class_for_a_field_whose_template_names_none()
+    {
+        await using var vault = await Selected(new VaultSnapshot([Fault(null)], Faults()));
+
+        var suggestion = await vault.SuggestAsync(new SuggestRequest("fault@1", "코드", Values("""{"설비": "펌프"}""")), Ct);
+        Assert.Equal(SuggestionMode.Abstain, suggestion!.Mode);
+        Assert.Null(suggestion.Value);
+    }
+
+    [Fact]
+    public async Task A_class_kept_from_an_earlier_launch_is_chosen_again_when_the_template_names_another_length()
+    {
+        var two = new VaultSnapshot([Fault(new Dictionary<string, int> { ["코드"] = 2 })], Faults());
+        var chosen = await Suggestions.BuildAsync(two, Ct);
+        chosen.Apply(await chosen.SelectThresholdsAsync(Ct));
+        var threshold = chosen.Thresholds[("fault@1", "코드")];
+        Assert.Equal(2, threshold.CoarsePrefix);
+        Assert.NotNull(threshold.Coarse);
+
+        var file = Path.GetTempFileName();
+        try
+        {
+            ThresholdStore.Save(file, chosen.Thresholds);
+            var kept = ThresholdStore.Load(file);
+            Assert.Equal(threshold.CoarsePrefix, kept[("fault@1", "코드")].CoarsePrefix);
+            Assert.Equal(threshold.Coarse, kept[("fault@1", "코드")].Coarse);
+            Assert.False((await Suggestions.BuildAsync(two, Ct, kept)).NeedsSelection);
+
+            // One character now names the class: a strength chosen for two is not one for it.
+            var one = new VaultSnapshot([Fault(new Dictionary<string, int> { ["코드"] = 1 })], Faults());
+            Assert.True((await Suggestions.BuildAsync(one, Ct, kept)).NeedsSelection);
+            Assert.True((await Suggestions.BuildAsync(new VaultSnapshot([Fault(null)], Faults()), Ct, kept)).NeedsSelection);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
     }
 }

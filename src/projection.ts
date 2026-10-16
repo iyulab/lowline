@@ -31,6 +31,12 @@ export interface TemplateSnapshot {
   fields: TemplateField[]
   /** Judgment fields the template's author turned suggestions on for (front matter `lowline.suggest`). */
   suggest: string[]
+  /**
+   * For judgment fields whose values name a broader class in their leading characters — the chapter of a fault code —
+   * how many characters (front matter `lowline.coarse`): where the value cannot be suggested, its class may be.
+   * Absent when the template names none.
+   */
+  coarse?: Record<string, number>
 }
 
 export interface DocumentSnapshot {
@@ -87,7 +93,9 @@ export function templateSnapshot(source: string): TemplateSnapshot {
     ...(f.relation?.type === 'fk' ? { reference: f.relation.target } : {}),
     }
   })
-  return { ref, fields, suggest: suggestFields(parsed.frontMatter?.data, fields) }
+  const suggest = suggestFields(parsed.frontMatter?.data, fields)
+  const coarse = coarseFields(parsed.frontMatter?.data, fields, suggest)
+  return { ref, fields, suggest, ...(coarse ? { coarse } : {}) }
 }
 
 /**
@@ -111,6 +119,20 @@ function suggestFields(data: Record<string, unknown> | undefined, fields: Templa
   if (!Array.isArray(named)) return []
   const known = new Set(fields.map((f) => f.name))
   return named.filter((n): n is string => typeof n === 'string' && known.has(n))
+}
+
+/**
+ * How many leading characters name the class of a judgment field's values, by field, as the template's front matter
+ * says under `lowline.coarse` — or undefined when it names none. Only a judgment field taking one value, and a whole
+ * number of characters from one, count; anything else under the key is ignored.
+ */
+function coarseFields(data: Record<string, unknown> | undefined, fields: TemplateField[], suggest: string[]): Record<string, number> | undefined {
+  const lowline = data?.lowline
+  const named = typeof lowline === 'object' && lowline !== null ? (lowline as { coarse?: unknown }).coarse : undefined
+  if (typeof named !== 'object' || named === null || Array.isArray(named)) return undefined
+  const single = new Set(fields.filter((f) => !f.multiple && suggest.includes(f.name)).map((f) => f.name))
+  const coarse = Object.entries(named).filter(([field, n]) => single.has(field) && Number.isInteger(n) && (n as number) >= 1)
+  return coarse.length > 0 ? (Object.fromEntries(coarse) as Record<string, number>) : undefined
 }
 
 /** A document's template and values, or undefined when it names no template. */
@@ -271,11 +293,12 @@ export interface Suggestion {
   /** The suggested value; null when there is none to offer. */
   value: string | null
   /**
-   * `key`: settled alongside a value this document has · `abstain` · `rejected` · `proposed`: the value another program
+   * `key`: settled alongside a value this document has · `coarse`: not the value but its class — its leading characters,
+   * as the template's `lowline.coarse` counts them — kept to the same promise · `abstain` · `rejected` · `proposed`: the value another program
    * wrote into the document as a suggestion (`lowline.proposed` — the app's own, never the sidecar's). Similar documents
    * are never offered as a suggestion — they are shown, with the values they confirmed, only when the person opens "비슷한 사례".
    */
-  mode: 'key' | 'abstain' | 'rejected' | 'proposed'
+  mode: 'key' | 'coarse' | 'abstain' | 'rejected' | 'proposed'
   /** What it rests on: the other field's value (`부서: 영업`) — or, for a proposed value, who wrote it (empty: unsaid). */
   source: string | null
   /** Why there is none, when `value` is null and the field was asked (`abstain`). */

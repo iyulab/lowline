@@ -13,10 +13,12 @@ namespace Lowline.Host;
 public sealed record TemplateField(string Name, string Type, bool Multiple = false, IReadOnlyList<string>? Options = null);
 
 /// <summary>
-/// A template: its `id@version`, its fields in template order, and the judgment fields its author
-/// turned suggestions on for (none unless named).
+/// A template: its `id@version`, its fields in template order, the judgment fields its author
+/// turned suggestions on for (none unless named), and for those whose values name a broader class in their leading
+/// characters, how many characters (<see cref="Coarse"/> — front matter `lowline.coarse`).
 /// </summary>
-public sealed record TemplateSnapshot(string Ref, IReadOnlyList<TemplateField> Fields, IReadOnlyList<string>? Suggest = null);
+public sealed record TemplateSnapshot(
+    string Ref, IReadOnlyList<TemplateField> Fields, IReadOnlyList<string>? Suggest = null, IReadOnlyDictionary<string, int>? Coarse = null);
 
 /// <summary>
 /// A document: where it lives in the vault, its template, its recorded values, when it was last
@@ -252,7 +254,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
     {
         try
         {
-            var chosen = await Task.Run(() => suggestions.SelectThresholds(cancellationToken), cancellationToken);
+            var chosen = await Task.Run(() => suggestions.SelectThresholdsAsync(cancellationToken), cancellationToken);
             await _gate.WaitAsync(cancellationToken);
             try
             {
@@ -399,7 +401,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            if (_cache is null || _templates?.TryGetValue(query.Template, out var snapshot) != true) return null;
+            if (_cache is null || _templates is null || !_templates.TryGetValue(query.Template, out var snapshot)) return null;
             var known = snapshot.Fields.Select(f => f.Name).ToHashSet();
             var groupBy = query.GroupBy ?? [];
             var filters = query.Filters ?? [];
