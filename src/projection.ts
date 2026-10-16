@@ -124,6 +124,19 @@ export function countColumns(template: TemplateSnapshot, templates: readonly Tem
 }
 
 /**
+ * The other templates whose documents refer to `template`'s — inspections naming their business — each with the
+ * fields that do: what a question about a business can count ("the businesses inspected most"). One field naming one
+ * document each, as `countColumns` follows them; in the vault's order.
+ */
+export function referringTemplates(template: TemplateSnapshot, templates: readonly TemplateSnapshot[]): { template: TemplateSnapshot; via: string[] }[] {
+  const id = templateId(template.ref)
+  return templates.flatMap((t) => {
+    const via = t.fields.filter((f) => !f.multiple && f.reference === id).map((f) => f.name)
+    return templateId(t.ref) !== id && via.length > 0 ? [{ template: t, via }] : []
+  })
+}
+
+/**
  * The templates the vault's fields refer to, by id: a template is one whose documents are what other
  * documents are about (a customer, an item) because a field says so — nothing marks it otherwise. Only
  * templates in the vault count.

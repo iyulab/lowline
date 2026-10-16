@@ -107,5 +107,25 @@ public sealed class ChatExtractionTests
         Assert.Contains("- `고객.등록일` (날짜)", told);
         Assert.Contains("- `고객.이름`", told);
         Assert.Contains("그 칸(예: `고객`)에 `equal`과 그 문서의 이름", told);
+        Assert.DoesNotContain("이 서식의 문서를 가리키는 다른 서식", told);
+    }
+
+    [Fact]
+    public async Task A_question_is_told_the_templates_whose_documents_refer_to_its_own_and_how_to_count_them_by_the_document_each_names()
+    {
+        var lmsupply = new LocalModelsTests.StandIn { Reply = "```json\n{\"of\": \"문의\", \"groupBy\": [\"고객\"]}\n```" };
+        await using var local = new LocalModels(lmsupply);
+        ReferringTemplate[] referring = [new("문의", ["고객"], [new("고객", "select"), new("분류", "select", ["배송", "반품"]), new("고객.지역", "select", ["서울", "부산"])])];
+
+        var reply = await ChatQuery.ReplyAsync(
+            new ChatQueryRequest(ChatAuthoring.LocalPreset, null, null, "gguf:qwen3-default", "상호: ___@상호", "문의가 많은 고객?", Referring: referring),
+            local, TimeSpan.FromSeconds(20), Ct);
+
+        Assert.True(reply.Ok);
+        var told = lmsupply.Loaded.Single().Asked[0].Content;
+        Assert.Contains("이 서식의 문서를 가리키는 다른 서식", told);
+        Assert.Contains("- `문의` — `고객` 칸이 이 서식의 문서를 가리킵니다. 셀 수 있는 칸: `고객`, `분류` (선택지: 배송, 반품), `고객.지역` (선택지: 서울, 부산)", told);
+        Assert.Contains("""`{"of": "문의", "groupBy": ["고객"]}`""", told);
+        Assert.DoesNotContain("다른 서식의 문서를 가리키는 칸(`-> 서식`)", told);
     }
 }

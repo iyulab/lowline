@@ -3,13 +3,31 @@
 
 import { DATE_TYPES, type ColumnFilter, type TemplateField } from './projection.js'
 import type { DocumentNames } from './references.js'
+import { templateId } from './template-revision.js'
 import { strings } from './strings.js'
 
-/** What to count: by which fields, of which documents, and how many of the largest counts to show (all when unset). */
+/**
+ * What to count: by which fields, of which documents, and how many of the largest counts to show (all when unset).
+ * `of` is the template whose documents are counted when it is not the one asked about — one whose documents refer to
+ * it, as inspections name their business.
+ */
 export interface QueryPlan {
   groupBy: string[]
   filters: ColumnFilter[]
   top?: number
+  of?: string
+}
+
+/**
+ * A template whose documents refer to the one asked about, as a question may count it: its reference, its name as the
+ * vault shows it, its fields that name the asked template's documents, and the columns its documents are counted by
+ * (`countColumns`).
+ */
+export interface ReferringCount {
+  ref: string
+  name: string
+  via: readonly string[]
+  columns: readonly TemplateField[]
 }
 
 /** What the reply asked for, checked: a plan to count — or why it is not one, in the app's terms. */
@@ -17,6 +35,7 @@ export type ReadPlan =
   | { plan: QueryPlan }
   | { unanswerable: string }
   | { problem: 'no-plan' }
+  | { problem: 'unknown-template'; template: string }
   | { problem: 'unknown-field'; field: string }
   | { problem: 'bad-filter'; field: string }
 
@@ -90,16 +109,43 @@ function objectOf(reply: string): Record<string, unknown> | null {
  * A field named twice to count by counts once. A `period` of a date field — one relative to `today`, a month, a year —
  * becomes its first and last day;
  * of a date-and-time field, from the start of the first to the end of the last. A field that refers to other documents
- * holds their ids: one named by its name in `names` is kept as its id.
+ * holds their ids: one named by its name in `names` is kept as its id. A reply that counts `of` another template counts
+ * one of `referring` — by its name or its id — and is checked against that template's columns instead.
  */
-export function queryPlan(reply: string, fields: readonly TemplateField[], today: Date = new Date(), names?: DocumentNames): ReadPlan {
+export function queryPlan(
+  reply: string,
+  columns: readonly TemplateField[],
+  today: Date = new Date(),
+  names?: DocumentNames,
+  referring: readonly ReferringCount[] = [],
+): ReadPlan {
   const asked = objectOf(reply)
   if (!asked) return { problem: 'no-plan' }
   if (typeof asked.unanswerable === 'string') return { unanswerable: asked.unanswerable }
-  const named = (text: unknown) => {
+  // A column by its name or label — or, counting a referring template, a field of the asked one as the referring
+  // template reaches it through the field naming it (`업소유형` of the business is `업소.업소유형` of its inspection).
+  const columnOf = (of: readonly TemplateField[], text: unknown, via: readonly string[] = []) => {
     const wanted = String(text ?? '').trim().replace(/^@/, '')
-    return fields.find((f) => f.name === wanted || f.label === wanted)
+    const reached = via.flatMap((v) => of.filter((f) => f.name === `${v}.${wanted}`))
+    return of.find((f) => f.name === wanted || f.label === wanted) ?? (reached.length === 1 ? reached[0] : undefined)
   }
+  let counted: ReferringCount | undefined
+  if (asked.of !== undefined && asked.of !== null && asked.of !== '') {
+    const wanted = String(asked.of).trim()
+    counted = referring.find((r) => r.name === wanted || templateId(r.ref) === wanted || r.ref === wanted)
+    if (!counted) return { problem: 'unknown-template', template: wanted }
+  } else {
+    // A reply that counts by fields the asked template does not have, all of them one referring template's, counts that
+    // template's documents — said as counted, so a question taken the wrong way is seen for what it counted.
+    const used = [...(Array.isArray(asked.groupBy) ? asked.groupBy : []), ...(Array.isArray(asked.filters) ? asked.filters : []).map((c) => (c as Record<string, unknown> | null)?.field)]
+    if (used.some((name) => !columnOf(columns, name))) {
+      const holding = referring.filter((r) => used.every((name) => columnOf(r.columns, name, r.via)))
+      if (holding.length === 1) counted = holding[0]
+    }
+  }
+  const fields = counted?.columns ?? columns
+  const of = counted?.ref
+  const named = (text: unknown) => columnOf(fields, text, counted?.via)
   const groupBy: string[] = []
   for (const name of Array.isArray(asked.groupBy) ? asked.groupBy : []) {
     const field = named(name)
@@ -132,14 +178,15 @@ export function queryPlan(reply: string, fields: readonly TemplateField[], today
     filters.push({ column: field.name, op: op as ColumnFilter['op'], value: id ?? text })
   }
   const top = typeof asked.top === 'number' && Number.isInteger(asked.top) && asked.top > 0 ? asked.top : undefined
-  return { plan: { groupBy, filters, ...(top ? { top } : {}) } }
+  return { plan: { groupBy, filters, ...(top ? { top } : {}), ...(of ? { of } : {}) } }
 }
 
 /**
  * What `plan` counts, in words — which documents, by what, how many — shown with every answer, so a question the
- * model took the wrong way is seen for what was counted. Fields by their labels, choices by what the form shows.
+ * model took the wrong way is seen for what was counted. Fields by their labels, choices by what the form shows; the
+ * documents of another template by its name, `counted` (`fields` are then its columns).
  */
-export function planWords(plan: QueryPlan, fields: readonly TemplateField[], names?: DocumentNames): string {
+export function planWords(plan: QueryPlan, fields: readonly TemplateField[], names?: DocumentNames, counted?: string): string {
   const of = (name: string) => fields.find((f) => f.name === name)
   const label = (name: string) => of(name)?.label ?? name
   const shown = (name: string, value: string) => {
@@ -161,7 +208,8 @@ export function planWords(plan: QueryPlan, fields: readonly TemplateField[], nam
   const words = said.map((s) =>
     typeof s === 'string' ? s : strings.queryBounds(label(s.column), s.from, s.to, DATE_TYPES.includes(of(s.column)?.type ?? '')),
   )
-  if (words.length === 0) words.push(strings.queryAll)
+  if (words.length === 0) words.push(counted ? strings.queryAllOf(counted) : strings.queryAll)
+  else if (counted) words.unshift(strings.queryOf(counted))
   if (plan.groupBy.length > 0) words.push(strings.queryBy(plan.groupBy.map(label)))
   if (plan.top) words.push(strings.queryTop(plan.top))
   return words.join(' · ')

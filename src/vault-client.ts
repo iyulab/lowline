@@ -288,13 +288,18 @@ export const model = {
   /** A reply about `template` — its source as it stands — to the conversation, by the model set up, with the key kept for its preset. */
   author: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, turns: ChatTurn[]) =>
     invoke<ChatReply>('host_chat_author', { request: { ...setting, template, turns } }),
-  /** What the model set up says to count for `question` about `template`'s documents — its reply, to be checked by the app. */
+  /**
+   * What the model set up says to count for `question` about `template`'s documents — its reply, to be checked by the app —
+   * told what the documents its fields refer to are counted by (`referred`) and which templates' documents refer to its
+   * own (`referring`), by names and choices only.
+   */
   query: (
     setting: { preset: string; baseUrl: string | null; model: string },
     template: string,
     question: string,
     referred: { name: string; type: string; options: string[] }[] = [],
-  ) => invoke<ChatReply>('host_chat_query', { request: { ...setting, template, question, referred } }),
+    referring: { name: string; via: string[]; columns: { name: string; type: string; options: string[] }[] }[] = [],
+  ) => invoke<ChatReply>('host_chat_query', { request: { ...setting, template, question, referred, referring } }),
   /** The records the model set up reads out of `text`, as values of `template`'s fields — its reply, to be read by the app. */
   extract: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, text: string) =>
     invoke<ChatReply>('host_chat_extract', { request: { ...setting, template, text } }),

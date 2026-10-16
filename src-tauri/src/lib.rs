@@ -712,6 +712,9 @@ struct ChatQuery {
     /// The fields of the documents the template's fields refer to, as columns to count by (`ReferredColumn`).
     #[serde(default)]
     referred: Vec<serde_json::Value>,
+    /// The templates whose documents refer to the template's own, as a question may count them (`ReferringTemplate`).
+    #[serde(default)]
+    referring: Vec<serde_json::Value>,
 }
 
 fn chat_query_body(request: &ChatQuery, key: Option<&str>) -> String {
@@ -723,6 +726,7 @@ fn chat_query_body(request: &ChatQuery, key: Option<&str>) -> String {
         "template": request.template,
         "question": request.question,
         "referred": request.referred,
+        "referring": request.referring,
     })
     .to_string()
 }
@@ -1128,6 +1132,17 @@ id: t
         let body: serde_json::Value =
             serde_json::from_str(&chat_query_body(&referring, None)).unwrap();
         assert_eq!(body["referred"][0]["name"], "고객.지역");
+        assert_eq!(body["referring"], serde_json::json!([])); // no template's documents refer to this one's
+
+        let referred_to: ChatQuery = serde_json::from_value(serde_json::json!({
+            "preset": "local", "baseUrl": null, "model": "gguf:qwen3-default",
+            "template": "상호: ___@상호", "question": "문의가 많은 고객?",
+            "referring": [{ "name": "문의", "via": ["고객"], "columns": [{ "name": "고객", "type": "select", "options": [] }] }]
+        }))
+        .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&chat_query_body(&referred_to, None)).unwrap();
+        assert_eq!(body["referring"][0]["via"], serde_json::json!(["고객"]));
     }
 
     #[test]

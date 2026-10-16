@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { periodDays, planWords, queryPlan } from '../chat-query.ts'
-import { countColumns, templateSnapshot } from '../projection.ts'
+import { countColumns, referringTemplates, templateSnapshot } from '../projection.ts'
 import { documentNames } from '../references.ts'
 import { strings } from '../strings.ts'
 
@@ -171,5 +171,92 @@ ${fence}`
     // A name no document has, or two have, is kept as said: it counts what the vault holds under it — none.
     for (const said of ['없는회사', '같은이름'])
       expect(queryPlan(reply(said), columns, new Date(), names)).toEqual({ plan: { groupBy: [], filters: [{ column: '고객', op: 'equal', value: said }] } })
+  })
+})
+
+describe('what a reply asks to count of the documents that refer to the ones asked about', () => {
+  const customer = templateSnapshot(`---
+id: customer
+version: 1
+---
+@이름: [text]
+@지역: [select options="서울,부산"]
+`)
+  const inquiry = templateSnapshot(`---
+id: inquiry
+version: 1
+---
+@고객 -> customer: [select]
+@분류: [select options="배송,반품"]
+`)
+  const other = templateSnapshot(`---
+id: memo
+version: 1
+---
+@상위 -> memo: [select]
+@글: [text]
+`)
+  const referring = referringTemplates(customer, [customer, inquiry, other]).map(({ template, via }) => ({
+    ref: template.ref,
+    name: '문의',
+    via,
+    columns: countColumns(template, [customer, inquiry]),
+  }))
+
+  it('are the other templates whose fields name them, one document each, with those fields', () => {
+    expect(referringTemplates(customer, [customer, inquiry, other]).map((r) => [r.template.ref, r.via])).toEqual([['inquiry@1', ['고객']]])
+    // A template's documents naming its own are not another template's.
+    expect(referringTemplates(other, [customer, inquiry, other])).toEqual([])
+  })
+
+  it('counts the template it names — by its name or id — checked against that template, back through its reference too', () => {
+    const reply = (asked: string) => `${fence}json\n${asked}\n${fence}`
+    const most = { plan: { groupBy: ['고객'], filters: [], top: 3, of: 'inquiry@1' } }
+    expect(queryPlan(reply('{"of": "문의", "groupBy": ["고객"], "top": 3}'), customer.fields, new Date(), undefined, referring)).toEqual(most)
+    expect(queryPlan(reply('{"of": "inquiry", "groupBy": ["고객"], "top": 3}'), customer.fields, new Date(), undefined, referring)).toEqual(most)
+    expect(
+      queryPlan(reply('{"of": "문의", "groupBy": ["고객"], "filters": [{"field": "고객.지역", "op": "equal", "value": "서울"}, {"field": "분류", "op": "equal", "value": "반품"}]}'), customer.fields, new Date(), undefined, referring),
+    ).toEqual({
+      plan: {
+        groupBy: ['고객'],
+        filters: [
+          { column: '고객.지역', op: 'equal', value: '서울' },
+          { column: '분류', op: 'equal', value: '반품' },
+        ],
+        of: 'inquiry@1',
+      },
+    })
+    // A template that does not refer to it is not counted for it.
+    expect(queryPlan(reply('{"of": "메모", "groupBy": []}'), customer.fields, new Date(), undefined, referring)).toEqual({ problem: 'unknown-template', template: '메모' })
+    // Without `of`, the asked template is counted as before.
+    expect(queryPlan(reply('{"groupBy": ["지역"]}'), customer.fields, new Date(), undefined, referring)).toEqual({ plan: { groupBy: ['지역'], filters: [] } })
+  })
+
+  it("counts the referring template when the reply counts by its fields without naming it, and reaches the asked template's fields through the field naming them", () => {
+    const reply = (asked: string) => `${fence}json
+${asked}
+${fence}`
+    const of = (asked: string) => queryPlan(reply(asked), customer.fields, new Date(), undefined, referring)
+    // Fields only the inquiries have: the inquiries are counted.
+    expect(of('{"groupBy": ["고객"], "filters": [{"field": "분류", "op": "equal", "value": "반품"}]}')).toEqual({
+      plan: { groupBy: ['고객'], filters: [{ column: '분류', op: 'equal', value: '반품' }], of: 'inquiry@1' },
+    })
+    // A customer's field among them is the inquiry's way to it.
+    expect(of('{"groupBy": ["지역", "분류"]}')).toEqual({ plan: { groupBy: ['고객.지역', '분류'], filters: [], of: 'inquiry@1' } })
+    expect(of('{"of": "문의", "groupBy": ["지역"]}')).toEqual({ plan: { groupBy: ['고객.지역'], filters: [], of: 'inquiry@1' } })
+    // Fields the customers have are the customers' own count.
+    expect(of('{"groupBy": ["지역"]}')).toEqual({ plan: { groupBy: ['지역'], filters: [] } })
+    // A field neither has is said as it was.
+    expect(of('{"groupBy": ["담당자"]}')).toEqual({ problem: 'unknown-field', field: '담당자' })
+  })
+
+  it('says the template it counted', () => {
+    const plan = { groupBy: ['고객'], filters: [{ column: '분류', op: 'equal' as const, value: '반품' }], top: 3, of: 'inquiry@1' }
+    expect(planWords(plan, referring[0].columns, undefined, '문의')).toBe(
+      [strings.queryOf('문의'), strings.queryEqual('분류', '반품'), strings.queryBy(['고객']), strings.queryTop(3)].join(' · '),
+    )
+    expect(planWords({ groupBy: ['고객'], filters: [], of: 'inquiry@1' }, referring[0].columns, undefined, '문의')).toBe(
+      [strings.queryAllOf('문의'), strings.queryBy(['고객'])].join(' · '),
+    )
   })
 })

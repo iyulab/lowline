@@ -9,10 +9,11 @@ import { failureText, modelLabel } from './model-settings.js'
 import { draftOf, draftProblems, fieldChanges, retryMessage, tidyDraft, wordsOf } from './chat-authoring.js'
 import { planWords, queryPlan, type ReadPlan } from './chat-query.js'
 import { fileName } from './documents.js'
-import { cellText, countColumns, templateSnapshot, type AggregateAnswer, type CountColumn, type TemplateSnapshot } from './projection.js'
+import { cellText, countColumns, referringTemplates, templateSnapshot, type AggregateAnswer, type CountColumn, type TemplateField, type TemplateSnapshot } from './projection.js'
 import { host, model as models, type ChatTurn } from './vault-client.js'
 import { SidecarUnavailable, readVault, syncVault } from './vault-snapshot.js'
 import { documentNames, type DocumentNames } from './references.js'
+import { templateId } from './template-revision.js'
 import { describeError } from './errors.js'
 import type { ModelSettings } from './settings.js'
 import './model-settings.js'
@@ -47,6 +48,7 @@ type Mode = 'author' | 'ask'
 function notCounted(read: Exclude<ReadPlan, { plan: unknown }>): string {
   if ('unanswerable' in read) return strings.queryUnanswerable(read.unanswerable)
   if (read.problem === 'no-plan') return strings.queryNoPlan
+  if (read.problem === 'unknown-template') return strings.queryUnknownTemplate(read.template)
   return read.problem === 'unknown-field' ? strings.queryUnknownField(read.field) : strings.queryBadFilter(read.field)
 }
 
@@ -218,27 +220,44 @@ export class LlChatPanel extends LitElement {
       // told the model by name and choices, never a value.
       const vaultNow = await readVault()
       const columns = countColumns(template, vaultNow.templates)
-      const referred = columns.filter((c) => c.via).map((c) => ({ name: c.name, type: c.type, options: c.options }))
+      const asColumn = (c: TemplateField) => ({ name: c.name, type: c.type, options: c.options })
+      const referred = columns.filter((c) => c.via).map(asColumn)
+      // The templates whose documents name this one's — what "the businesses inspected most" counts — told the model
+      // the same way: by name, the fields that name this one's documents, and what their documents are counted by.
+      const referring = referringTemplates(template, vaultNow.templates).map(({ template: t, via }) => ({
+        ref: t.ref,
+        name: vaultNow.names.get(t.ref) ?? templateId(t.ref),
+        via,
+        columns: countColumns(t, vaultNow.templates),
+      }))
+      const told = referring.map((r) => ({ name: r.name, via: r.via, columns: r.columns.map(asColumn) }))
       const names = documentNames(vaultNow.documents)
       // The vault handed to the sidecar as it stands, as the table does before it counts — while the model reads.
-      const [reply] = await Promise.all([models.query(model, this.saved, question, referred), syncVault()])
+      const [reply] = await Promise.all([models.query(model, this.saved, question, referred, told), syncVault()])
       if (ask !== this.asked) return
       if (!reply.ok || reply.text === null) {
         fail(strings.chatFailed(failureText(reply.failure, reply.statusCode)))
         return
       }
-      const read = queryPlan(reply.text, columns, new Date(), names)
+      const read = queryPlan(reply.text, columns, new Date(), names, referring)
       if (!('plan' in read)) {
         fail(notCounted(read))
         return
       }
-      const counts = await host.aggregate(template.ref, read.plan.groupBy, read.plan.filters)
+      const of = read.plan.of ? referring.find((r) => r.ref === read.plan.of) : undefined
+      const counted = (of && vaultNow.templates.find((t) => t.ref === of.ref)) || template
+      const countedColumns = of?.columns ?? columns
+      const counts = await host.aggregate(counted.ref, read.plan.groupBy, read.plan.filters)
       if (ask !== this.asked) return
       const total = counts.groups.reduce((sum, g) => sum + g.count, 0)
       const top = read.plan.top ? { ...counts, groups: counts.groups.slice(0, read.plan.top) } : counts
       this.shown = [
         ...this.shown,
-        { role: 'assistant', text: '', answer: { template, columns, names, counted: planWords(read.plan, columns, names), counts: top, total } },
+        {
+          role: 'assistant',
+          text: '',
+          answer: { template: counted, columns: countedColumns, names, counted: planWords(read.plan, countedColumns, names, of?.name), counts: top, total },
+        },
       ]
     } catch (e) {
       if (ask === this.asked) fail(e instanceof SidecarUnavailable ? strings.hostFailed(e.message) : describeError(e))

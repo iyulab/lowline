@@ -533,7 +533,23 @@ export default {
       await ask('고객별로?', '{"groupBy": ["고객"]}')
       const byCustomer = await app.cdp.evaluate(`[...${chat}.querySelectorAll('u-message:last-of-type tbody tr')].map((tr) => tr.cells[0].textContent.trim())`)
       assert.deepEqual(byCustomer, ['가나상사', '다라무역'])
+
+      // Asked of the customers, the inquiries naming each are counted: the documents that refer to them, by the one each names.
+      await app.templateOf(CUSTOMER)
+      if (!(await app.cdp.evaluate(`!!${chat}?.querySelector('u-prompt')`))) await app.click('dc-button', '채팅')
+      await app.cdp.waitFor(`!!${chat}?.querySelector('u-prompt')`, 'the chat beside 고객')
+      await app.cdp.evaluate(`[...${chat}.querySelector('dc-segmented-control').shadowRoot.querySelectorAll('[role=radio]')].find((b) => b.textContent.includes('기록에 묻기')).click()`)
+      const most = await ask('문의가 제일 많은 고객은?', '{"of": "문의", "groupBy": ["고객"], "top": 1}')
+      assert.match(most, /센 것: 「문의」의 모든 기록 · 고객별 · 많은 것 1개/, `what was counted, in words: ${most}`)
+      const mostRows = await app.cdp.evaluate(`[...${chat}.querySelectorAll('u-message:last-of-type tbody tr')].map((tr) => [tr.cells[0].textContent.trim(), Number(tr.cells[1].textContent)])`)
+      assert.deepEqual(mostRows, [['가나상사', 2]])
+      // The model was told which template refers to the customers, by which field, and what it is counted by — no value.
+      const toldOf = asked.at(-1).messages[0].content
+      assert.match(toldOf, /- `문의` — `고객` 칸이 이 서식의 문서를 가리킵니다/)
+      assert.ok(!toldOf.includes('가나상사') && !toldOf.includes('문의 1'), 'no value went to the model')
       await app.noAlert()
+      // A template that does not refer to the customers is not counted for them — said, last, as the chat says what it could not count.
+      assert.match(await ask('메모 수?', '{"of": "메모", "groupBy": []}'), /이 서식을 가리키지 않는 서식\(메모\)의 기록을 세려 했습니다/)
     } finally {
       server.close()
       await useModel(null)
