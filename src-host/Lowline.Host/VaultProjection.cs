@@ -8,9 +8,16 @@ namespace Lowline.Host;
 
 /// <summary>
 /// A field of a template, as the UI's Formdown parser reports it: a choice field with its options (none for any
-/// other field).
+/// other field), and for a field whose value names a document of another template (`-> customer`), that template's id.
 /// </summary>
-public sealed record TemplateField(string Name, string Type, bool Multiple = false, IReadOnlyList<string>? Options = null);
+public sealed record TemplateField(
+    string Name, string Type, bool Multiple = false, IReadOnlyList<string>? Options = null, string? Reference = null);
+
+/// <summary>
+/// A column a template's documents can be counted by: one of its own fields, or — through <see cref="Via"/>, a field of it
+/// that names a document of template <see cref="Target"/> — a field of that document, read as it holds it now.
+/// </summary>
+public sealed record CountColumn(string Name, TemplateField Field, string? Via = null, string? Target = null);
 
 /// <summary>
 /// A template: its `id@version`, its fields in template order, the judgment fields its author
@@ -140,6 +147,32 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
 
     /// <summary>The column that carries a document's vault path. `$` cannot start a Formdown field name.</summary>
     public const string PathColumn = "$path";
+
+    /// <summary>The column holding what a document is known by — what a field that refers to it holds.</summary>
+    public const string IdColumn = "$id";
+
+    /// <summary>
+    /// The columns <paramref name="template"/>'s documents can be counted by: its own fields, then, for each field naming one
+    /// document of another template in <paramref name="templates"/>, that template's fields as `<field>.<its field>` — not
+    /// its own references: one step, not a chain.
+    /// </summary>
+    public static IReadOnlyList<CountColumn> CountColumnsOf(TemplateSnapshot template, IEnumerable<TemplateSnapshot> templates)
+    {
+        // The snapshot holds each template once, at its version now: a reference names it by its id.
+        var byId = templates.ToDictionary(t => IdOf(t.Ref), StringComparer.Ordinal);
+        return
+        [
+            .. template.Fields.Select(f => new CountColumn(f.Name, f)),
+            .. template.Fields
+                .Where(f => !f.Multiple && f.Reference is not null && byId.ContainsKey(f.Reference))
+                .SelectMany(f => byId[f.Reference!].Fields
+                    .Where(g => g.Reference is null)
+                    .Select(g => new CountColumn($"{f.Name}.{g.Name}", g, f.Name, byId[f.Reference!].Ref))),
+        ];
+    }
+
+    /// <summary>A template's id: its `id@version` without the version.</summary>
+    private static string IdOf(string templateRef) => templateRef[..(templateRef.LastIndexOf('@') is var at and >= 0 ? at : templateRef.Length)];
 
     private const int DefaultMax = 20;
 
@@ -393,8 +426,9 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
 
     /// <summary>
     /// The counts <paramref name="query"/> asks for — Formbase counts the projection, the documents behind each count
-    /// read with it — or null when the vault has no such template. A grouping or filter column that is not one of the
-    /// template's fields is refused (<see cref="ArgumentException"/>): a count of a field that is not there answers nothing.
+    /// read with it — or null when the vault has no such template. A grouping or filter column may be a field of a document
+    /// the template's documents refer to (<see cref="CountColumnsOf"/>), read as that document holds it now; one that is
+    /// neither is refused (<see cref="ArgumentException"/>): a count of a field that is not there answers nothing.
     /// </summary>
     public async Task<AggregateAnswer?> AggregateAsync(AggregateQuery query, CancellationToken cancellationToken)
     {
@@ -402,13 +436,13 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         try
         {
             if (_cache is null || _templates is null || !_templates.TryGetValue(query.Template, out var snapshot)) return null;
-            var known = snapshot.Fields.Select(f => f.Name).ToHashSet();
+            var columns = CountColumnsOf(snapshot, _templates.Values).ToDictionary(c => c.Name, StringComparer.Ordinal);
             var groupBy = query.GroupBy ?? [];
             var filters = query.Filters ?? [];
-            if (groupBy.Distinct().Count() != groupBy.Count || groupBy.Concat(filters.Select(f => f.Column)).Any(c => !known.Contains(c) && c != PathColumn))
-                throw new ArgumentException("a column that is not one of the template's fields", nameof(query));
+            if (groupBy.Distinct().Count() != groupBy.Count || groupBy.Concat(filters.Select(f => f.Column)).Any(c => !columns.ContainsKey(c) && c != PathColumn))
+                throw new ArgumentException("a column that is neither one of the template's fields nor one it refers to", nameof(query));
             var evidence = Math.Clamp(query.Evidence ?? DefaultEvidence, 1, MaxEvidence);
-            return await _cache.AggregateAsync(snapshot, groupBy, [.. filters.Select(f => f.ToFieldFilter())], evidence, cancellationToken);
+            return await _cache.AggregateAsync(snapshot, columns, groupBy, [.. filters.Select(f => f.ToFieldFilter())], evidence, cancellationToken);
         }
         finally
         {

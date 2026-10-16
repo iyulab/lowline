@@ -87,6 +87,47 @@ public sealed class VaultProjectionTests
     }
 
     [Fact]
+    public async Task Counts_documents_by_a_field_of_the_document_they_refer_to_as_it_holds_it_now()
+    {
+        var customer = new TemplateSnapshot("customer@2", [new TemplateField("이름", "text"), new TemplateField("지역", "select"), new TemplateField("등록일", "date")]);
+        var inquiry = new TemplateSnapshot("inquiry@1",
+            [new TemplateField("고객", "select", Reference: "customer"), new TemplateField("담당", "select"), new TemplateField("태그", "checkbox", Multiple: true)]);
+        static DocumentSnapshot Of(string path, string template, string json, string? id = null) =>
+            new(path, template, JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)!, Id: id);
+        DocumentSnapshot[] Documents(string region) =>
+        [
+            Of("고객/가나.md", "customer@2", $$"""{"이름": "가나상사", "지역": "{{region}}", "등록일": "2026-03-02"}""", id: "c-1"),
+            // Known by its path: a reference to it holds the path.
+            Of("고객/다라.md", "customer@2", """{"이름": "다라무역", "지역": "부산"}"""),
+            Of("문의/1.md", "inquiry@1", """{"고객": "c-1", "담당": "장비"}"""),
+            Of("문의/2.md", "inquiry@1", """{"고객": "c-1", "담당": "인사"}"""),
+            Of("문의/3.md", "inquiry@1", """{"고객": "고객/다라.md", "담당": "장비"}"""),
+            Of("문의/4.md", "inquiry@1", """{"담당": "장비"}"""),
+        ];
+        await using var vault = new VaultProjection();
+        await vault.IngestAsync(new VaultSnapshot([customer, inquiry], Documents("서울")), Ct);
+
+        var byRegion = await vault.AggregateAsync(new AggregateQuery("inquiry@1", ["고객.지역"]), Ct);
+        Assert.Equal([("서울", 2L), ("부산", 1L), (null, 1L)], byRegion!.Groups.Select(g => ((string?)g.Key["고객.지역"], g.Count)));
+        Assert.Equal(["문의/1.md", "문의/2.md"], byRegion.Groups[0].Evidence);
+
+        // Kept by a field of the referred document; a date there reads as it was written.
+        var seoul = await vault.AggregateAsync(new AggregateQuery("inquiry@1", ["담당"], [new ColumnFilter("고객.지역", "equal", "서울")]), Ct);
+        Assert.Equal([("인사", 1L), ("장비", 1L)], seoul!.Groups.Select(g => ((string?)g.Key["담당"], g.Count)).OrderBy(g => g.Item1));
+        var registered = await vault.AggregateAsync(new AggregateQuery("inquiry@1", ["고객.등록일"], [new ColumnFilter("고객.등록일", "atLeast", "2026-03-01")]), Ct);
+        Assert.Equal(("2026-03-02", 2L), ((string?)Assert.Single(registered!.Groups).Key["고객.등록일"], registered.Groups[0].Count));
+
+        // The customer moves: the count follows the document as it is now.
+        await vault.IngestAsync(new VaultSnapshot([customer, inquiry], Documents("대전")), Ct);
+        var moved = await vault.AggregateAsync(new AggregateQuery("inquiry@1", ["고객.지역"]), Ct);
+        Assert.Equal(2L, moved!.Groups.Single(g => (string?)g.Key["고객.지역"] == "대전").Count);
+
+        // One step only, and only through a field that names one document of a template the vault has.
+        await Assert.ThrowsAsync<ArgumentException>(() => vault.AggregateAsync(new AggregateQuery("inquiry@1", ["태그.지역"]), Ct));
+        await Assert.ThrowsAsync<ArgumentException>(() => vault.AggregateAsync(new AggregateQuery("inquiry@1", ["고객.없는칸"]), Ct));
+    }
+
+    [Fact]
     public async Task Answers_the_rows_that_match_every_filter()
     {
         await using var vault = new VaultProjection();

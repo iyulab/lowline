@@ -19,7 +19,6 @@ public sealed class SnapshotContractTests
         {
             ["label"] = "what the form shows; the table and suggestions go by the field's name",
             ["optionLabels"] = "what the form shows for an option; suggestions go by the option's value",
-            ["reference"] = "the UI resolves a reference to a name; the sidecar keeps the id it is given",
         },
         [typeof(DocumentSnapshot)] = new()
         {

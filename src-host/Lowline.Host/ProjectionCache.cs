@@ -88,11 +88,29 @@ internal sealed class ProjectionCache : IAsyncDisposable
                 skipped.Add(new SkippedDocument(document.Path, $"template {document.Template} is not in the vault"));
                 continue;
             }
-            var body = new JsonObject { [VaultProjection.PathColumn] = document.Path };
+            var body = new JsonObject { [VaultProjection.PathColumn] = document.Path, [VaultProjection.IdColumn] = document.Identity };
             // A field left blank — no text, or an empty list — has no value: it is not stored as an empty one.
             foreach (var (name, value) in document.Values)
                 if (!IsBlank(value)) body[name] = JsonNode.Parse(value.GetRawText());
             ofTemplate[RecordKeyOf(document.Path).Value] = (document.Path, body);
+        }
+
+        // Every template is declared before any is projected: a field that refers to another template's documents is a
+        // column read from that template's table, which must be declared to be found.
+        foreach (var template in vault.Templates)
+        {
+            await _hints.DeclareAsync(new FormTypeHints(
+                FormTypeRef.Create(template.Ref),
+                TableName(template.Ref),
+                [
+                    new FieldHint(VaultProjection.PathColumn, ColumnType.Text, Nullable: false),
+                    new FieldHint(VaultProjection.IdColumn, ColumnType.Text, Nullable: false),
+                    .. VaultProjection.CountColumnsOf(template, vault.Templates).Select(c => c.Via is null
+                        ? new FieldHint(c.Name, VaultProjection.ColumnTypeOf(c.Field))
+                        // Read from the referred document as it holds the field now, found by what it is known by.
+                        : new FieldHint(c.Name, VaultProjection.ColumnTypeOf(c.Field), Nullable: true, SourceKey: null, FieldBinding.Reference,
+                            new EntityRef(FormTypeRef.Create(c.Target!), c.Field.Name, TargetLookup.Field(VaultProjection.IdColumn), c.Via))),
+                ]), cancellationToken);
         }
 
         int appended = 0, retired = 0;
@@ -100,13 +118,6 @@ internal sealed class ProjectionCache : IAsyncDisposable
         foreach (var template in vault.Templates)
         {
             var type = FormTypeRef.Create(template.Ref);
-            await _hints.DeclareAsync(new FormTypeHints(
-                type,
-                TableName(template.Ref),
-                [
-                    new FieldHint(VaultProjection.PathColumn, ColumnType.Text, Nullable: false),
-                    .. template.Fields.Select(f => new FieldHint(f.Name, VaultProjection.ColumnTypeOf(f))),
-                ]), cancellationToken);
 
             var records = await RecordsAsync(type, cancellationToken);
             var present = documents[template.Ref];
@@ -182,18 +193,18 @@ internal sealed class ProjectionCache : IAsyncDisposable
 
     /// <summary>
     /// The documents of <paramref name="template"/> that <paramref name="filters"/> keep, counted per distinct combination
-    /// of the <paramref name="groupBy"/> fields, each count with the vault paths of up to <paramref name="evidence"/> of
+    /// of the <paramref name="groupBy"/> columns (of <paramref name="columns"/> — fields of the template or of documents it refers to), each count with the vault paths of up to <paramref name="evidence"/> of
     /// its documents — the largest count first; of a tie, a group with a blank value after the others, the rest in the
     /// order Formbase gives its keys.
     /// </summary>
     public async Task<AggregateAnswer> AggregateAsync(
-        TemplateSnapshot template, IReadOnlyList<string> groupBy, IReadOnlyList<FieldFilter> filters, int evidence, CancellationToken cancellationToken)
+        TemplateSnapshot template, IReadOnlyDictionary<string, CountColumn> columns, IReadOnlyList<string> groupBy, IReadOnlyList<FieldFilter> filters,
+        int evidence, CancellationToken cancellationToken)
     {
         var result = await _engine.AggregateAsync(FormTypeRef.Create(template.Ref), new AggregateSpec(groupBy, filters, evidence), cancellationToken);
-        var fields = template.Fields.ToDictionary(f => f.Name);
         var groups = result.Groups
             .Select((g, order) => (Order: order, Group: new CountGroup(
-                groupBy.ToDictionary(c => c, c => g.Key.TryGetValue(c, out var v) && fields.TryGetValue(c, out var f) ? AsWritten(f, v) : null),
+                groupBy.ToDictionary(c => c, c => g.Key.TryGetValue(c, out var v) && columns.TryGetValue(c, out var column) ? AsWritten(column.Field, v) : null),
                 g.Count,
                 [.. (g.Records ?? []).Select(r => r.Key?.Value).OfType<string>()])))
             .OrderByDescending(x => x.Group.Count)
