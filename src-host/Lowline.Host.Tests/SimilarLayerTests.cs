@@ -52,28 +52,41 @@ public sealed class SimilarLayerTests
             var documents = played.Documents.Where(d => d.Template == template.Ref).ToList();
             var resolver = new FormResolver(new FieldMemory(), new LexicalMemory());
             var settled = new List<SettledDocument>();
-            var chosen = new Dictionary<string, (ThresholdChoice? Key, ThresholdChoice? Similar)>(StringComparer.Ordinal);
+            var chosen = new Dictionary<string, (ThresholdChoice? Key, ThresholdChoice? Similar, FieldThreshold Keyed)>(StringComparer.Ordinal);
             var chosenAt = -1;
             var key = judged.ToDictionary(f => f, _ => new Tally(), StringComparer.Ordinal);
             var similar = judged.ToDictionary(f => f, _ => new Tally(), StringComparer.Ordinal);
-            // Asked where the key layer abstains: what the similar layer adds to what the app offers now.
-            var added = judged.ToDictionary(f => f, _ => new Tally(), StringComparer.Ordinal);
             var form = bare;
 
             foreach (var document in documents)
             {
-                // Chosen again as the app chooses its key threshold: once there is enough to replay, then at each tenth.
+                // Chosen again as the app chooses its key threshold: once there is enough to replay, then at each tenth —
+                // and as the app chooses it (Suggestions.SelectThresholdsAsync): how readily each field's keys are
+                // believed, then the fields that key it, then both layers' strengths on that form. The similar layer
+                // answers only where the key layer, as the app has it, does not. Before typing only.
                 if (settled.Count >= Suggestions.MinimumAnswered && (chosenAt < 0 || Math.Abs(settled.Count - chosenAt) * 10 >= Math.Max(chosenAt, 10)))
                 {
                     foreach (var field in judged)
                     {
+                        var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), bare, field, settled) is { Count: > 0 } c ? c : null;
+                        var concentrated = Suggestions.Form(template, f => new FieldThreshold(null, 0, 0, KeyConcentrations: f == field ? concentrations : null))!;
+                        var keyFields = ThresholdSelection.SelectKeyFields(
+                            () => new FieldMemory(), concentrated, field, settled, Suggestions.TargetPrecision, Suggestions.MinimumAnswered).KeyFields;
+                        var keyed = new FieldThreshold(null, 0, 0, KeyFields: keyFields, KeyConcentrations: concentrations);
                         var layers = await ThresholdSelection.SelectLayersAsync(
-                            new FieldMemory(), new LexicalMemory(), bare, field, settled, Suggestions.TargetPrecision, Suggestions.MinimumAnswered, ct);
-                        chosen[field] = (layers.Key.Chosen, layers.Memory.Chosen);
+                            new FieldMemory(), new LexicalMemory(), Suggestions.Form(template, f => f == field ? keyed : new FieldThreshold(null, 0, 0))!,
+                            field, settled, Suggestions.TargetPrecision, Suggestions.MinimumAnswered, ct);
+                        chosen[field] = (layers.Key.Chosen, layers.Memory.Chosen, keyed);
                     }
                     chosenAt = settled.Count;
                     form = new FormDefinition(template.Ref, [.. bare.Fields.Select(f => chosen.TryGetValue(f.Name, out var c)
-                        ? f with { KeyThreshold = c.Key?.Threshold, MemoryThreshold = c.Similar?.Threshold }
+                        ? f with
+                        {
+                            KeyThreshold = c.Key?.Threshold,
+                            MemoryThreshold = c.Similar?.Threshold,
+                            KeyFields = c.Keyed.KeyFields,
+                            KeyConcentrations = c.Keyed.KeyConcentrations,
+                        }
                         : f)], PromptLanguage.English);
                 }
 
@@ -97,12 +110,6 @@ public sealed class SimilarLayerTests
                         tally.Offered++;
                         tally.Promised += promise;
                         if (right) tally.Right++;
-                        if (top.Source == FieldSource.SimilarDocument)
-                        {
-                            added[field].Offered++;
-                            added[field].Promised += promise;
-                            if (right) added[field].Right++;
-                        }
                     }
                 }
 
