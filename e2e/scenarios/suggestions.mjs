@@ -170,9 +170,12 @@ export default {
   },
   async 'imports rows copied from a spreadsheet as confirmed records'(app, vault) {
     const before = new Set(await documentsIn(vault))
-    // How many records the replay of 담당 asks before the import — earlier scenarios have saved some.
-    const asked = await app.cdp.evaluate(
-      `(async () => (await window.__TAURI_INTERNALS__.invoke('host_curves')).find((c) => c.template?.startsWith('intake@') && c.field === '담당')?.replay?.lookups ?? 0)()`,
+    // How many records the replay of 담당 asked before the import — earlier scenarios have saved some, and its replay may
+    // still be running in the background: at least that many once there is one.
+    const asked = await app.cdp.waitFor(
+      `(async () => (await window.__TAURI_INTERNALS__.invoke('host_curves')).find((c) => c.template?.startsWith('intake@') && c.field === '담당')?.replay?.lookups)()`,
+      'a replay of 접수 · 담당',
+      { timeoutMs: 30_000 },
     )
     await app.documentsOf(INTAKE)
     await app.click('dc-button', '가져오기')
@@ -222,7 +225,7 @@ export default {
     // Imported records are confirmed values: what is learned replays the two imported with the rest. (A request seen
     // once settles nothing by itself here: 부서 has decided 담당 all along, and the imported rows go against it.)
     await app.learning()
-    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); return t?.startsWith('저장된 ${asked + 2}건') && t })()`
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); const n = Number(/^저장된 (\\d+)건/.exec(t ?? '')?.[1]); return n >= ${asked + 2} && t })()`
     await app.cdp.waitFor(replay, 'the replay of 접수 · 담당 with the imported records', { timeoutMs: 30_000 })
 
     // Left as the next scenario starts: a new document typed into.
