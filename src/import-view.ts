@@ -7,10 +7,12 @@ import { describeError } from './errors.js'
 import { importFields, planImport, recordsFromReply, rowsFromRecords, textPieces, type ColumnUse, type ImportField, type ImportPlan } from './import.js'
 import { failureText } from './model-settings.js'
 import { templateSnapshot } from './projection.js'
+import { documentNames, type DocumentNames } from './references.js'
 import type { ModelSettings } from './settings.js'
 import { strings } from './strings.js'
 import type { TemplateItem } from './template-scope.js'
 import { model as models, vault, type VaultInfo } from './vault-client.js'
+import { readVault } from './vault-snapshot.js'
 
 /** How many values that do not fit are listed; the rest are counted. */
 const PROBLEMS_SHOWN = 10
@@ -110,6 +112,8 @@ export class LlImport extends LitElement {
   @state() private fields: ImportField[] = []
   /** The template's judgment fields: what a model's values come in as suggestions for. */
   @state() private judgment: string[] = []
+  /** The vault's documents by name, for a reference field's cells to name — read with the template. */
+  private names?: DocumentNames
   @state() private plan?: ImportPlan
   /** The pasted rows, kept to plan again when the person changes what a column is kept for. */
   private rows: string[][] = []
@@ -139,9 +143,13 @@ export class LlImport extends LitElement {
     this.templatePath = path
     this.fields = []
     this.judgment = []
+    this.names = undefined
     try {
       this.templateSource = await vault.read(path)
-      this.fields = importFields(this.templateSource)
+      const fields = importFields(this.templateSource)
+      // Only a template with a reference field needs the vault's documents.
+      if (fields.some((f) => f.reference)) this.names = documentNames((await readVault()).documents)
+      this.fields = fields
       this.judgment = templateSnapshot(this.templateSource).suggest
     } catch (e) {
       this.error = describeError(e)
@@ -153,7 +161,7 @@ export class LlImport extends LitElement {
     this.partial = ''
     this.proposedBy = ''
     this.rows = e.detail.rows
-    this.plan = planImport(this.rows, this.fields)
+    this.plan = planImport(this.rows, this.fields, undefined, this.names)
   }
 
   /**
@@ -201,14 +209,14 @@ export class LlImport extends LitElement {
     if (this.read.done < pieces.length) this.partial = strings.importTextPartial(this.read.done, pieces.length)
     this.rows = rowsFromRecords(records, this.fields)
     this.proposedBy = strings.importProposedBy(model.model.replace(/^gguf:/, ''))
-    this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined))
+    this.plan = planImport(this.rows, this.fields, this.fields.map(() => undefined), this.names)
   }
 
   /** A column that fills no field is kept for `use` — one column for each use. */
   private keepFor(index: number, use: ColumnUse | undefined) {
     if (!this.plan) return
     const uses = this.plan.columns.map((c, i) => (i === index ? use : c.use === use ? undefined : c.use))
-    this.plan = planImport(this.rows, this.fields, uses)
+    this.plan = planImport(this.rows, this.fields, uses, this.names)
   }
 
   /** A field's label; a problem about a day names the column, which is no field. */
@@ -297,7 +305,9 @@ export class LlImport extends LitElement {
   /** The records the model read, field by field — what the person checks before they come in. */
   private renderRecords(plan: ImportPlan) {
     const shown = this.fields.filter((f) => plan.documents.some((d) => d.values[f.name] !== undefined))
-    const cell = (v: unknown) => (Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? '예' : '아니오') : String(v ?? ''))
+    const text = (v: unknown) => (Array.isArray(v) ? v.join(', ') : typeof v === 'boolean' ? (v ? '예' : '아니오') : String(v ?? ''))
+    // A reference field holds a document's id: it is shown by the document's name.
+    const cell = (f: ImportField, v: unknown) => (f.reference && typeof v === 'string' && this.names?.nameOf(f.reference, v)) || text(v)
     return html`<div class="records">
       <table aria-label=${strings.importRecords}>
         <thead>
@@ -306,7 +316,7 @@ export class LlImport extends LitElement {
           </tr>
         </thead>
         <tbody>
-          ${plan.documents.map((d) => html`<tr>${shown.map((f) => html`<td>${cell(d.values[f.name])}</td>`)}</tr>`)}
+          ${plan.documents.map((d) => html`<tr>${shown.map((f) => html`<td>${cell(f, d.values[f.name])}</td>`)}</tr>`)}
         </tbody>
       </table>
     </div>
@@ -358,7 +368,7 @@ export class LlImport extends LitElement {
             <ul>
               ${problems
                 .slice(0, PROBLEMS_SHOWN)
-                .map((p) => html`<li>${strings.importProblem(p.row, this.label(p.field), p.value)}</li>`)}
+                .map((p) => html`<li>${strings.importProblem(p.row, this.label(p.field), p.value, p.reason)}</li>`)}
             </ul>`
         : nothing}
       <div class="bar">

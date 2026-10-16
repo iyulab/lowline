@@ -4,6 +4,7 @@
 
 import { parseFormdown } from '@formdown/core'
 import type { FieldValue, FieldValues } from './documents.js'
+import type { DocumentNames } from './references.js'
 
 export interface ImportField {
   name: string
@@ -14,6 +15,8 @@ export interface ImportField {
   /** The value an option's shown text stands for (`value=Label`), so a cell may hold either. */
   valueOf?: Record<string, string>
   options: string[]
+  /** The template whose documents the field names (`@고객 -> customer: [select]`): a cell names one of them. */
+  reference?: string
 }
 
 /**
@@ -44,6 +47,8 @@ export interface ImportProblem {
   /** The field — or, for a day that could not be read, the column's heading. */
   field: string
   value: string
+  /** Why it does not fit when it is not an option: it names no one document of the template the field refers to. */
+  reason?: 'reference'
 }
 
 export interface ImportPlan {
@@ -130,6 +135,8 @@ export function importFields(templateSource: string): ImportField[] {
       multiple: f.type === 'checkbox' && options.length > 0,
       options,
       ...(labelled.length > 0 ? { valueOf: Object.fromEntries(labelled.map((o) => [o.label!, o.value])) } : {}),
+      // One document of another template (`->`), as the projection reads it; many to many (`<->`) is not read yet.
+      ...(f.relation?.type === 'fk' ? { reference: f.relation.target } : {}),
     }
   })
 }
@@ -156,12 +163,18 @@ const NO = new Set(['false', 'no', 'n', 'x', '0', '아니오', '아니요'])
 
 /**
  * A cell as a field value. Empty cells fill nothing. A value that does not fit the field — an
- * option the field does not offer, a check mark it cannot read — is kept as written (nothing the
- * person had is dropped) and reported.
+ * option the field does not offer, a check mark it cannot read, a name that is no document of the
+ * template a reference field refers to — is kept as written (nothing the person had is dropped) and
+ * reported. A reference field holds the id of the document its cell names, by `names`; a cell that
+ * already holds such an id is kept.
  */
-export function cellValue(field: ImportField, text: string): { value?: FieldValue; fits: boolean } {
+export function cellValue(field: ImportField, text: string, names?: DocumentNames): { value?: FieldValue; fits: boolean } {
   const cell = text.trim()
   if (!cell) return { fits: true }
+  if (field.reference) {
+    const id = names?.idOf(field.reference, cell) ?? (names?.nameOf(field.reference, cell) !== undefined ? cell : undefined)
+    return id ? { value: id, fits: true } : { value: cell, fits: false }
+  }
   if (field.type === 'checkbox' && !field.multiple) {
     const answer = cell.toLowerCase()
     if (YES.has(answer)) return { value: true, fits: true }
@@ -226,9 +239,10 @@ function guessUses(columns: ColumnMatch[], records: string[][]): (ColumnUse | un
 
 /**
  * What importing `rows` (the first one naming the columns) into a template would create. `uses` says
- * what each column that fills no field is kept for; without it, `guessUses` guesses.
+ * what each column that fills no field is kept for; without it, `guessUses` guesses. `names` are the
+ * vault's documents, which a reference field's cells name.
  */
-export function planImport(rows: string[][], fields: ImportField[], uses?: (ColumnUse | undefined)[]): ImportPlan {
+export function planImport(rows: string[][], fields: ImportField[], uses?: (ColumnUse | undefined)[], names?: DocumentNames): ImportPlan {
   const [headings = [], ...records] = rows
   const matched = matchColumns(headings, fields)
   const filling = records.filter((cells) =>
@@ -251,10 +265,10 @@ export function planImport(rows: string[][], fields: ImportField[], uses?: (Colu
       }
       const field = column.field ? byName.get(column.field) : undefined
       if (!field) return
-      const { value, fits } = cellValue(field, cells[i] ?? '')
+      const { value, fits } = cellValue(field, cells[i] ?? '', names)
       if (value === undefined) return
       record.values[field.name] = value
-      if (!fits) problems.push({ row: index + 2, field: field.name, value: cell })
+      if (!fits) problems.push({ row: index + 2, field: field.name, value: cell, ...(field.reference ? { reason: 'reference' as const } : {}) })
     })
     if (Object.keys(record.values).length === 0) {
       skipped++

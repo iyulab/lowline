@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cellValue, importFields, matchColumns, parseRecordDate, planImport, recordsFromReply, rowsFromRecords, textPieces } from '../import.js'
+import { documentNames } from '../references.js'
 
 const template = `---
 id: bug-report
@@ -87,6 +88,59 @@ describe('planImport', () => {
   it('has nothing to create from a heading row alone', () => {
     expect(planImport([['제목']], fields)).toMatchObject({ documents: [], skipped: 0 })
     expect(planImport([], fields).documents).toEqual([])
+  })
+})
+
+describe("a field that refers to another template's documents", () => {
+  const inquiry = importFields(`---
+id: inquiry
+version: 1
+---
+@고객 -> customer: [select]
+
+@내용: [textarea]
+`)
+  const names = documentNames([
+    { path: '문서/2026-10-01-가나상사.md', id: 'c-1', template: 'customer@1', values: {} },
+    { path: '문서/한빛상사.md', id: 'c-2', template: 'customer@1', values: {} },
+    // One name after two days: the name says neither.
+    { path: '문서/2026-10-01-같은이름.md', id: 'c-3', template: 'customer@1', values: {} },
+    { path: '문서/2026-10-02-같은이름.md', id: 'c-4', template: 'customer@1', values: {} },
+    // Another template's document of the same name is not one of the field's.
+    { path: '문서/2026-10-01-다라무역.md', id: 'q-9', template: 'inquiry@1', values: {} },
+  ])
+
+  it('knows which template it refers to', () => {
+    expect(inquiry.find((f) => f.name === '고객')).toMatchObject({ reference: 'customer', options: [] })
+  })
+
+  it("holds the id of the document a cell names — by its file name, or without the day the app put before it — or keeps an id it already holds", () => {
+    const plan = planImport(
+      [
+        ['고객', '내용'],
+        ['가나상사', '배송 문의'],
+        ['2026-10-01-가나상사', '반품 문의'],
+        ['한빛상사', '견적 요청'],
+        ['c-2', '재견적'],
+      ],
+      inquiry,
+      undefined,
+      names,
+    )
+    expect(plan.documents.map((d) => d.values['고객'])).toEqual(['c-1', 'c-1', 'c-2', 'c-2'])
+    expect(plan.problems).toEqual([])
+  })
+
+  it('keeps a name that is no one document of that template as written, and says why it does not fit', () => {
+    const plan = planImport([['고객'], ['없는회사'], ['같은이름'], ['다라무역']], inquiry, undefined, names)
+    expect(plan.documents.map((d) => d.values['고객'])).toEqual(['없는회사', '같은이름', '다라무역'])
+    expect(plan.problems).toEqual([
+      { row: 2, field: '고객', value: '없는회사', reason: 'reference' },
+      { row: 3, field: '고객', value: '같은이름', reason: 'reference' },
+      { row: 4, field: '고객', value: '다라무역', reason: 'reference' },
+    ])
+    // Without the vault's documents nothing can be named: every cell is kept and said.
+    expect(planImport([['고객'], ['가나상사']], inquiry).problems).toEqual([{ row: 2, field: '고객', value: '가나상사', reason: 'reference' }])
   })
 })
 

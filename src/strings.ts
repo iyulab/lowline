@@ -213,8 +213,9 @@ export const strings = {
   importUseOf: (heading: string) => `${heading} 열을 어디에 쓸지`,
   importSummary: (documents: number, skipped: number) =>
     skipped ? `문서 ${documents}건을 만듭니다 · 빈 행 ${skipped}개는 건너뜁니다` : `문서 ${documents}건을 만듭니다`,
-  importProblems: (n: number) => `선택지와 맞지 않는 값 ${n}개 — 적힌 그대로 가져옵니다`,
-  importProblem: (row: number, field: string, value: string) => `${row}행 ${field}: ${value}`,
+  importProblems: (n: number) => `칸에 맞지 않는 값 ${n}개 — 적힌 그대로 가져옵니다`,
+  importProblem: (row: number, field: string, value: string, reason?: 'reference') =>
+    `${row}행 ${field}: ${value}${reason === 'reference' ? ' — 이 이름의 문서가 없거나 둘 이상입니다' : ''}`,
   importConfirm: (n: number) => `${n}건 가져오기`,
   importing: (done: number, total: number) => `가져오는 중 ${done} / ${total}`,
   imported: (n: number) => `${n}건을 가져왔습니다`,

@@ -155,6 +155,8 @@ version: 1
     const names = documentNames([
       { path: '문서/가나상사.md', id: 'c-1', template: 'customer@2', values: {} },
       { path: '문서/다라무역.md', id: '문서/다라무역.md', template: 'customer@2', values: {} },
+      // A document the app named after its day is named without it too.
+      { path: '문서/2026-10-01-마바산업.md', id: 'c-5', template: 'customer@2', values: {} },
       // Two of one name in one template: the name says neither.
       { path: '서식2/같은이름.md', id: 'c-3', template: 'customer@2', values: {} },
       { path: '서식3/같은이름.md', id: 'c-4', template: 'customer@2', values: {} },
@@ -165,6 +167,7 @@ ${fence}`
     const kept = queryPlan(reply('가나상사'), columns, new Date(), names)
     expect(kept).toEqual({ plan: { groupBy: [], filters: [{ column: '고객', op: 'equal', value: 'c-1' }] } })
     expect('plan' in kept && planWords(kept.plan, columns, names)).toBe(strings.queryEqual('고객', '가나상사'))
+    expect(queryPlan(reply('마바산업'), columns, new Date(), names)).toEqual({ plan: { groupBy: [], filters: [{ column: '고객', op: 'equal', value: 'c-5' }] } })
     // A name no document has, or two have, is kept as said: it counts what the vault holds under it — none.
     for (const said of ['없는회사', '같은이름'])
       expect(queryPlan(reply(said), columns, new Date(), names)).toEqual({ plan: { groupBy: [], filters: [{ column: '고객', op: 'equal', value: said }] } })

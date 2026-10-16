@@ -355,6 +355,36 @@ export default {
       assert.equal((await app.where()).place, '문의')
       await app.openDocument(CUSTOMER, '가나상회')
       await app.cdp.waitFor(`__e2e.all('div.referring p').some((p) => p.textContent.trim() === '아직 이 문서를 가리키는 문서가 없습니다.')`, 'nothing naming 가나상회')
+
+      // Rows pasted into the inquiries name their customers by name: each comes in holding the customer's id, and a
+      // name no customer has is kept as written and said.
+      const pastedBefore = new Set(await readdir(join(vault, '문서')))
+      await app.documentsOf(INQUIRY)
+      await app.click('dc-button', '가져오기')
+      const zone = `__e2e.all('textarea').find((t) => t.getRootNode().host?.localName === 'dc-paste-rows-zone')`
+      await app.cdp.waitFor(`Boolean(${zone})`, 'the paste zone')
+      const pasted = [['고객', '내용'], ['가나상회', '배송 문의'], ['없는회사', '반품 문의']].map((r) => r.join('\t')).join('\n')
+      await app.cdp.evaluate(`(() => {
+        const data = new DataTransfer()
+        data.setData('text/plain', ${q(pasted)})
+        ${zone}.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+        return true
+      })()`)
+      await app.status('문서 2건을 만듭니다')
+      assert.ok(
+        await app.cdp.evaluate(`__e2e.all('li').some((li) => li.textContent.trim() === '3행 고객: 없는회사 — 이 이름의 문서가 없거나 둘 이상입니다')`),
+        'a name no customer has is said',
+      )
+      await app.click('dc-button', '2건 가져오기')
+      await app.status('2건을 가져왔습니다')
+      const imported = (await readdir(join(vault, '문서'))).filter((f) => !pastedBefore.has(f))
+      for (const name of imported) files.push([join(vault, '문서', name)])
+      const customers = await Promise.all(imported.map(async (name) => (await fileValues(join(vault, '문서', name))).고객))
+      assert.deepEqual(customers.sort(), ['c-gana', '없는회사'], 'the customer named by name is held by its id')
+      await app.openDocument(CUSTOMER, '가나상회')
+      await app.cdp.waitFor(`__e2e.all('div.referring h4').some((h) => h.textContent.trim() === '문의 1건')`, 'the imported inquiry naming 가나상회', {
+        timeoutMs: 15_000,
+      })
       await app.noAlert()
     } finally {
       await app.learning()

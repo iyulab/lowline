@@ -17,19 +17,32 @@ export interface DocumentNames {
   nameOf(target: string, id: string): string | undefined
 }
 
-/** The names of `documents`, each among its own template's — as a reference field offers them. */
+/** The day a new document's file name starts with (`2026-10-16-가나상사`) — not part of what a person calls it. */
+const NAMED_DAY = /^\d{4}-\d{2}-\d{2}-(?=.)/
+
+/**
+ * The names of `documents`, each among its own template's — as a reference field offers them. A name is a document's
+ * file name; one said without the day the app put before it (`가나상사` for `2026-10-16-가나상사`) names it too, when
+ * no document has that file name and only one has it after its day.
+ */
 export function documentNames(documents: readonly DocumentSnapshot[]): DocumentNames {
   const names = new Map<string, string>()
   const ids = new Map<string, string>()
+  const undated = new Map<string, string>()
+  // Two documents of one template with one name: neither is the one a name says.
+  const add = (map: Map<string, string>, key: string, id: string) => map.set(key, map.has(key) ? '' : id)
   for (const d of documents) {
     const name = fileName(d.path, '.md')
-    names.set(`${templateId(d.template)}\n${d.id}`, name)
-    // Two documents of one template with one name: neither is the one a name says.
-    const key = `${templateId(d.template)}\n${name}`
-    ids.set(key, ids.has(key) ? '' : d.id)
+    const target = templateId(d.template)
+    names.set(`${target}\n${d.id}`, name)
+    add(ids, `${target}\n${name}`, d.id)
+    if (NAMED_DAY.test(name)) add(undated, `${target}\n${name.replace(NAMED_DAY, '')}`, d.id)
   }
   return {
-    idOf: (target, name) => ids.get(`${target}\n${name}`) || undefined,
+    idOf: (target, name) => {
+      const key = `${target}\n${name}`
+      return (ids.has(key) ? ids.get(key) : undated.get(key)) || undefined
+    },
     nameOf: (target, id) => names.get(`${target}\n${id}`),
   }
 }
