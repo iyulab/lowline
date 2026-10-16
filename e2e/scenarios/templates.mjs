@@ -316,6 +316,8 @@ export default {
         await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = ${q('처리 기한 칸을 날짜로 넣고, 담당 부서 칸은 선택지로 바꾸고, 접수 경로 칸 아래에 메모 칸을 하나 더 넣어 줘')}; return true })()`)
         await app.cdp.waitFor(`${box}.clientHeight > ${oneLine}`, 'the long line folded onto more lines')
         assert.ok(await app.cdp.evaluate(`${box}.scrollWidth <= ${box}.clientWidth`), 'nothing past the width of the box')
+        // And it grows to every line it folded onto: a scrollbar showing while it grew must not leave the last one hidden.
+        await app.cdp.waitFor(`${box}.scrollHeight <= ${box}.clientHeight`, 'every folded line in view')
         await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = ''; return true })()`)
       } finally {
         await app.cdp.send('Emulation.clearDeviceMetricsOverride')
