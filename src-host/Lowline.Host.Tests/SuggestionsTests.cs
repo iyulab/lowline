@@ -276,6 +276,63 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public void How_readily_keys_were_believed_is_kept_with_the_strengths_chosen_on_it()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            var choice = new Gil.Forms.ThresholdChoice(0.5, 0.9, 0.5, 20, 40);
+            ThresholdStore.Save(file, new Dictionary<(string, string), FieldThreshold>
+            {
+                [("inspection@1", "위험도")] = new(choice, 40, 40, KeyConcentrations: new Dictionary<string, double> { ["업소"] = 0.004 }),
+                [("inspection@1", "결과")] = new(choice, 40, 40),
+            });
+            var loaded = ThresholdStore.Load(file);
+            Assert.Equal(0.004, loaded[("inspection@1", "위험도")].KeyConcentrations!["업소"]);
+            Assert.Null(loaded[("inspection@1", "결과")].KeyConcentrations);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public async Task A_field_naming_what_is_judged_is_believed_after_few_settlements_where_suggestions_are_made()
+    {
+        // Each establishment keeps its risk; an inspection's kind is drawn from three and mostly goes with one risk. The
+        // establishment's keys keep their value, so they are believed after a settlement or two — in the form the
+        // strengths were chosen on and the one suggestions are made with alike.
+        var inspection = new TemplateSnapshot("inspection@1",
+        [
+            new TemplateField("업소", "text"),
+            new TemplateField("유형", "select", Options: ["정기", "민원", "재점검"]),
+            new TemplateField("위험도", "select", Options: ["상", "중", "하"]),
+        ], Suggest: ["위험도"]);
+        string[] risks = ["상", "중", "하"];
+        string[] kinds = ["정기", "민원", "재점검"];
+        // Establishment e has risk e % 3; the kind is that risk's kind except one inspection in five. Establishments
+        // 0–39 were inspected twice, 40–59 once.
+        var documents = Enumerable.Range(0, 100).Select(i =>
+        {
+            var e = i % 60;
+            var kind = kinds[i % 5 == 4 ? (e + 1) % 3 : e % 3];
+            return new DocumentSnapshot($"검사/{i}.md", "inspection@1",
+                Values($$"""{"업소": "업소-{{e}}", "유형": "{{kind}}", "위험도": "{{risks[e % 3]}}"}"""), Modified: i);
+        }).ToArray();
+        var suggestions = await Suggestions.BuildAsync(new VaultSnapshot([inspection], documents), Ct);
+        suggestions.Apply(await suggestions.SelectThresholdsAsync(Ct));
+
+        var concentrations = suggestions.Thresholds[("inspection@1", "위험도")].KeyConcentrations!;
+        Assert.True(concentrations["업소"] < 1, $"업소 {concentrations["업소"]}");
+        var form = Suggestions.Form(inspection, field => suggestions.Thresholds[("inspection@1", field)])!;
+        Assert.Same(concentrations, form.Fields.Single(f => f.Name == "위험도").KeyConcentrations);
+        // 업소-43, seen once, is 중; 재점검 mostly goes with 하.
+        var request = new SuggestRequest("inspection@1", "위험도", Values("""{"업소": "업소-43", "유형": "재점검"}"""));
+        Assert.Equal(new Suggestion("중", "key", "업소: 업소-43"), await suggestions.SuggestAsync(request, Ct));
+    }
+
+    [Fact]
     public async Task A_field_naming_another_document_decides_a_judgment_field_by_that_documents_id()
     {
         // 고객 names a customer document by its id; which customer it is decides 담당.

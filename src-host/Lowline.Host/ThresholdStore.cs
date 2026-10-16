@@ -15,7 +15,7 @@ namespace Lowline.Host;
 public static class ThresholdStore
 {
     /// <summary>The shape of the file; one written in another is not read.</summary>
-    private const int Format = 7;
+    private const int Format = 8;
 
     /// <summary>The Gil whose scores the thresholds are on.</summary>
     public static readonly string Scorer =
@@ -25,7 +25,8 @@ public static class ThresholdStore
 
     private sealed record Entry(
         string Template, string Field, ThresholdChoice? Choice, int SelectedAt, ThresholdChoice? Closest, IReadOnlyList<string>? Domain,
-        IReadOnlyList<string>? KeyFields, IReadOnlyList<ThresholdChoice?>? Typed, int? CoarsePrefix, ThresholdChoice? Coarse);
+        IReadOnlyList<string>? KeyFields, IReadOnlyList<ThresholdChoice?>? Typed, int? CoarsePrefix, ThresholdChoice? Coarse,
+        IReadOnlyDictionary<string, double>? KeyConcentrations);
 
     private sealed record Stored(int Format, string? Scorer, IReadOnlyList<Entry> Fields);
 
@@ -44,7 +45,8 @@ public static class ThresholdStore
             if (stored?.Format != Format || stored.Scorer != Scorer) return None;
             return stored.Fields.ToDictionary(
                 e => (e.Template, e.Field),
-                e => new FieldThreshold(e.Choice, e.SelectedAt, e.SelectedAt, e.Closest, e.Domain, e.KeyFields, e.Typed, e.CoarsePrefix, e.Coarse));
+                e => new FieldThreshold(e.Choice, e.SelectedAt, e.SelectedAt, e.Closest, e.Domain, e.KeyFields, e.Typed, e.CoarsePrefix, e.Coarse,
+                    e.KeyConcentrations));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -58,7 +60,7 @@ public static class ThresholdStore
         var stored = new Stored(Format, Scorer, [.. thresholds
             .Where(t => t.Value.SelectedAt is not null)
             .Select(t => new Entry(t.Key.Template, t.Key.Field, t.Value.Choice, t.Value.SelectedAt!.Value, t.Value.Closest, t.Value.Domain, t.Value.KeyFields, t.Value.Typed,
-                t.Value.CoarsePrefix, t.Value.Coarse))]);
+                t.Value.CoarsePrefix, t.Value.Coarse, t.Value.KeyConcentrations))]);
         // Written beside and moved over, so a launch never reads half a file.
         var written = path + ".new";
         File.WriteAllText(written, JsonSerializer.Serialize(stored, JsonSerializerOptions.Web));

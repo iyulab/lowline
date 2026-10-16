@@ -35,7 +35,7 @@ public sealed record TypedReplay(int Characters, double Threshold, double Precis
 /// <see cref="Precision"/> of those were right, with what to expect next (<see cref="Promise"/>, as for <see cref="FieldReplay"/>).
 /// </summary>
 public sealed record ClassReplay(
-    double Threshold, double Precision, double Promise, int PromiseOver, double AnswerRate, int Answered, int Lookups);
+    double Threshold, double Precision, double Promise, double PromiseAnswered, int PromiseOver, double AnswerRate, int Answered, int Lookups);
 
 /// <summary>Of a field's decisions about suggestions from one source, how many there were and how many were accepted.</summary>
 public sealed record SourceCount(string Source, int Decided, int Accepted);
@@ -54,12 +54,13 @@ public sealed record FieldShortfall(double Precision, double AnswerRate, int Ans
 /// suggestions that were made, this says how often none was. <see cref="DependsOn"/> names the fields the replay chose
 /// for the field's suggestions to rest on — the fields that key it — when resting on them alone was suggested more often
 /// at the same precision; null when every value filled in counts. <see cref="Promise"/> is what to expect of the next
-/// suggestions: the precision of those among the latest <see cref="PromiseOver"/> documents, or <see cref="Precision"/>
-/// when they are too few to rest on — a replay's precision runs over every document, so it keeps a time the field did
-/// better long after.
+/// suggestions at least: the precision of those among the latest <see cref="PromiseOver"/> documents, or of the whole
+/// replay when they are too few to rest on — a replay's precision runs over every document, so it keeps a time the field
+/// did better long after — lowered to what the <see cref="PromiseAnswered"/> answers it rests on can vouch for, since the
+/// strength was chosen on those very answers and a few of them flatter it.
 /// </summary>
 public sealed record FieldReplay(
-    double Threshold, double Precision, double Promise, int PromiseOver, double AnswerRate, int Answered, int Lookups,
+    double Threshold, double Precision, double Promise, double PromiseAnswered, int PromiseOver, double AnswerRate, int Answered, int Lookups,
     IReadOnlyList<string>? DependsOn = null);
 
 /// <summary>

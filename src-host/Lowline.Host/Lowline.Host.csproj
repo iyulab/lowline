@@ -25,10 +25,10 @@
     <PackageReference Include="Formbase.Core" Version="0.22.0" />
     <PackageReference Include="Formbase.Sqlite" Version="0.22.0" />
     <PackageReference Include="Formbase.DependencyInjection" Version="0.22.0" />
-    <PackageReference Include="Gil" Version="0.20.0" />
-    <PackageReference Include="IronProw.Core" Version="0.16.1" />
-    <PackageReference Include="IronProw.IronHive" Version="0.16.1" />
-    <PackageReference Include="IronProw.LMSupply" Version="0.16.1" />
+    <PackageReference Include="Gil" Version="0.21.0" />
+    <PackageReference Include="IronProw.Core" Version="0.16.2" />
+    <PackageReference Include="IronProw.IronHive" Version="0.16.2" />
+    <PackageReference Include="IronProw.LMSupply" Version="0.16.2" />
     <PackageReference Include="LMSupply.Generator" Version="0.123.0" />
     <PackageReference Include="FluxIndex.SDK" Version="0.100.0" />
     <PackageReference Include="FluxIndex.Storage.SQLite" Version="0.100.0" />

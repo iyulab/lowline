@@ -45,20 +45,28 @@ describe('how typing did on replay', () => {
 })
 
 describe('what a replay promises', () => {
-  const replay = { answerRate: 0.4, precision: 0.88, promise: 0.88, promiseOver: 5000, lookups: 1200 }
+  const replay = { answerRate: 0.4, precision: 0.88, promise: 0.88, promiseAnswered: 480, promiseOver: 5000, lookups: 1200 }
 
-  it('says no more than the whole replay when the latest stretch agrees with it', () => {
+  it('says no more than the whole replay when the promise agrees with it', () => {
     expect(strings.learningReplay(replay)).toBe('저장된 1200건을 순서대로 다시 물으면 40%에 제안, 그중 88% 맞음')
   })
 
-  it('names the latest stretch as what to expect when it has drifted from the whole replay', () => {
-    expect(strings.learningReplay({ ...replay, promise: 0.81 })).toContain('최근 5,000건만 보면 81% 맞음, 앞으로 기대할 값은 이쪽')
+  it('gives the promise as a floor, with the answers it rests on', () => {
+    expect(strings.learningReplay({ ...replay, promise: 0.86 })).toBe(
+      '저장된 1200건을 순서대로 다시 물으면 40%에 제안, 그중 88% 맞음 — 앞으로는 적어도 86% 맞으리라 봅니다(제안 480건으로 셈)',
+    )
+  })
+
+  it('names the latest stretch when the promise rests on it rather than the whole replay', () => {
+    expect(strings.learningReplay({ ...replay, lookups: 12000, promise: 0.81, promiseAnswered: 2100 })).toContain(
+      '적어도 81% 맞으리라 봅니다(최근 5,000건의 제안 2,100건으로 셈)',
+    )
   })
 })
 
 describe('what a class promises', () => {
   it('says how often a class was offered where the value was not, and how often it was right', () => {
-    const coarse = { answerRate: 0.17, precision: 0.95, promise: 0.95, promiseOver: 5000, lookups: 429 }
+    const coarse = { answerRate: 0.17, precision: 0.95, promise: 0.95, promiseAnswered: 73, promiseOver: 5000, lookups: 429 }
     expect(strings.learningClass(coarse)).toBe('앞부분(분류): 값을 제안하지 못한 429건 중 17%에 분류를 제안, 그중 95% 맞음')
   })
 })

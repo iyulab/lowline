@@ -228,6 +228,7 @@
         "threshold": 0,
         "precision": 0,
         "promise": 0,
+        "promiseAnswered": 0,
         "promiseOver": 0,
         "answerRate": 0,
         "answered": 0,
@@ -277,12 +278,14 @@
         "threshold": 0,
         "precision": 0,
         "promise": 0,
+        "promiseAnswered": 0,
         "promiseOver": 0,
         "answerRate": 0,
         "answered": 0,
         "lookups": 0,
         "dependsOn": [
-          "설비"
+          "설비",
+          "교대"
         ]
       },
       "whyNoReplay": null,
@@ -342,6 +345,7 @@
         "threshold": 0,
         "precision": 0,
         "promise": 0,
+        "promiseAnswered": 0,
         "promiseOver": 0,
         "answerRate": 0,
         "answered": 0,

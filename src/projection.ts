@@ -267,13 +267,15 @@ export interface FieldCurve {
    * that were right, at the strength the replay chose. Absent until the history is long enough to choose one from.
    * `dependsOn` names the fields the replay chose for the suggestions to rest on, when resting on them alone was
    * suggested more often at the same precision; absent or null when every value filled in counts. `promise` is what to
-   * expect of the next suggestions: the precision of those among the latest `promiseOver` documents, or `precision`
-   * when they are too few to rest on.
+   * expect of the next suggestions at least: the precision of those among the latest `promiseOver` documents (of the
+   * whole replay when they are too few to rest on), lowered to what the `promiseAnswered` answers it rests on can vouch
+   * for — a floor, not a forecast.
    */
   replay?: {
     threshold: number
     precision: number
     promise: number
+    promiseAnswered: number
     promiseOver: number
     answerRate: number
     answered: number
@@ -303,7 +305,7 @@ export interface FieldCurve {
    * documents whose value the replay left unsuggested, the share given a class and the share of those right, with what
    * to expect next as for `replay`. Absent or null otherwise.
    */
-  coarse?: { threshold: number; precision: number; promise: number; promiseOver: number; answerRate: number; answered: number; lookups: number } | null
+  coarse?: { threshold: number; precision: number; promise: number; promiseAnswered: number; promiseOver: number; answerRate: number; answered: number; lookups: number } | null
 }
 
 export interface TypedReplay {

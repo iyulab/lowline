@@ -6,18 +6,20 @@ interface Replayed {
   answerRate: number
   precision: number
   promise: number
+  promiseAnswered: number
   promiseOver: number
   lookups: number
 }
 
 /**
  * What to expect next, when it differs from the whole replay: a replay's precision keeps a time a field did better long
- * after, and the latest stretch is what the next suggestions are like.
+ * after, and the strength was chosen on those very answers, so the promise is the latest stretch's precision lowered to
+ * what its answers can vouch for. It is a floor, so it says "at least", with how many answers it rests on beside it.
  */
 function promiseTail(replay: Replayed): string {
-  return Math.round(replay.promise * 100) === Math.round(replay.precision * 100)
-    ? ''
-    : ` — 최근 ${replay.promiseOver.toLocaleString('ko-KR')}건만 보면 ${Math.round(replay.promise * 100)}% 맞음, 앞으로 기대할 값은 이쪽`
+  if (Math.round(replay.promise * 100) === Math.round(replay.precision * 100)) return ''
+  const latest = replay.lookups > replay.promiseOver ? `최근 ${replay.promiseOver.toLocaleString('ko-KR')}건의 ` : ''
+  return ` — 앞으로는 적어도 ${Math.round(replay.promise * 100)}% 맞으리라 봅니다(${latest}제안 ${Math.round(replay.promiseAnswered).toLocaleString('ko-KR')}건으로 셈)`
 }
 
 export const strings = {

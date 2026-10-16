@@ -463,7 +463,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
                 ? c with
                 {
                     Replay = new FieldReplay(
-                        choice.Threshold, choice.Precision, choice.Promise, Gil.Forms.ThresholdSelection.RecentDocuments, choice.AnswerRate,
+                        choice.Threshold, choice.Precision, choice.Promise, choice.PromiseAnswered, Gil.Forms.ThresholdSelection.RecentDocuments, choice.AnswerRate,
                         choice.Answered, choice.Lookups, _suggestions.KeyFields(c.Template, c.Field)),
                 }
                 : c with
@@ -485,7 +485,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         ? curve with
         {
             Coarse = new ClassReplay(
-                coarse.Threshold, coarse.Precision, coarse.Promise, Gil.Forms.ThresholdSelection.RecentDocuments, coarse.AnswerRate,
+                coarse.Threshold, coarse.Precision, coarse.Promise, coarse.PromiseAnswered, Gil.Forms.ThresholdSelection.RecentDocuments, coarse.AnswerRate,
                 coarse.Answered, coarse.Lookups),
         }
         : curve;

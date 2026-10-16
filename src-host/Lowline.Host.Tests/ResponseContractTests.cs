@@ -44,8 +44,9 @@ public sealed class ResponseContractTests
             $$"""{"요청": "{{Requests.GetValueOrDefault(i, $"노트북 배터리 {i}")}}", "부서": "영업", "수량": {{(i == 1 ? "\"여러 개\"" : "1")}}, "담당": "장비", "긴급": "{{(i % 2 == 0 ? "높음" : "낮음")}}"}""")!,
         Modified: i);
 
-    // Fault codes the machine decides nine times in ten, with five fields that say nothing about them: the replay
-    // rests 고장 on 설비 alone, so a curve carries the fields its suggestions rest on. Picked, not typed: a field typed
+    // Fault codes the machine decides nine times in ten, with five fields of many values that say nothing about them:
+    // the replay rests 고장 on 설비 and leaves most of them out, so a curve carries the fields its suggestions rest on.
+    // (Of few values, their keys gain new codes so often that how readily they are believed already counts them out.) Picked, not typed: a field typed
     // into is counted while typing too, where the prefix decides more than 설비 and every field is kept.
     private static readonly string[] Noise = ["교대", "라인", "등급", "지역", "공정"];
 
@@ -58,7 +59,7 @@ public sealed class ResponseContractTests
         var random = new Random(7);
         for (var i = 0; i < 300; i++)
         {
-            var values = Noise.ToDictionary(n => n, n => (object)$"{n}{random.Next(6)}");
+            var values = Noise.ToDictionary(n => n, n => (object)$"{n}{random.Next(20)}");
             var machine = random.Next(30);
             values["설비"] = $"설비{machine}";
             values["고장"] = random.NextDouble() < 0.9 ? $"F{machine:D2}" : $"F{random.Next(90):D2}";

@@ -29,7 +29,8 @@ public sealed class ReplayTests
     /// characters typed; null when nothing was offered.
     /// </summary>
     private sealed record Offered(
-        string Doc, string Field, Suggestion Suggestion, IReadOnlyList<string> Filled, string? Typed = null, double? Promised = null);
+        string Doc, string Field, Suggestion Suggestion, IReadOnlyList<string> Filled, string? Typed = null, double? Promised = null,
+        IReadOnlyList<string>? KeyFields = null);
 
     [Fact]
     public async Task Replays_records_in_the_order_they_were_made()
@@ -70,7 +71,8 @@ public sealed class ReplayTests
                 else wrong++;
                 tally[counted] = (right, wrong, abstained);
                 await offers.WriteLineAsync(JsonSerializer.Serialize(
-                    new Offered(document.Identity, field, suggestion, before, Promised: await PromisedAsync(vault, document.Template, field, suggestion, null, ct)), Json));
+                    new Offered(document.Identity, field, suggestion, before, Promised: await PromisedAsync(vault, document.Template, field, suggestion, null, ct),
+                        KeyFields: (await vault.CurvesAsync(ct)).Single(c => c.Template == document.Template && c.Field == field).Replay?.DependsOn), Json));
 
                 // A value typed out that was not offered: typed from its start, asked again with each of the first three
                 // characters, and taken once it is offered. While typing, only a value that adds to the text is shown.

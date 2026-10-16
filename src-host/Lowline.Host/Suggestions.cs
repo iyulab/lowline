@@ -198,6 +198,13 @@ public sealed class Suggestions
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
+            // How far a key seen only a few times is believed, first: a field naming the very thing judged keeps the value
+            // its keys were first seen with, a broad one mixes values, and the scores every strength below is chosen on
+            // follow from it. Each field's is its own, so choosing them over every field holds for whichever key it.
+            var concentrations = ThresholdSelection.SelectKeyConcentrations(new FieldMemory(), bare, field, _settled[template]) is { Count: > 0 } chosenConcentrations
+                ? chosenConcentrations
+                : null;
+            var concentrated = Form(_templates[template], f => new FieldThreshold(null, 0, 0, KeyConcentrations: f == field ? concentrations : null))!;
             // The fields that key the judgment first — where a few decide a field of many values, the rest only add to
             // every value's score — then the strength, replayed with them. A field a person types into is asked again
             // with each character, and the fields that decide it before typing may blur it once a prefix has narrowed its
@@ -206,12 +213,13 @@ public sealed class Suggestions
             // rightly, so each keeps its promise where a person actually types. Null for a field whose value is picked.
             var typeable = Typeable(_templates[template].Fields.First(f => f.Name == field));
             var keyed = ThresholdSelection.SelectKeyFields(
-                () => new FieldMemory(), bare, field, _settled[template], TargetPrecision, MinimumAnswered,
+                () => new FieldMemory(), concentrated, field, _settled[template], TargetPrecision, MinimumAnswered,
                 typedLongest: typeable ? TypedLongest : 0);
             var key = keyed.Chosen;
             var threshold = new FieldThreshold(
                 key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
-                keyed.KeyFields, keyed.Typed?.ByLength.Select(r => r.Chosen).ToList(), CoarseOf(_templates[template], field));
+                keyed.KeyFields, keyed.Typed?.ByLength.Select(r => r.Chosen).ToList(), CoarseOf(_templates[template], field),
+                KeyConcentrations: concentrations);
             // A class is offered where the value is not, so its strength is replayed on the lookups the value's leaves.
             if (threshold.CoarsePrefix is not null)
             {
@@ -319,6 +327,7 @@ public sealed class Suggestions
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
                 KeyFields = threshold(f.Name).KeyFields,
+                KeyConcentrations = threshold(f.Name).KeyConcentrations,
                 TypedKeyThresholds = threshold(f.Name).Typed?.Select(c => c?.Threshold).ToList(),
                 // A field of one choice is suggested only a choice it has now: a value settled under an option
                 // since dropped is remembered, not offered.
@@ -439,10 +448,14 @@ public sealed class Suggestions
 /// How the class did on the lookups the value left, and the strength chosen for it; null when none was right often enough,
 /// or the field has no class.
 /// </param>
+/// <param name="KeyConcentrations">
+/// How readily each field's keys were believed after a few settlements when the strengths were chosen — they set the scale
+/// of the scores those strengths are on; null when every field's was the usual one.
+/// </param>
 public sealed record FieldThreshold(
     ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
     IReadOnlyList<string>? KeyFields = null, IReadOnlyList<ThresholdChoice?>? Typed = null, int? CoarsePrefix = null,
-    ThresholdChoice? Coarse = null)
+    ThresholdChoice? Coarse = null, IReadOnlyDictionary<string, double>? KeyConcentrations = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>
