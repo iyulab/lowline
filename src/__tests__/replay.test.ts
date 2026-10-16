@@ -6,12 +6,17 @@
 // record field by field and the record saved with what it says (`ReplayTests.cs`); what was offered becomes the
 // events a save records, and those the weekly counts a person would hand over. Everything is written to
 // `LOWLINE_REPLAY_OUT` (default: a folder in the temp directory) — the rows never leave this machine, only what
-// the counts say. Runs only when `LOWLINE_REPLAY` is set; needs `dotnet`.
+// the counts say. Records that name documents of another template (`@업소 -> food-business`) come with that template
+// and its rows in `base/`, in the same shape: those are brought in first and whole, as a person brings in their
+// businesses before the inspections that name them, and the records' reference cells are resolved to them the way
+// the app resolves pasted names. Runs only when `LOWLINE_REPLAY` is set; needs `dotnet`.
 import { describe, expect, it } from 'vitest'
 import { documentFileName, documentTitle, newDocument, type FieldValues } from '../documents.js'
 import { charactersTyped, presentation, suggestionEvents, type Offer, type Presentation, type SuggestionEvent } from '../events.js'
 import { importFields, planImport } from '../import.js'
 import { documentSnapshot, templateSnapshot, type DocumentSnapshot, type Suggestion } from '../projection.js'
+import { documentNames } from '../references.js'
+import { templateId } from '../template-revision.js'
 import { weekOf, weeklyCounts } from '../weekly-counts.js'
 
 interface NodeProcess {
@@ -20,6 +25,7 @@ interface NodeProcess {
     readFileSync(path: string, encoding: 'utf8'): string
     writeFileSync(path: string, text: string): void
     mkdirSync(path: string, options: { recursive: true }): void
+    existsSync(path: string): boolean
   }
   getBuiltinModule(name: 'node:child_process'): {
     execFileSync(file: string, args: string[], options: { env: Record<string, string | undefined>; stdio: 'inherit'; timeout: number }): void
@@ -52,15 +58,37 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     fs.mkdirSync(out, { recursive: true })
 
     // Brought in as the app brings in pasted rows.
+    const rowsIn = (dir: string) =>
+      fs
+        .readFileSync(`${dir}/rows.tsv`, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => line.trim())
+        .map((line) => line.split('\t'))
+    // Named as the app names them — by the record's day and its first value, numbered when the name is taken.
+    const named = (taken: Set<string>, day: Date, title: string | undefined) => {
+      let name = documentFileName(day, title)
+      for (let n = 1; taken.has(name); n++) name = name.replace(/( \(\d+\))?\.md$/, ` (${n}).md`)
+      taken.add(name)
+      return name
+    }
+    // The documents the records refer to, if any: planned and named first, for the records' cells to name them.
+    const baseSource = fs.existsSync(`${source}/base/template.md`) ? fs.readFileSync(`${source}/base/template.md`, 'utf8') : undefined
+    const base = baseSource ? templateSnapshot(baseSource) : undefined
+    const basePlan = baseSource ? planImport(rowsIn(`${source}/base`), importFields(baseSource)) : undefined
+    expect(basePlan?.problems ?? [], 'every row of the documents referred to fits their form').toEqual([])
+    const baseTaken = new Set<string>()
+    const baseNamed = (basePlan?.documents ?? []).map((record, i) => ({
+      record,
+      id: `base-${i}`,
+      path: `문서/${named(baseTaken, record.date ?? new Date(0), documentTitle(baseSource!, record.values))}`,
+    }))
+    const names = documentNames(baseNamed.map((b) => ({ path: b.path, id: b.id, template: base!.ref, values: {} })))
+
     const templateSource = fs.readFileSync(`${source}/template.md`, 'utf8')
     const template = templateSnapshot(templateSource)
-    const rows = fs
-      .readFileSync(`${source}/rows.tsv`, 'utf8')
-      .split(/\r?\n/)
-      .filter((line) => line.trim())
-      .map((line) => line.split('\t'))
-    const plan = planImport(rows, importFields(templateSource))
-    expect(plan.problems, 'every row fits the form').toEqual([])
+    const rows = rowsIn(source)
+    const plan = planImport(rows, importFields(templateSource), undefined, names)
+    expect(plan.problems, 'every row fits the form, and names one document of each template it refers to').toEqual([])
     expect(plan.documents.length).toBe(rows.length - 1)
     expect(plan.documents.every((r) => r.date), 'every record has its day').toBe(true)
 
@@ -75,17 +103,23 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     const firstWeek = Date.parse(weekOf(made[0]))
     const broughtIn = made.filter((at) => at < firstWeek + broughtInWeeks * 7 * DAY).length
     const importedAt = (made[broughtIn] ?? made[made.length - 1]) - 60 * 60 * 1000
-    // Named as the app names them — by the record's day and its first value, numbered when the name is taken.
     const taken = new Set<string>()
     const documents: DocumentSnapshot[] = plan.documents.map((record, i) => {
-      const id = `replay-${i}`
-      let name = documentFileName(record.date!, documentTitle(templateSource, record.values))
-      for (let n = 1; taken.has(name); n++) name = name.replace(/( \(\d+\))?\.md$/, ` (${n}).md`)
-      taken.add(name)
-      return documentSnapshot(`문서/${name}`, newDocument(templateSource, record.values, id), i < broughtIn ? importedAt + i : made[i])!
+      const name = named(taken, record.date!, documentTitle(templateSource, record.values))
+      return documentSnapshot(`문서/${name}`, newDocument(templateSource, record.values, `replay-${i}`), i < broughtIn ? importedAt + i : made[i])!
     })
+    // The documents referred to were there before any record: brought in all at once, just before the rest.
+    const baseDocuments: DocumentSnapshot[] = baseNamed.map(
+      (b, i) => documentSnapshot(b.path, newDocument(baseSource!, b.record.values, b.id), Math.min(importedAt, made[0]) - 60 * 60 * 1000 + i)!,
+    )
+    const baseIds = new Set(baseDocuments.map((d) => d.id))
+    // Documents brought in for the records to refer to are referred to: the form reads its reference field.
+    if (base) expect(template.fields.some((f) => f.reference === templateId(base.ref)), `${template.ref} refers to ${base.ref}`).toBe(true)
+    for (const field of template.fields.filter((f) => f.reference))
+      expect(documents.every((d) => baseIds.has(String(d.values[field.name]))), `every record's ${field.name} names a document referred to`).toBe(true)
+    const templates = base ? [base, template] : [template]
     const snapshot = `${out}/snapshot.json`
-    fs.writeFileSync(snapshot, JSON.stringify({ templates: [template], documents, broughtIn }))
+    fs.writeFileSync(snapshot, JSON.stringify({ templates, documents: [...baseDocuments, ...documents], broughtIn: baseDocuments.length + broughtIn }))
 
     // Asked and saved one by one, on the sidecar's side.
     const offersFile = `${out}/offers.jsonl`
@@ -127,7 +161,7 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     })
     fs.writeFileSync(`${out}/events.jsonl`, events.map((e) => JSON.stringify(e)).join('\n') + '\n')
 
-    const counts = weeklyCounts([template], documents, events, shown)
+    const counts = weeklyCounts(templates, [...baseDocuments, ...documents], events, shown)
     const text = JSON.stringify(counts, null, 2)
     fs.writeFileSync(`${out}/weekly-counts.json`, text + '\n')
 
@@ -158,8 +192,9 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
         }
     }
     collect(JSON.parse(text))
-    const values = new Set(documents.flatMap((d) => Object.values(d.values).map(String)).filter((v) => v.length >= 2))
-    for (const secret of [template.ref.split('@')[0], ...template.fields.map((f) => f.name), ...values]) {
+    const values = new Set([...baseDocuments, ...documents].flatMap((d) => Object.values(d.values).map(String)).filter((v) => v.length >= 2))
+    const namesOfForms = templates.flatMap((t) => [t.ref.split('@')[0], ...t.fields.map((f) => f.name)])
+    for (const secret of [...namesOfForms, ...values]) {
       const said = /^\d+(\.\d+)?$/.test(secret) ? words.includes(secret) : words.some((w) => w.includes(secret))
       expect(said, `${secret} in the counts`).toBe(false)
     }
