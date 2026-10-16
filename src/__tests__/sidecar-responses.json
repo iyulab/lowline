@@ -226,6 +226,8 @@
       "replay": {
         "threshold": 0,
         "precision": 0,
+        "promise": 0,
+        "promiseOver": 0,
         "answerRate": 0,
         "answered": 0,
         "lookups": 0,
@@ -271,6 +273,8 @@
       "replay": {
         "threshold": 0,
         "precision": 0,
+        "promise": 0,
+        "promiseOver": 0,
         "answerRate": 0,
         "answered": 0,
         "lookups": 0,

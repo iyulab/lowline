@@ -282,7 +282,7 @@ export class LlLearning extends LitElement {
         <p class="message">${strings.learningUndecided}</p>
         <p class="secondary replay">
           ${curve.replay
-            ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
+            ? strings.learningReplay(curve.replay)
             : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
         </p>
         ${this.renderDependsOn(curve)}${this.renderTyping(curve)}
@@ -308,7 +308,7 @@ export class LlLearning extends LitElement {
       </div>
       <p class="secondary replay">
         ${curve.replay
-          ? strings.learningReplay(curve.replay.answerRate, curve.replay.precision, curve.replay.lookups)
+          ? strings.learningReplay(curve.replay)
           : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
       </p>
       ${this.renderDependsOn(curve)}${this.renderTyping(curve)}

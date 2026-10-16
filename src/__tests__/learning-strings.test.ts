@@ -43,3 +43,15 @@ describe('how typing did on replay', () => {
     expect(strings.learningTyping([])).toContain('치는 동안에도 제안하지 않습니다')
   })
 })
+
+describe('what a replay promises', () => {
+  const replay = { answerRate: 0.4, precision: 0.88, promise: 0.88, promiseOver: 5000, lookups: 1200 }
+
+  it('says no more than the whole replay when the latest stretch agrees with it', () => {
+    expect(strings.learningReplay(replay)).toBe('저장된 1200건을 순서대로 다시 물으면 40%에 제안, 그중 88% 맞음')
+  })
+
+  it('names the latest stretch as what to expect when it has drifted from the whole replay', () => {
+    expect(strings.learningReplay({ ...replay, promise: 0.81 })).toContain('최근 5,000건만 보면 81% 맞음, 앞으로 기대할 값은 이쪽')
+  })
+})

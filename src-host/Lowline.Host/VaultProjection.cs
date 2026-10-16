@@ -383,8 +383,8 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
                 ? c with
                 {
                     Replay = new FieldReplay(
-                        choice.Threshold, choice.Precision, choice.AnswerRate, choice.Answered, choice.Lookups,
-                        _suggestions.KeyFields(c.Template, c.Field)),
+                        choice.Threshold, choice.Precision, choice.Promise, Gil.Forms.ThresholdSelection.RecentDocuments, choice.AnswerRate,
+                        choice.Answered, choice.Lookups, _suggestions.KeyFields(c.Template, c.Field)),
                 }
                 : c with
                 {

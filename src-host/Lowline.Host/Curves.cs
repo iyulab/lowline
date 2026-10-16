@@ -45,10 +45,14 @@ public sealed record FieldShortfall(double Precision, double AnswerRate, int Ans
 /// got a suggestion, and <see cref="Precision"/> of those were right. Unlike the curve, which counts only
 /// suggestions that were made, this says how often none was. <see cref="DependsOn"/> names the fields the replay chose
 /// for the field's suggestions to rest on — the fields that key it — when resting on them alone was suggested more often
-/// at the same precision; null when every value filled in counts.
+/// at the same precision; null when every value filled in counts. <see cref="Promise"/> is what to expect of the next
+/// suggestions: the precision of those among the latest <see cref="PromiseOver"/> documents, or <see cref="Precision"/>
+/// when they are too few to rest on — a replay's precision runs over every document, so it keeps a time the field did
+/// better long after.
 /// </summary>
 public sealed record FieldReplay(
-    double Threshold, double Precision, double AnswerRate, int Answered, int Lookups, IReadOnlyList<string>? DependsOn = null);
+    double Threshold, double Precision, double Promise, int PromiseOver, double AnswerRate, int Answered, int Lookups,
+    IReadOnlyList<string>? DependsOn = null);
 
 /// <summary>
 /// Correction curves from the vault's event files — whether suggestions get better with use.
