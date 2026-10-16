@@ -101,8 +101,8 @@ public sealed class ReplayTests
     }
 
     /// <summary>
-    /// What the field's curve promises for what was offered: its replay's promise, its class's for a class, or its replay at
-    /// that many characters.
+    /// What the field's curve promises for what was offered: its replay's promise, its class's for a class, similar documents'
+    /// for a value one confirmed, or its replay at that many characters.
     /// </summary>
     private static async Task<double?> PromisedAsync(
         VaultProjection vault, string template, string field, Suggestion offered, string? typed, CancellationToken ct)
@@ -110,6 +110,7 @@ public sealed class ReplayTests
         if (offered.Value is null) return null;
         var curve = (await vault.CurvesAsync(ct)).Single(c => c.Template == template && c.Field == field);
         if (offered.Mode == SuggestionMode.Coarse) return curve.Coarse?.Promise;
+        if (offered.Mode == SuggestionMode.Memory) return curve.Similar?.Promise;
         return typed is null
             ? curve.Replay?.Promise
             : curve.Typing?.FirstOrDefault(t => t.Characters == typed.Length)?.Precision;

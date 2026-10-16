@@ -210,16 +210,21 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     // Quarter by quarter, for each field: how often a value was offered before typing and while typing, how often it
     // was the one saved, and what its replay promised when it was offered — what the app shows under the field's curve.
     const tally = () => ({ asked: 0, offered: 0, right: 0, promised: 0, promises: 0 })
-    const summary: Record<string, Record<string, { before: ReturnType<typeof tally>; typing: ReturnType<typeof tally>; class: ReturnType<typeof tally> }>> = {}
+    const summary: Record<
+      string,
+      Record<string, { before: ReturnType<typeof tally>; typing: ReturnType<typeof tally>; class: ReturnType<typeof tally>; similar: ReturnType<typeof tally> }>
+    > = {}
     const start = Date.parse(weekOf(made[broughtIn]))
     for (const o of offered) {
       const i = Number(o.doc.slice('replay-'.length))
       const quarter = `q${Math.floor((Date.parse(weekOf(made[i])) - start) / (13 * 7 * DAY)) + 1}`
-      const cells = ((summary[o.field] ??= {})[quarter] ??= { before: tally(), typing: tally(), class: tally() })
+      const cells = ((summary[o.field] ??= {})[quarter] ??= { before: tally(), typing: tally(), class: tally(), similar: tally() })
       if (o.typed === null) cells.before.asked++
       if (o.suggestion.value === null) continue
-      // A class is offered where the value is not: it is counted apart, against the asks before typing.
-      const cell = o.suggestion.mode === 'coarse' ? cells.class : cells[o.typed === null ? 'before' : 'typing']
+      // A class is offered where the value is not, and a similar record's value where none settled alongside answers: each
+      // is counted apart, against the asks before typing.
+      const cell =
+        o.suggestion.mode === 'coarse' ? cells.class : o.suggestion.mode === 'memory' ? cells.similar : cells[o.typed === null ? 'before' : 'typing']
       cell.offered++
       const saved = String(documents[i].values[o.field])
       if (o.suggestion.mode === 'coarse' ? saved.startsWith(o.suggestion.value) : o.suggestion.value === saved) cell.right++
@@ -236,7 +241,7 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       if (o.typed !== null || o.suggestion.value === null || o.suggestion.mode === 'coarse') continue
       const i = Number(o.doc.slice('replay-'.length))
       const quarter = `q${Math.floor((Date.parse(weekOf(made[i])) - start) / (13 * 7 * DAY)) + 1}`
-      const key = o.suggestion.source?.split(':')[0] ?? '-'
+      const key = o.suggestion.mode === 'memory' ? '(similar records)' : (o.suggestion.source?.split(':')[0] ?? '-')
       const cell = (((byKey[o.field] ??= {})[key] ??= {})[quarter] ??= tally())
       cell.offered++
       if (o.suggestion.value === String(documents[i].values[o.field])) cell.right++
@@ -254,6 +259,8 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       console.log(`  ${field}: ` + quarters.map(([q, { before }]) => `${q} ${read(before)}`).join(' · '))
       if (quarters.some(([, { typing }]) => typing.offered > 0))
         console.log(`  ${field} while typing: ` + quarters.map(([q, { typing }]) => `${q} ${read(typing)}`).join(' · '))
+      if (quarters.some(([, c]) => c.similar.offered > 0))
+        console.log(`  ${field} from similar records: ` + quarters.map(([q, c]) => `${q} ${read(c.similar)}`).join(' · '))
       if (quarters.some(([, c]) => c.class.offered > 0))
         console.log(`  ${field} class: ` + quarters.map(([q, c]) => `${q} ${read(c.class)}`).join(' · '))
     }
