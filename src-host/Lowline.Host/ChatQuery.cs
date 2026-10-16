@@ -45,6 +45,7 @@ public static class ChatQuery
         - JSON 객체 하나만 ```json 코드 블록에 담아 답합니다. 다른 말은 쓰지 않습니다.
         - `groupBy`: 무엇별로 셀지 — 칸 이름의 배열(`@` 없이). 전체 건수만 물으면 `[]`.
         - `filters`: 어떤 기록만 셀지 — `{"field": 칸 이름, "op": 조건, "value": 값}`의 배열. 조건은 `equal`(같음), `contains`(글에 포함), `atLeast`(이상), `atMost`(이하), `empty`(비어 있음, 값 없이), `period`(날짜 칸의 기간).
+        - `filters`에는 질문이 말한 조건만 넣습니다. 질문이 거르라고 하지 않으면 `[]`입니다 — 「가장 많은」「~별」은 거르는 조건이 아닙니다.
         - 「오늘·어제·이번 주·지난주·이번 달·지난달·올해·작년」은 날짜를 계산하지 말고 `period`로 씁니다 — 값은 `today`, `yesterday`, `this-week`, `last-week`, `this-month`, `last-month`, `this-year`, `last-year` 중 하나. 날짜는 Lowline이 셉니다.
         - 달 하나나 해 하나를 말하면 그것도 `period`로 씁니다 — 값은 달이면 `YYYY-MM`, 해면 `YYYY`. 오늘은 {{today:yyyy-MM-dd}}이니 「작년 12월」은 `{{today.Year - 1}}-12`, 「3월」은 `{{today.Year}}-03`입니다.
         - `period`의 값은 위의 낱말 하나, `YYYY-MM` 하나, `YYYY` 하나 중 하나입니다. 둘을 섞어 쓰지 않습니다.
@@ -56,6 +57,10 @@ public static class ChatQuery
         - 질문이 서식의 어느 칸에도 적히지 않는 것을 물으면 비슷한 다른 칸으로 바꿔 세지 말고 `{"unanswerable": "이유"}`로 답합니다.
 
         예: 칸이 `원인`(부품·설정·사용자)·`방문일`(날짜)·`지역`(글)인 서식에서
+        - 「원인이 가장 많은 것 3개?」 — 거르는 조건이 없다.
+        ```json
+        {"groupBy": ["원인"], "filters": [], "top": 3}
+        ```
         - 「지난달 원인 상위 2개?」
         ```json
         {"groupBy": ["원인"], "filters": [{"field": "방문일", "op": "period", "value": "last-month"}], "top": 2}
@@ -94,7 +99,18 @@ public static class ChatQuery
             {{string.Join("\n", referring.Select(t => $"- `{t.Name}` — {string.Join(", ", t.Via.Select(v => $"`{v}`"))} 칸이 이 서식의 문서를 가리킵니다. 셀 수 있는 칸: {string.Join(", ", t.Columns.Select(Column))}"))}}
             이 서식의 문서마다 그것을 가리키는 기록을 세려면(「{{referring[0].Name}} 기록이 많은 것」) 가리키는 칸으로 묶습니다: `{"of": "{{referring[0].Name}}", "groupBy": ["{{referring[0].Via[0]}}"]}`.
             세는 것이 그 서식의 기록이면 `of`를 쓰고, 이 서식의 문서 자체이면 쓰지 않습니다: 「{{referring[0].Name}} 기록이 가장 많은 3개」는 `{"of": "{{referring[0].Name}}", "groupBy": ["{{referring[0].Via[0]}}"], "top": 3}`, 이 서식의 문서가 칸 값마다 몇 개인지는 `of` 없이 이 서식의 칸으로 묶습니다.
+            {{ReferringByField(referring[0])}}
             """;
+
+    /// <summary>
+    /// How to count the referring template's records by a field of the document each names — "accidents by aircraft
+    /// kind": the records are counted, so `of`, by the column the reference brings. Nothing when the template names none.
+    /// </summary>
+    private static string ReferringByField(ReferringTemplate referring) =>
+        referring.Columns.Where(c => c.Name.StartsWith(referring.Via[0] + ".", StringComparison.Ordinal))
+            .OrderByDescending(c => c.Options is { Count: > 0 }).FirstOrDefault() is { } column
+            ? $$"""이 서식의 칸 값마다 {{referring.Name}} 기록이 몇 건인지(「{{column.Name[(column.Name.IndexOf('.') + 1)..]}}별 {{referring.Name}} 수」)는 그 기록을 세므로 `of`를 쓰고, 가리키는 칸을 거친 이름으로 묶습니다: `{"of": "{{referring.Name}}", "groupBy": ["{{column.Name}}"]}`."""
+            : "";
 
     /// <summary>A column as the model is told it: its name, and its choices or that it is a date.</summary>
     private static string Column(ReferredColumn c) =>

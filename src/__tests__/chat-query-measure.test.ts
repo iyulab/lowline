@@ -35,23 +35,40 @@ const sorted = (read: ReadPlan) =>
       ? { unanswerable: true }
       : read
 
+interface Head {
+  model: string
+  template: string
+  referring: { name: string; via: string[]; columns: Column[] }[]
+}
+
 describe.runIf(env.LOWLINE_CHAT_MEASURE)('replies a model on this computer made to questions of referred documents', () => {
   it('count what was asked, as often as they do', () => {
-    const [head, ...lines] = process!.getBuiltinModule('node:fs').readFileSync(env.LOWLINE_CHAT_MEASURE!, 'utf8').split(/\r?\n/).filter(Boolean)
-    const { model, template, referring } = JSON.parse(head) as { model: string; template: string; referring: { name: string; via: string[]; columns: Column[] }[] }
-    const fields = templateSnapshot(template).fields
+    const lines = process!.getBuiltinModule('node:fs').readFileSync(env.LOWLINE_CHAT_MEASURE!, 'utf8').split(/\r?\n/).filter(Boolean)
     const asField = (c: Column): TemplateField => ({ name: c.name, label: c.name, type: c.type, multiple: false, options: c.options ?? [] })
-    const counts: ReferringCount[] = referring.map((r) => ({ ref: r.name, name: r.name, via: r.via, columns: r.columns.map(asField) }))
     const today = new Date(2026, 9, 16)
-    let meant = 0
+    // Each set begins with a line naming its template and the templates referring to it; its questions follow.
+    let set: { model: string; name: string; fields: TemplateField[]; counts: ReferringCount[] } | undefined
+    const tally = new Map<string, { meant: number; asked: number }>()
     for (const line of lines) {
-      const { question, meant: wanted, reply, ms } = JSON.parse(line) as { question: string; meant: string; reply: string; ms: number }
-      const read = queryPlan(reply, fields, today, undefined, counts)
-      const right = JSON.stringify(sorted(read)) === JSON.stringify(sorted(queryPlan(wanted, fields, today, undefined, counts)))
-      if (right) meant++
-      console.log(`${model} · ${right ? 'meant' : 'not meant'} · ${ms} ms · ${question} → ${JSON.stringify(read)}`)
+      const read = JSON.parse(line) as Head | { question: string; meant: string; reply: string; ms: number }
+      if ('template' in read) {
+        const fields = templateSnapshot(read.template).fields
+        set = {
+          model: read.model,
+          name: /^# (.+)$/m.exec(read.template)?.[1] ?? '',
+          fields,
+          counts: read.referring.map((r) => ({ ref: r.name, name: r.name, via: r.via, columns: r.columns.map(asField) })),
+        }
+        continue
+      }
+      const { question, meant: wanted, reply, ms } = read
+      const plan = queryPlan(reply, set!.fields, today, undefined, set!.counts)
+      const right = JSON.stringify(sorted(plan)) === JSON.stringify(sorted(queryPlan(wanted, set!.fields, today, undefined, set!.counts)))
+      const counted = tally.get(set!.name) ?? { meant: 0, asked: 0 }
+      tally.set(set!.name, { meant: counted.meant + (right ? 1 : 0), asked: counted.asked + 1 })
+      console.log(`${set!.model} · ${set!.name} · ${right ? 'meant' : 'not meant'} · ${ms} ms · ${question} → ${JSON.stringify(plan)}`)
     }
-    console.log(`${model} · ${meant}/${lines.length} plans as meant`)
-    expect(lines.length).toBeGreaterThan(0)
+    for (const [name, { meant, asked }] of tally) console.log(`${set?.model} · ${name} · ${meant}/${asked} plans as meant`)
+    expect(tally.size).toBeGreaterThan(0)
   })
 })
