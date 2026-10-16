@@ -123,7 +123,7 @@ public sealed class HostTests : IClassFixture<HostTests.Factory>
 
         Assert.Equal(HttpStatusCode.InternalServerError, ingest.StatusCode);
         var body = await ingest.Content.ReadAsStringAsync(ct);
-        var failure = System.Text.Json.JsonSerializer.Deserialize<TauriKit.Sidecar.Loopback.FaultResponse>(body, System.Text.Json.JsonSerializerOptions.Web)!.Fault;
+        var failure = System.Text.Json.JsonSerializer.Deserialize<TauriKit.Sidecar.Loopback.FaultProblem>(body, System.Text.Json.JsonSerializerOptions.Web)!.Fault;
         Assert.False(string.IsNullOrEmpty(failure.Type));
         Assert.Contains(failure.Frames, f => f.StartsWith("Lowline.Host.", StringComparison.Ordinal));
         Assert.DoesNotContain("회의록", body);
