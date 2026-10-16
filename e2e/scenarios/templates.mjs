@@ -6,6 +6,14 @@ import { parseFormdown, readFrontMatter } from '@formdown/core'
 import { TEMPLATE, BUG, INTAKE, documentsIn, fileValues } from '../shared.mjs'
 import { SETTINGS, q } from '../app.mjs'
 
+/** A request's body as text: its chunks put together first, so a character split between two is read whole. */
+const bodyOf = (req) =>
+  new Promise((resolve) => {
+    const chunks = []
+    req.on('data', (chunk) => chunks.push(chunk))
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+  })
+
 export default {
   async 'starts the sidecar with the app'(app) {
     const status = await app.cdp.waitFor(
@@ -255,9 +263,7 @@ export default {
         res.end(JSON.stringify({ object: 'list', data: [{ id: 'small-4b', object: 'model' }, { id: 'large-8b', object: 'model' }] }))
         return
       }
-      let body = ''
-      req.on('data', (chunk) => (body += chunk))
-      req.on('end', () => {
+      void bodyOf(req).then((body) => {
         asked.push(JSON.parse(body))
         const text = asked.length === 1 ? `넣었습니다.\n\n${fence}formdown\n${draft('@제목: [text]\n')}${fence}` : `고쳤습니다.\n\n${fence}formdown\n${draft('')}${fence}`
         res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'large-8b', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }))
@@ -378,9 +384,7 @@ export default {
       { 요청: '회의실 의자 다리가 부러졌어요', 부서: '개발', 담당: '장비' },
     ]
     const server = createServer((req, res) => {
-      let body = ''
-      req.on('data', (chunk) => (body += chunk))
-      req.on('end', () => {
+      void bodyOf(req).then((body) => {
         asked.push(JSON.parse(body))
         res.setHeader('content-type', 'application/json')
         // A piece of the long text that fails: the server errs on it.
@@ -466,9 +470,7 @@ export default {
     const asked = []
     let plan = ''
     const server = createServer((req, res) => {
-      let body = ''
-      req.on('data', (chunk) => (body += chunk))
-      req.on('end', () => {
+      void bodyOf(req).then((body) => {
         asked.push(JSON.parse(body))
         res.setHeader('content-type', 'application/json')
         res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'small-4b', choices: [{ index: 0, message: { role: 'assistant', content: plan }, finish_reason: 'stop' }] }))
