@@ -144,10 +144,25 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     const timed = counts.counts.flatMap((c) => Object.values(c.byTyped).flatMap((s) => (s.dwell ? [...s.dwell.accepted, ...s.dwell.other] : [])))
     expect(timed.reduce((n, k) => n + k, 0)).toBe(decided)
 
-    // Nothing that says what the records are about: no form or field name, no value.
+    // Nothing that says what the records are about: no form or field name, no value. Only the counts' words can say
+    // it — their numbers are counts, and a record's amount (`18`) is told apart from them by being a word, not by
+    // its digits. A number a record holds may sit inside a word (`2024-01-18`), so it counts only as a whole word.
+    const words: string[] = []
+    const collect = (node: unknown): void => {
+      if (typeof node === 'string') words.push(node)
+      else if (Array.isArray(node)) node.forEach(collect)
+      else if (node && typeof node === 'object')
+        for (const [key, child] of Object.entries(node)) {
+          words.push(key)
+          collect(child)
+        }
+    }
+    collect(JSON.parse(text))
     const values = new Set(documents.flatMap((d) => Object.values(d.values).map(String)).filter((v) => v.length >= 2))
-    for (const secret of [template.ref.split('@')[0], ...template.fields.map((f) => f.name), ...values])
-      expect(text.includes(secret), `${secret} in the counts`).toBe(false)
+    for (const secret of [template.ref.split('@')[0], ...template.fields.map((f) => f.name), ...values]) {
+      const said = /^\d+(\.\d+)?$/.test(secret) ? words.includes(secret) : words.some((w) => w.includes(secret))
+      expect(said, `${secret} in the counts`).toBe(false)
+    }
 
     // The form's records a week are counted by the weeks they were made in — those brought in all at once too.
     const used = documents.length - broughtIn
