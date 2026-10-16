@@ -293,7 +293,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             {
                 if (ReferenceEquals(_suggestions, suggestions))
                 {
-                    suggestions.Apply(chosen);
+                    await suggestions.ApplyAsync(chosen, cancellationToken);
                     ThresholdStore.Save(ThresholdsFileOf(root), suggestions.Thresholds);
                 }
             }

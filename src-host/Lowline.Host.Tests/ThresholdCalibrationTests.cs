@@ -338,7 +338,7 @@ public sealed class ThresholdCalibrationTests
             var process = System.Diagnostics.Process.GetCurrentProcess();
             var cpu = process.TotalProcessorTime;
             var wall = System.Diagnostics.Stopwatch.StartNew();
-            suggestions.Apply(await suggestions.SelectThresholdsAsync(ct));
+            await suggestions.ApplyAsync(await suggestions.SelectThresholdsAsync(ct), ct);
             process.Refresh();
             return (wall.Elapsed, process.TotalProcessorTime - cpu);
         }

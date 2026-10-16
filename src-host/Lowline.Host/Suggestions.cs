@@ -113,12 +113,18 @@ public sealed class Suggestions
     private const string Unsaved = "\u0000unsaved";
 
     /// <summary>
-    /// Every saved document goes into its memory; asking writes nothing to it. Values settled alongside the document's other
-    /// values answer first, once replay has shown they decide the field (<see cref="FieldDefinition.KeyThreshold"/>); similar
-    /// documents answer where those settle nothing, on a field whose own replay of that layer earned it
-    /// (<see cref="FieldDefinition.MemoryThreshold"/> — see <see cref="FieldThreshold.SimilarThreshold"/>).
+    /// Each template's memory: every saved document goes into it; asking writes nothing to it. Values settled alongside the
+    /// document's other values answer first, once replay has shown they decide the field
+    /// (<see cref="FieldDefinition.KeyThreshold"/>); similar documents answer where those settle nothing, on a field whose own
+    /// replay of that layer earned it (<see cref="FieldDefinition.MemoryThreshold"/> — see
+    /// <see cref="FieldThreshold.SimilarThreshold"/>). Only a template with such a field keeps its documents for similarity
+    /// (<see cref="_similar"/>): on a large vault that memory costs as much to build as the rest, and most templates never
+    /// earn it.
     /// </summary>
-    private readonly FormResolver _resolver = new(new FieldMemory(), new LexicalMemory());
+    private Dictionary<string, FormResolver> _resolvers = new(StringComparer.Ordinal);
+
+    /// <summary>The templates whose memory keeps their documents for similarity.</summary>
+    private HashSet<string> _similar = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TemplateSnapshot> _templates;
     private readonly Dictionary<string, List<SettledDocument>> _settled;
     private Dictionary<(string Template, string Field), FieldThreshold> _thresholds;
@@ -187,11 +193,25 @@ public sealed class Suggestions
         var suggestions = new Suggestions(templates, settled, thresholds, vault.Events ?? []);
         foreach (var template in templates.Values)
         {
-            // Memory is kept for every judgment field; the threshold a field is asked at decides whether it is used.
-            var remembering = Form(template, _ => new FieldThreshold(null, 0, null))!;
-            await suggestions._resolver.RebuildAsync(remembering, settled[template.Ref], cancellationToken);
+            var similar = suggestions.EarnsSimilar(template.Ref);
+            suggestions._resolvers[template.Ref] = await suggestions.RememberAsync(template, similar, cancellationToken);
+            if (similar) suggestions._similar.Add(template.Ref);
         }
         return suggestions;
+    }
+
+    /// <summary>Whether any judgment field of the template is offered similar documents' values.</summary>
+    private bool EarnsSimilar(string template) => _templates[template].Suggest!.Any(f => _thresholds[(template, f)].SimilarOffered);
+
+    /// <summary>
+    /// A template's memory of its saved documents — kept for similarity too when <paramref name="similar"/>. Memory is kept
+    /// for every judgment field; the threshold a field is asked at decides whether it is used.
+    /// </summary>
+    private async Task<FormResolver> RememberAsync(TemplateSnapshot template, bool similar, CancellationToken cancellationToken)
+    {
+        var resolver = new FormResolver(new FieldMemory(), similar ? new LexicalMemory() : null);
+        await resolver.RebuildAsync(Form(template, _ => new FieldThreshold(null, 0, null))!, _settled[template.Ref], cancellationToken);
+        return resolver;
     }
 
     /// <summary>
@@ -207,13 +227,14 @@ public sealed class Suggestions
 
     /// <summary>
     /// Chooses the strength at which each judgment field's values settled alongside the document's other values answer, by
-    /// replaying its confirmed documents in the order they were saved. It runs apart from building memory and its
-    /// result is applied with <see cref="Apply"/>.
+    /// replaying its confirmed documents in the order they were saved — only the fields whose thresholds are due (see
+    /// <see cref="Due(string, string)"/>); the rest keep theirs. It runs apart from building memory and its result is applied
+    /// with <see cref="ApplyAsync"/>.
     /// </summary>
     public async Task<IReadOnlyDictionary<(string Template, string Field), FieldThreshold>> SelectThresholdsAsync(CancellationToken cancellationToken)
     {
         var chosen = new Dictionary<(string, string), FieldThreshold>();
-        foreach (var ((template, field), current) in _thresholds)
+        foreach (var ((template, field), current) in _thresholds.Where(t => Due(t.Value)).ToList())
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bare = Form(_templates[template], _ => new FieldThreshold(null, 0, 0))!;
@@ -271,8 +292,11 @@ public sealed class Suggestions
     public static bool Typeable(TemplateField field) =>
         !field.Multiple && field.Options is not [_, ..] && TypedTypes.Contains(field.Type);
 
-    /// <summary>Uses thresholds <see cref="SelectThresholdsAsync"/> chose.</summary>
-    public void Apply(IReadOnlyDictionary<(string Template, string Field), FieldThreshold> chosen)
+    /// <summary>
+    /// Uses thresholds <see cref="SelectThresholdsAsync"/> chose. A template one of whose fields has just earned similar
+    /// documents gets its memory built again to keep them; one whose fields no longer have keeps it until the next build.
+    /// </summary>
+    public async Task ApplyAsync(IReadOnlyDictionary<(string Template, string Field), FieldThreshold> chosen, CancellationToken cancellationToken)
     {
         // Replaced, not changed in place: a later build may be reading these as its previous thresholds.
         var thresholds = new Dictionary<(string, string), FieldThreshold>(_thresholds);
@@ -280,7 +304,12 @@ public sealed class Suggestions
         {
             if (thresholds.ContainsKey(key)) thresholds[key] = threshold;
         }
-        _thresholds = thresholds;
+        var earning = _templates.Keys.Where(t => !_similar.Contains(t) && t is var template
+            && _templates[template].Suggest!.Any(f => thresholds[(template, f)].SimilarOffered)).ToList();
+        var resolvers = new Dictionary<string, FormResolver>(_resolvers, StringComparer.Ordinal);
+        foreach (var template in earning)
+            resolvers[template] = await RememberAsync(_templates[template], similar: true, cancellationToken);
+        (_thresholds, _resolvers, _similar) = (thresholds, resolvers, [.. _similar, .. earning]);
         _forms = Forms();
     }
 
@@ -414,7 +443,7 @@ public sealed class Suggestions
         if (typing && !Typeable(_templates[request.Template].Fields.First(f => f.Name == request.Field)))
             return Abstain(request.Template, request.Field);
         // Only the field asked about: typing into it changes no other field's suggestion.
-        var suggestion = await _resolver.SuggestAsync(
+        var suggestion = await _resolvers[request.Template].SuggestAsync(
             form, request.Document ?? Unsaved, request.Field, held, sets: null, typing ? request.Typed : null, cancellationToken);
 
         // Only a layer that keeps its promise is offered: anything else leaves the field to the person. Similar documents
