@@ -19,9 +19,21 @@ interface Column {
   options?: string[] | null
 }
 
-/** A plan with its conditions in one order, so two plans of the same count compare equal. */
+/**
+ * A plan as the count it makes, so two plans that answer alike compare equal: its conditions in one order, and not
+ * counted by a field it keeps one value of (that makes one row, the same number). A question not counted is one,
+ * whatever the reason given.
+ */
 const sorted = (read: ReadPlan) =>
-  'plan' in read ? { ...read.plan, filters: [...read.plan.filters].sort((a, b) => `${a.column}${a.op}${a.value}`.localeCompare(`${b.column}${b.op}${b.value}`)) } : read
+  'plan' in read
+    ? {
+        ...read.plan,
+        groupBy: read.plan.groupBy.filter((g) => !read.plan.filters.some((f) => f.column === g && f.op === 'equal')),
+        filters: [...read.plan.filters].sort((a, b) => `${a.column}${a.op}${a.value}`.localeCompare(`${b.column}${b.op}${b.value}`)),
+      }
+    : 'unanswerable' in read
+      ? { unanswerable: true }
+      : read
 
 describe.runIf(env.LOWLINE_CHAT_MEASURE)('replies a model on this computer made to questions of referred documents', () => {
   it('count what was asked, as often as they do', () => {

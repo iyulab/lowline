@@ -50,7 +50,9 @@ public static class ChatQuery
         - `period`의 값은 위의 낱말 하나, `YYYY-MM` 하나, `YYYY` 하나 중 하나입니다. 둘을 섞어 쓰지 않습니다.
         - 「9월 1일부터」처럼 날을 직접 말한 질문만 `atLeast`·`atMost`에 `YYYY-MM-DD`로 씁니다(연도를 말하지 않으면 올해).
         - `top`: 「상위 3개」처럼 몇 개만 물으면 그 수. 아니면 넣지 않습니다.
-        - 칸 이름과 선택지는 서식에 있는 그대로 씁니다.
+        - 칸 이름과 선택지는 서식에 있는 그대로 씁니다. 질문이 선택지의 값을 말하면(그 뜻이나 다른 말로라도) 그 칸에 `equal`로 거릅니다.
+        - 「A별 B」처럼 칸 둘로 나누어 물으면 `groupBy`에 둘 다 넣습니다. 질문이 값을 정해 말하지 않은 칸에는 `equal`을 걸지 않습니다.
+        - Lowline은 건수만 셉니다. 비율·평균·합계를 물으면 `unanswerable`로 답합니다.
         - 질문이 서식의 어느 칸에도 적히지 않는 것을 물으면 비슷한 다른 칸으로 바꿔 세지 말고 `{"unanswerable": "이유"}`로 답합니다.
 
         예: 칸이 `원인`(부품·설정·사용자)·`방문일`(날짜)·`지역`(글)인 서식에서
@@ -91,6 +93,7 @@ public static class ChatQuery
             이 서식의 문서를 가리키는 다른 서식이 있습니다. 그 서식의 기록을 세려면 `"of"`에 그 서식의 이름을 넣고, 그 서식의 칸 이름을 씁니다:
             {{string.Join("\n", referring.Select(t => $"- `{t.Name}` — {string.Join(", ", t.Via.Select(v => $"`{v}`"))} 칸이 이 서식의 문서를 가리킵니다. 셀 수 있는 칸: {string.Join(", ", t.Columns.Select(Column))}"))}}
             이 서식의 문서마다 그것을 가리키는 기록을 세려면(「{{referring[0].Name}} 기록이 많은 것」) 가리키는 칸으로 묶습니다: `{"of": "{{referring[0].Name}}", "groupBy": ["{{referring[0].Via[0]}}"]}`.
+            세는 것이 그 서식의 기록이면 `of`를 쓰고, 이 서식의 문서 자체이면 쓰지 않습니다: 「{{referring[0].Name}} 기록이 가장 많은 3개」는 `{"of": "{{referring[0].Name}}", "groupBy": ["{{referring[0].Via[0]}}"], "top": 3}`, 이 서식의 문서가 칸 값마다 몇 개인지는 `of` 없이 이 서식의 칸으로 묶습니다.
             """;
 
     /// <summary>A column as the model is told it: its name, and its choices or that it is a date.</summary>

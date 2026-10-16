@@ -51,6 +51,10 @@ public sealed class ChatQueryMeasureTests
         ("업소 유형별로 업소가 몇 곳?", """{"groupBy": ["업소유형"]}"""),
         ("업소 유형별 검사 결과는?", """{"of": "식품 업소 검사", "groupBy": ["업소.업소유형", "결과"]}"""),
         ("민원(Complaint) 검사가 가장 많은 업소 3곳?", """{"of": "식품 업소 검사", "groupBy": ["업소"], "filters": [{"field": "검사유형", "op": "equal", "value": "Complaint"}], "top": 3}"""),
+        ("식당(Restaurant)은 몇 곳이야?", """{"filters": [{"field": "업소유형", "op": "equal", "value": "Restaurant"}]}"""),
+        ("위험도 높음(Risk 1) 검사는 결과별로 몇 건?", """{"of": "식품 업소 검사", "groupBy": ["결과"], "filters": [{"field": "위험도", "op": "equal", "value": "Risk 1 (High)"}]}"""),
+        ("업소별 불합격 비율은?", """{"unanswerable": "비율은 셀 수 없습니다"}"""),
+        ("학교(School) 업소들은 검사를 모두 몇 번 받았어?", """{"of": "식품 업소 검사", "filters": [{"field": "업소.업소유형", "op": "equal", "value": "School"}]}"""),
     ];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerOptions.Web) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
