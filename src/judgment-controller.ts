@@ -41,6 +41,12 @@ export class JudgmentController implements ReactiveController {
   /** Every suggestion shown since the draft was opened or last saved: what a save confirms or not. */
   offered = new Map<string, Offer>()
   /**
+   * Classes taken since the draft was opened or last saved (`coarse`), by field: the field stays open for the rest of
+   * the value — and for the suggestions typing it brings, which take its place in `offered` — so what the save says
+   * about the class is kept apart.
+   */
+  private classes = new Map<string, Offer>()
+  /**
    * Values another program wrote into the open document as suggestions (`lowline.proposed`) that the person has not
    * decided yet, with who wrote them: the field is shown empty with the value offered in it, and saving leaves the
    * value and its mark in the file as they were.
@@ -92,6 +98,7 @@ export class JudgmentController implements ReactiveController {
     this.abstained = new Map()
     this.unavailable = false
     this.offered = new Map()
+    this.classes = new Map()
     this.filled = []
     this.typing = new Set()
     this.rejected = new Set()
@@ -204,12 +211,26 @@ export class JudgmentController implements ReactiveController {
     if (this.template) this.suggestTimer = setTimeout(() => void this.suggest(), SUGGEST_DELAY_MS)
   }
 
-  /** The suggested value for `field` is taken: it is a value like any other until the document is saved. */
-  take(field: string) {
+  /**
+   * The suggested value for `field` is taken: it is a value like any other until the document is saved. A class taken
+   * is the start of the value, not all of it: the field stays open, asked about with it as typed, and this answers true.
+   */
+  take(field: string): boolean {
     this.decided(field)
-    this.typing.delete(field)
+    const taken = this.suggestions.get(field)
     this.settle(field)
     this.dismiss(field)
+    if (taken?.mode !== 'coarse') {
+      this.typing.delete(field)
+      return false
+    }
+    const offer = this.offered.get(field)
+    if (offer) this.classes.set(field, offer)
+    this.offered.delete(field)
+    this.typing.add(field)
+    clearTimeout(this.suggestTimer)
+    this.suggestTimer = setTimeout(() => void this.suggest(), 0)
+    return true
   }
 
   /** The suggestion for `field` is set aside. The rejection is recorded if the field is still empty when saved. */
@@ -224,11 +245,15 @@ export class JudgmentController implements ReactiveController {
   /** Records what saving document `id` confirmed about the suggestions offered; what was typed is no longer being typed. */
   async saved(id: string | undefined) {
     if (id !== undefined) {
-      const events = suggestionEvents(this.offered, this.rejected, this.source.values(), id, new Date(), this.template?.ref)
+      const values = this.source.values()
+      const at = new Date()
+      const events = suggestionEvents(this.offered, this.rejected, values, id, at, this.template?.ref)
+      const classes = suggestionEvents(this.classes, new Set(), values, id, at, this.template?.ref)
       // Each event is recorded once; a rejection stays in force while the draft is open. A suggestion
       // the save said nothing about is still the one showing, not a new presentation.
       for (const event of events) this.offered.delete(event.field)
-      for (const event of events) await vault.recordEvent(event)
+      this.classes = new Map()
+      for (const event of [...classes, ...events]) await vault.recordEvent(event)
     }
     this.typing = new Set()
     // The file holds marks only on the values not yet decided.
@@ -245,7 +270,8 @@ export class JudgmentController implements ReactiveController {
       states[field] = { suggestions: [value], note: strings.suggestionProposed(by), decline: strings.reject }
     }
     for (const [field, s] of this.suggestions) {
-      states[field] = { suggestions: [s.value!], note: this.source.sourceOf(s), decline: strings.reject }
+      const note = s.mode === 'coarse' ? strings.suggestionClass(this.source.sourceOf(s)) : this.source.sourceOf(s)
+      states[field] = { suggestions: [s.value!], note, decline: strings.reject }
     }
     for (const [field, reason] of this.abstained) {
       states[field] = {

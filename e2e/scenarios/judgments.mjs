@@ -171,6 +171,57 @@ export default {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '인계')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'offers the class of a typed judgment where its value is undecided, and the person types the rest after it'(app, vault) {
+    // Each 설비 has five codes of one chapter: the codes settled alongside a 설비 never decide the code, and always its
+    // first two characters — which the template says name its class.
+    const FAULT = { name: '결함 코드', ref: 'fault@1', path: '서식/결함 코드.fd.md' }
+    const body = '# 결함 코드\n\n요청: ___@요청\n\n@설비: [select options="압축기,펌프,밸브"]\n\n@코드: [text]\n'
+    const template = join(vault, FAULT.path)
+    await writeFile(template, `---\nid: fault\nversion: 1\nlowline:\n  suggest: [코드]\n  coarse: { 코드: 2 }\n---\n${body}`)
+    const chapters = [['압축기', '21'], ['펌프', '32'], ['밸브', '52']]
+    const files = Array.from({ length: 45 }, (_, i) => join(vault, '문서', `결함-${i + 1}.md`))
+    for (const [i, file] of files.entries()) {
+      const [unit, chapter] = chapters[i % 3]
+      await writeFile(file, `---\ntemplate: fault@1\n요청: 서로 다른 결함 ${i + 1}\n설비: ${unit}\n코드: ${chapter}${String(Math.floor(i / 3) % 5).padStart(2, '0')}\n---\n${body}`)
+    }
+    // The replay has run once the learning view says how the code did.
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '결함 코드 · 코드'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); return t?.includes('목표') && t })()`
+    await app.sidebar(FAULT.name, { timeoutMs: 30_000 })
+    await app.learning()
+    await app.cdp.waitFor(replay, 'the replay of 결함 코드 · 코드', { timeoutMs: 30_000 })
+
+    await app.newDocument(FAULT)
+    await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
+    await app.fill('[data-field-name="요청"]', '처음 보는 결함')
+    await app.choose('select[name="설비"]', '펌프')
+    // Not the code — 펌프 leaves five — but its chapter, said to be only the start of the value.
+    const note = await app.cdp.waitFor(
+      `__e2e.all('[data-formdown-note="코드"]').filter((el) => el.querySelector('.formdown-suggestion')).map((el) => el.textContent.replace(/\\s+/g, ' ').trim())[0]`,
+      'the class offered for 코드',
+      { timeoutMs: 15_000 },
+    )
+    assert.match(note, /설비: 펌프/)
+    assert.match(note, /앞부분\(분류\)만 — 고르면 이어서 칩니다/)
+    assert.equal(await app.cdp.evaluate(`__e2e.one('[data-formdown-note="코드"] .formdown-suggestion')?.textContent`), '32')
+
+    // Taken, it is the start of the value: the cursor is back in the field, after it, for the rest.
+    await app.click('[data-formdown-note="코드"] .formdown-suggestion', '32')
+    await app.cdp.waitFor(`__e2e.one('input[name="코드"]')?.value === '32'`, 'the class put in the field')
+    const focused = `(() => { let a = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a?.getAttribute('name') })()`
+    await app.cdp.waitFor(`${focused} === '코드'`, 'the cursor back in 코드')
+    await app.cdp.send('Input.insertText', { text: '03' })
+    await app.cdp.waitFor(`__e2e.one('input[name="코드"]')?.value === '3203'`, 'the rest typed after the class')
+    // What the save will record about the class is kept apart from whatever typing the rest offers.
+    assert.equal(await app.cdp.evaluate(`__e2e.one('ll-documents').judgment.classes.get('코드')?.suggestion.value`), '32')
+    await app.noAlert()
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await Promise.all([template, ...files].map((f) => rm(f)))
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '결함 코드')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'offers a value another program proposed in its field, and learns it only once a person decides it'(app, vault) {
     // A mail sorter wrote a record with its guesses for all three judgments, marked as proposed — 분야 without saying who.
     const SORT = { name: '분류', ref: 'sort@1', path: '서식/분류.fd.md' }

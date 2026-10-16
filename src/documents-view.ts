@@ -442,14 +442,18 @@ export class LlDocuments extends LitElement {
     this.similar = undefined
   }
 
-  /** Puts a suggested value into the form. It is a value like any other until the document is saved. */
+  /**
+   * Puts a suggested value into the form. It is a value like any other until the document is saved. A class taken is
+   * the start of the value: the cursor goes back into the field, after it, for the rest.
+   */
   private accept(field: string, value: string) {
-    this.judgment.take(field)
+    const open = this.judgment.take(field)
     this.setValues({ ...this.values, [field]: value })
     this.initialValues = this.values
     this.applied++
     this.dirty = true
     this.message = ''
+    if (open) void this.focusForm(field)
   }
 
   /** The form's values, and the order its fields were filled in. */

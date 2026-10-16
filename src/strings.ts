@@ -271,7 +271,7 @@ export const strings = {
   learningCounts: (accepted: number, corrected: number, rejected: number) => `수락 ${accepted} · 교정 ${corrected} · 거절 ${rejected}`,
   // Each source of suggestions read apart — a share only once there are enough decisions to say one.
   learningBySource: (source: string, decided: number, accepted: number) =>
-    `${source === 'key' ? '함께 확정된 값' : source === 'memory' ? '비슷한 기록' : source === 'proposed' ? '다른 프로그램' : source}에서 낸 제안 ${decided}건 중 ${accepted}건 수락${
+    `${source === 'key' ? '함께 확정된 값' : source === 'memory' ? '비슷한 기록' : source === 'proposed' ? '다른 프로그램' : source === 'coarse' ? '앞부분(분류)' : source}에서 낸 제안 ${decided}건 중 ${accepted}건 수락${
       decided >= 10 ? ` (${Math.round((accepted / decided) * 100)}%)` : ''
     }`,
   // Decisions on suggestions from similar records stay in the curve; no new ones are made.
@@ -309,6 +309,8 @@ export const strings = {
   reviseDocument: '지금 판으로 옮기기',
   revised: '지금 판으로 옮겼습니다',
   suggestionKey: (value: string) => `제안 · 함께 확정된 값: ${value}`,
+  // A class, not the value: its first characters, for the person to type the rest after.
+  suggestionClass: (source: string) => `${source} · 값의 앞부분(분류)만 — 고르면 이어서 칩니다`,
   // A value another program wrote into the document as a suggestion: who wrote it, as the file names them.
   suggestionProposed: (by: string) => `제안 · ${by || '다른 프로그램'}에서 넣은 값`,
   // In the table: a value another program wrote as a suggestion, not yet decided by a person.

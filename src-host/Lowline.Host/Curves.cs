@@ -12,8 +12,8 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// Without a <see cref="Replay"/>, <see cref="WhyNoReplay"/> says why (see <see cref="Suggestions.WhyNoReplay"/>), and
 /// when the replay fell short of the target, <see cref="Closest"/> says by how much. <see cref="BySource"/> splits the
 /// decisions by where each suggestion came from: each source promises the target on its own replay, so each is
-/// read against it apart; values another program proposed (<see cref="SuggestionSource.Proposed"/>) are counted there
-/// alone, not in the curve. <see cref="Typing"/>, for a field whose value is typed out, says how its replay did as typed
+/// read against it apart; values another program proposed (<see cref="SuggestionSource.Proposed"/>) and classes offered
+/// where the value was not (<see cref="SuggestionMode.Coarse"/>) are counted there alone, not in the curve. <see cref="Typing"/>, for a field whose value is typed out, says how its replay did as typed
 /// from its start — whether or not <see cref="Replay"/> found a strength without typing.
 /// </summary>
 public sealed record FieldCurve(
@@ -88,7 +88,7 @@ public static class Curves
     {
         // The curve is how the suggestions made here fared; values another program proposed are counted only by source.
         var all = events.OrderBy(e => e.At, StringComparer.Ordinal).ToList();
-        var ordered = all.Where(e => e.Source != SuggestionSource.Proposed).ToList();
+        var ordered = all.Where(e => e.Source is not (SuggestionSource.Proposed or SuggestionMode.Coarse)).ToList();
         var points = new List<CurvePoint>(ordered.Count);
         for (var i = 0; i < ordered.Count; i++)
         {

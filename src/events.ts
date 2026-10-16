@@ -104,7 +104,11 @@ export function suggestionEvents(
     if (suggestion.value === null) continue
     const value = saved[field]
     let kind: EventKind | undefined
-    if (!isEmpty(value)) kind = same(value!, suggestion.value) ? 'accept' : 'correct'
+    // A class is taken when the value saved is of it — begins with it — whatever the rest of the value is.
+    if (!isEmpty(value))
+      kind = (suggestion.mode === 'coarse' ? typeof value === 'string' && value.startsWith(suggestion.value) : same(value!, suggestion.value))
+        ? 'accept'
+        : 'correct'
     else if (rejected.has(field)) kind = 'reject'
     if (!kind) continue
     events.push({

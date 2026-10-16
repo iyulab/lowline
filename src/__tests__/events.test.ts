@@ -48,6 +48,13 @@ describe('suggestionEvents', () => {
   it('says nothing about a suggestion that was neither taken nor rejected', () => {
     expect(suggestionEvents(offered, new Set(), {}, 'd', at)).toEqual([])
   })
+
+  it('reads a class as taken when the value saved begins with it, whatever follows', () => {
+    const chapter = new Map([['코드', { ...offer('32'), suggestion: { value: '32', mode: 'coarse' as const, source: '설비: 펌프' } }]])
+    const [taken] = suggestionEvents(chapter, new Set(), { 코드: '3203' }, 'd', at)
+    expect([taken.kind, taken.source, taken.suggested, taken.value]).toEqual(['accept', 'coarse', '32', '3203'])
+    expect(suggestionEvents(chapter, new Set(), { 코드: '5210' }, 'd', at)[0].kind).toBe('correct')
+  })
 })
 
 describe('parseEvents', () => {

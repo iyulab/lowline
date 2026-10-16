@@ -296,7 +296,7 @@ describe('templateProblems from what the parser could not read', () => {
   const head = '---\nid: t\nversion: 1\n---\n'
   it('says a condition that is not one, and a line that looks like a field but is not one', () => {
     expect(templateProblems(`${head}@부서: [select options="영업,개발"]\n@비고: [text visible-if="부서 == 영업"]\n`)).toContainEqual({ kind: 'invalid-condition', field: '비고' })
-    expect(templateProblems(`${head}@경로: r{전화,메일}[]\n`)).toContainEqual({ kind: 'unrecognized-field', name: '경로', line: 5 })
+    expect(templateProblems(`${head}@경로: r{전화,메일}[]\n`)).toContainEqual({ kind: 'unrecognized-field', name: '경로', line: 5, fix: '@경로{전화,메일}: r[]' })
   })
 
   it('says how to write a field written without its brackets', () => {
