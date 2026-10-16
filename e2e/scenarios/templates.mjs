@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { parseFormdown, readFrontMatter } from '@formdown/core'
-import { TEMPLATE, BUG, INTAKE, documentsIn } from '../shared.mjs'
+import { TEMPLATE, BUG, INTAKE, documentsIn, fileValues } from '../shared.mjs'
 import { SETTINGS, q } from '../app.mjs'
 
 export default {
@@ -184,6 +184,38 @@ export default {
     await enter()
     await app.status('이름을 바꿨습니다')
     assert.equal(await readFile(join(vault, TEMPLATE), 'utf8'), before)
+    await app.noAlert()
+  },
+
+  async 'works out a field from others as they are typed, and saves what it worked out'(app, vault) {
+    const REQUISITION = { name: '물품청구', ref: 'requisition@1', path: '서식/물품청구.fd.md' }
+    const template = join(vault, REQUISITION.path)
+    await writeFile(
+      template,
+      '---\nid: requisition\nversion: 1\n---\n# 물품청구\n\n품명: ___@품명\n\n@청구량: [number]\n\n@단가: [number description="원, 부가세 포함"]\n\n@금액: [number compute="청구량 * 단가"]\n',
+    )
+    const before = new Set(await documentsIn(vault))
+    try {
+      await app.sidebar(REQUISITION.name, { timeoutMs: 30_000 })
+      await app.newDocument(REQUISITION)
+      await app.cdp.waitFor(`__e2e.one('input[name="금액"]')?.readOnly === true`, 'the amount, worked out rather than typed')
+      // How to fill a field, under it.
+      assert.equal(await app.cdp.evaluate(`__e2e.one('.formdown-field-description')?.textContent.trim()`), '원, 부가세 포함')
+      await app.fill('[data-field-name="품명"]', '복사 용지')
+      await app.fill('input[name="청구량"]', '3')
+      await app.fill('input[name="단가"]', '1500')
+      await app.cdp.waitFor(`__e2e.one('input[name="금액"]')?.value === '4500'`, 'the amount following the quantity and the price')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
+      const [saved] = (await documentsIn(vault)).filter((n) => !before.has(n))
+      assert.ok(saved, 'the requisition saved')
+      assert.equal(String((await fileValues(join(vault, '문서', saved))).금액), '4500', 'the file keeps the amount worked out')
+      await rm(join(vault, '문서', saved))
+    } finally {
+      await app.templateOf(BUG)
+      await rm(template, { force: true })
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '물품청구')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
     await app.noAlert()
   },
 

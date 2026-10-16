@@ -111,6 +111,12 @@ export const strings = {
           ? `칸 "${p.field}"의 조건이 이 서식에 없는 칸 "${p.name}"을(를) 가리킵니다. 값이 들어올 수 없어 늘 같게 판정됩니다 — visible-if라면 칸이 계속 숨습니다.`
           : p.kind === 'invalid-condition'
             ? `칸 "${p.field}"의 조건을 읽을 수 없어 조건 없이 늘 보입니다. 조건은 "칸 이름=값" 꼴로 적습니다(예: visible-if="부서=영업").`
+          : p.kind === 'unknown-compute'
+            ? p.name === p.field
+              ? `칸 "${p.field}"의 계산이 자기 자신을 읽습니다. 값이 생기지 않아 늘 비어 있습니다.`
+              : `칸 "${p.field}"의 계산이 이 서식에 없는 칸 "${p.name}"을(를) 읽습니다. 값이 들어올 수 없어 늘 비어 있습니다.`
+          : p.kind === 'invalid-compute'
+            ? `칸 "${p.field}"의 계산을 읽을 수 없어 값이 생기지 않습니다. 계산은 숫자와 칸 이름을 + - * /와 괄호로 잇습니다(예: compute="청구량 * 단가").`
           : p.kind === 'unrecognized-field'
             ? `${p.line ? `${p.line}번째 줄은 ` : ''}칸 "${p.name}"처럼 보이지만 칸으로 읽히지 않아 글자로 보입니다. ${
                 p.fix ? `이렇게 쓰면 칸이 됩니다: ${p.fix.text}` : `칸은 "@이름: [형식]"으로 씁니다 — 형식과 속성은 대괄호 안에(예: @${p.name}: [text]).`

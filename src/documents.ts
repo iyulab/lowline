@@ -294,14 +294,17 @@ function rank(order: readonly string[], name: string): number {
  * What stands in the way of a template working as written, in the order a person would fix it: front matter
  * that cannot be read (the template has no identity then), a field name used twice (a document keeps one
  * value under it, so both fields hold the same), a condition that names no field of the template (it never
- * sees a value, so it decides the same way for every document — a `visible-if` keeps its field hidden), and
- * a `lowline.suggest` name that is not a field (nothing is suggested for it).
+ * sees a value, so it decides the same way for every document — a `visible-if` keeps its field hidden), a computed
+ * value that cannot be read or reads no field of the template (it never has a value), and a `lowline.suggest` name
+ * that is not a field (nothing is suggested for it).
  */
 export type TemplateProblem =
   | { kind: 'front-matter'; detail: string }
   | { kind: 'duplicate-field'; name: string; lines: number[] }
   | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'invalid-condition'; field: string }
+  | { kind: 'unknown-compute'; field: string; name: string }
+  | { kind: 'invalid-compute'; field: string }
   | { kind: 'unrecognized-field'; name: string; line?: number; fix?: SourceFix }
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
@@ -403,6 +406,10 @@ export function templateProblems(source: string): TemplateProblem[] {
       problems.push({ kind: 'unknown-condition', field: d.field, name: d.related })
     }
     if (d.code === 'invalid-condition' && d.field !== undefined) problems.push({ kind: 'invalid-condition', field: d.field })
+    if (d.code === 'compute-unknown-field' && d.field !== undefined && d.related !== undefined) {
+      problems.push({ kind: 'unknown-compute', field: d.field, name: d.related })
+    }
+    if (d.code === 'invalid-compute' && d.field !== undefined) problems.push({ kind: 'invalid-compute', field: d.field })
     if (d.code === 'unrecognized-field' && d.field !== undefined)
       problems.push({
         kind: 'unrecognized-field',

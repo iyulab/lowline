@@ -357,6 +357,18 @@ describe('templateProblems — conditions', () => {
   })
 })
 
+describe('templateProblems — computed values', () => {
+  it('names a computation that cannot be read, or reads no field of the template', () => {
+    const source =
+      '---\nid: requisition\nversion: 1\n---\n@청구량: [number]\n\n@단가: [number]\n\n@금액: [number compute="청구량 * 단가"]\n\n@세액: [number compute="금액 * 세율"]\n\n@합계: [number compute="금액 +"]\n'
+    expect(templateProblems(source)).toEqual([
+      { kind: 'unknown-compute', field: '세액', name: '세율' },
+      { kind: 'invalid-compute', field: '합계' },
+    ])
+    for (const problem of templateProblems(source)) expect(strings.templateProblem(problem)).toContain('계산')
+  })
+})
+
 describe('strayFields', () => {
   const source = '---\nid: intake\nversion: 1\n---\n# 접수\n\n요청: ___@요청\n\n@배정: [select options="장비,인사"]\n'
   const doc = (values: Record<string, unknown>, template = 'intake@1') => ({ template, values })

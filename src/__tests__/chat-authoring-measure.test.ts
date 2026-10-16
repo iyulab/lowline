@@ -36,6 +36,7 @@ interface Asked {
   fields: string[]
   judged: string[]
   conditional?: string[]
+  computed?: string[]
   reply: string
   ms: number
 }
@@ -53,6 +54,8 @@ function judge(asked: Asked, reply: string) {
   // A field asked to apply only on another's answer: shown, hidden, enabled or required by a condition.
   const conditioned = snapshot ? parseFormdown(tidied!).forms.filter((f) => f.conditions && Object.keys(f.conditions).length > 0).map((f) => plain(f.name)) : []
   const conditional = asked.conditional ?? []
+  // A field asked to be worked out from others' numbers (`compute="…"`).
+  const worked = snapshot ? parseFormdown(tidied!).forms.filter((f) => f.compute).map((f) => plain(f.name)) : []
   return {
     draft,
     problems,
@@ -61,15 +64,16 @@ function judge(asked: Asked, reply: string) {
     missing: asked.fields.filter((w) => !has(w)),
     closed: asked.judged.filter(closedJudged),
     onCondition: conditional.filter((word) => conditioned.some((n) => n.includes(plain(word)))),
+    computed: (asked.computed ?? []).filter((word) => worked.some((n) => n.includes(plain(word)))),
   }
 }
 
 type Judged = ReturnType<typeof judge>
 
 function report(model: string, title: string, rows: [Asked, Judged, number][]) {
-  const total = { works: 0, fields: 0, asked: 0, judged: 0, judgedAsked: 0, conditional: 0, conditionalAsked: 0 }
+  const total = { works: 0, fields: 0, asked: 0, judged: 0, judgedAsked: 0, conditional: 0, conditionalAsked: 0, computed: 0, computedAsked: 0 }
   for (const [asked, judged, ms] of rows) {
-    const { snapshot, problems, found, missing, closed, onCondition } = judged
+    const { snapshot, problems, found, missing, closed, onCondition, computed } = judged
     const conditional = asked.conditional ?? []
     if (snapshot) total.works++
     total.fields += found.length
@@ -78,17 +82,20 @@ function report(model: string, title: string, rows: [Asked, Judged, number][]) {
     total.judgedAsked += asked.judged.length
     total.conditional += onCondition.length
     total.conditionalAsked += conditional.length
+    total.computed += computed.length
+    total.computedAsked += (asked.computed ?? []).length
     const state = snapshot ? 'works' : judged.draft === null ? 'does not work: no template in the reply' : `does not work: ${problems.join(' / ')}`
     console.log(
       `${model} · ${title} · ${asked.id} · ${ms} ms · ${state} · fields ${found.length}/${asked.fields.length}` +
         (missing.length ? ` (missing ${missing.join(', ')})` : '') +
         ` · judged ${closed.length}/${asked.judged.length}` +
         (conditional.length ? ` · on a condition ${onCondition.length}/${conditional.length}` : '') +
+        (asked.computed?.length ? ` · computed ${computed.length}/${asked.computed.length}` : '') +
         ` · ${snapshot?.fields.map((f) => `${f.name}:${f.type}`).join(' ') ?? ''}`,
     )
   }
   console.log(
-    `${model} · ${title} · works ${total.works}/${rows.length} · fields ${total.fields}/${total.asked} · judged and closed ${total.judged}/${total.judgedAsked} · on a condition ${total.conditional}/${total.conditionalAsked}`,
+    `${model} · ${title} · works ${total.works}/${rows.length} · fields ${total.fields}/${total.asked} · judged and closed ${total.judged}/${total.judgedAsked} · on a condition ${total.conditional}/${total.conditionalAsked} · computed ${total.computed}/${total.computedAsked}`,
   )
 }
 
