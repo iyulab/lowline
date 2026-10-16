@@ -76,7 +76,7 @@ What is recorded about a document — its suggestion events, the rejections that
 
 ### Fields that name other documents
 
-A field written `@고객 -> customer: [select]` names one document of the template whose `id` is `customer`. The field offers that template's documents by their file names, and the document records the chosen one's id — so renaming it changes nothing in the documents that name it:
+A field written `@고객 -> customer: [select]` names one document of the template whose `id` is `customer`. The field offers that template's documents by their file names — past twenty of them, typing part of a name narrows the list — and the document records the chosen one's id — so renaming it changes nothing in the documents that name it:
 
 ```yaml
 ---

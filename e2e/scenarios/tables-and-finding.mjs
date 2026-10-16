@@ -393,6 +393,52 @@ export default {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '문의')`, 'the templates gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'narrows a field referring to many documents by typing part of a name, keeping the id'(app, vault) {
+    const SHOP = { name: '업소', ref: 'shop@1', path: '서식/업소.fd.md' }
+    const VISIT = { name: '점검', ref: 'visit@1', path: '서식/점검.fd.md' }
+    const shopBody = '# 업소\n\n상호: ___@상호\n'
+    const visitBody = '# 점검\n\n@업소 -> shop: [select]\n\n내용: ___@내용\n'
+    // More than a select lists comfortably: the field becomes one to type into.
+    const shops = Array.from({ length: 30 }, (_, i) => (i === 17 ? '푸른들 정육점' : `가게 ${String(i + 1).padStart(2, '0')}`))
+    const files = [
+      [SHOP.path, `---\nid: shop\nversion: 1\n---\n${shopBody}`],
+      [VISIT.path, `---\nid: visit\nversion: 1\n---\n${visitBody}`],
+      ...shops.map((name, i) => [`문서/${name}.md`, `---\ntemplate: shop@1\nlowline:\n  id: s-${i + 1}\n상호: ${name}\n---\n${shopBody}`]),
+    ].map(([path, text]) => [join(vault, path), text])
+    for (const [file, text] of files) await writeFile(file, text)
+    const combobox = `__e2e.one('input[role="combobox"]')`
+    try {
+      await app.tabOf(VISIT, '문서', { timeoutMs: 30_000 })
+      await app.click('dc-button', '새 문서')
+      await app.cdp.waitFor(`__e2e.one('select[name="업소"]')?.options.length === 30 && !!${combobox}`, 'the shops offered to type into', { timeoutMs: 15_000 })
+      // The select is still the field, out of the way; the combobox is what a person reaches.
+      assert.equal(await app.cdp.evaluate(`__e2e.one('select[name="업소"]').getAttribute('aria-hidden')`), 'true')
+
+      await app.cdp.evaluate(`${combobox}.focus()`)
+      await app.cdp.insertText('정육')
+      await app.cdp.waitFor(
+        `__e2e.all('[role="option"]').map((o) => o.textContent).join('|') === '푸른들 정육점'`,
+        'the one shop whose name holds 정육',
+      )
+      await app.cdp.press('Enter', { keyCode: 13 })
+      await app.cdp.waitFor(`${combobox}.value === '푸른들 정육점' && __e2e.one('select[name="업소"]').value === 's-18'`, 'the shop chosen')
+
+      const before = new Set(await readdir(join(vault, '문서')))
+      await app.fill('[data-field-name="내용"]', '냉장 온도 확인')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
+      const saved = (await readdir(join(vault, '문서'))).find((f) => !before.has(f))
+      assert.ok(saved, 'the visit saved')
+      files.push([join(vault, '문서', saved)])
+      assert.equal((await fileValues(join(vault, '문서', saved))).업소, 's-18', 'the file keeps the id, not the name typed')
+      await app.noAlert()
+    } finally {
+      await app.learning()
+      await Promise.all(files.map(([f]) => rm(f, { force: true })))
+    }
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '점검')`, 'the templates gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'filters a table by a date range and names the dates it could not read'(app, vault) {
     const VISITS = { name: '방문 기록', ref: 'visits@1', path: '서식/방문 기록.fd.md' }
     const body = '# 방문 기록\n\n제목: ___@제목\n\n@방문일: [date]\n'
