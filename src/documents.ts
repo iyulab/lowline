@@ -294,7 +294,7 @@ export type TemplateProblem =
   | { kind: 'duplicate-field'; name: string; lines: number[] }
   | { kind: 'unknown-condition'; field: string; name: string }
   | { kind: 'invalid-condition'; field: string }
-  | { kind: 'unrecognized-field'; name: string; line?: number; fix?: string }
+  | { kind: 'unrecognized-field'; name: string; line?: number; fix?: SourceFix }
   | { kind: 'unknown-suggest'; name: string }
   | { kind: 'stray-values'; name: string; count: number }
   | { kind: 'shared-id'; id: string; names: string[] }
@@ -368,6 +368,13 @@ export function referenceProblems(source: string, templates: readonly { ref: str
   return problems
 }
 
+/** Text that, put in place of the source from `start` to `end`, makes it what it looks meant to be. */
+export interface SourceFix {
+  text: string
+  start: number
+  end: number
+}
+
 export function templateProblems(source: string): TemplateProblem[] {
   const parsed = parseFormdown(source)
   const problems: TemplateProblem[] = (parsed.diagnostics ?? [])
@@ -389,7 +396,12 @@ export function templateProblems(source: string): TemplateProblem[] {
     }
     if (d.code === 'invalid-condition' && d.field !== undefined) problems.push({ kind: 'invalid-condition', field: d.field })
     if (d.code === 'unrecognized-field' && d.field !== undefined)
-      problems.push({ kind: 'unrecognized-field', name: d.field, line: d.span?.line, ...(d.fix !== undefined && { fix: d.fix }) })
+      problems.push({
+        kind: 'unrecognized-field',
+        name: d.field,
+        line: d.span?.line,
+        ...(d.fix !== undefined && d.span && { fix: { text: d.fix, start: d.span.start, end: d.span.end } }),
+      })
   }
   const lowline = parsed.frontMatter?.data.lowline
   const suggest = typeof lowline === 'object' && lowline !== null ? (lowline as { suggest?: unknown }).suggest : undefined

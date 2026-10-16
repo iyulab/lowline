@@ -349,6 +349,33 @@ export default {
     await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '경계 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
   },
 
+  async 'fixes a line the parser can tell the meaning of, and one undo takes the fix away'(app, vault) {
+    const LOOSE = { name: '느슨한 서식', ref: 'loose@1', path: '서식/느슨한 서식.fd.md' }
+    const file = join(vault, LOOSE.path)
+    const source = '---\nid: loose\nversion: 1\n---\n# 느슨\n\n요청: ___@요청\n\n@처리_기한: date\n'
+    await writeFile(file, source)
+    await app.tabOf(LOOSE, '서식', { timeoutMs: 30_000 })
+    const problems = `__e2e.all('ul.problems li').map((li) => li.textContent.replace(/\\s+/g, ' ').trim())`
+    const said = await app.cdp.waitFor(`(${problems}).find((t) => t.includes('처리_기한'))`, 'the line that is not a field', { timeoutMs: 30_000 })
+    assert.match(said, /이렇게 쓰면 칸이 됩니다: @처리_기한: \[date\]/)
+
+    await app.click('ul.problems dc-button', '고치기')
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value.includes('@처리_기한: [date]\\n')`, 'the fix in the source')
+    assert.equal(await app.value('textarea'), source.replace('@처리_기한: date', '@처리_기한: [date]'), 'nothing else changed')
+    await app.cdp.waitFor(`(${problems}).length === 0`, 'nothing more to say once fixed')
+
+    // Put in as typing is, so one undo takes it away.
+    await app.cdp.press('z', { code: 'KeyZ', modifiers: 2, keyCode: 90 })
+    await app.cdp.waitFor(`__e2e.one('textarea')?.value === ${JSON.stringify(source)}`, 'the source as it was')
+    await app.cdp.waitFor(`(${problems}).some((t) => t.includes('처리_기한'))`, 'the problem said again')
+
+    // Leave the vault as the scenarios after this one expect it.
+    await app.learning()
+    await app.answerUnsaved('편집 버리기')
+    await rm(file)
+    await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '느슨한 서식')`, 'the template gone from the sidebar', { timeoutMs: 30_000 })
+  },
+
   async 'opens a link in a template body outside the window, keeping the window on the app with what was typed'(app, vault) {
     const GUIDE = { name: '안내 링크', ref: 'guide@1', path: '서식/안내 링크.fd.md' }
     const file = join(vault, GUIDE.path)

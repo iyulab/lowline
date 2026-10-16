@@ -2,7 +2,19 @@ import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state } from 'lit/decorators.js'
 import { formdownTheme } from './formdown-theme.js'
 import { authoringCompletion, parseFormdown, readFrontMatter, setFieldAttribute } from '@formdown/core'
-import { fileName, fileNameFor, optionsText, referenceProblems, setOptions, setSuggest, sharedId, strayFields, templateInfo, templateProblems } from './documents.js'
+import {
+  fileName,
+  fileNameFor,
+  optionsText,
+  referenceProblems,
+  setOptions,
+  setSuggest,
+  sharedId,
+  strayFields,
+  templateInfo,
+  templateProblems,
+  type SourceFix,
+} from './documents.js'
 import { readVault, onVaultChanged } from './vault-snapshot.js'
 import type { DocumentSnapshot } from './projection.js'
 import type { TemplateItem } from './template-scope.js'
@@ -297,6 +309,20 @@ export class LlTemplates extends LitElement {
     this.message = ''
   }
 
+  /**
+   * Puts a problem's fix in place of the source it is about, as typing does — one undo takes it away — with the caret
+   * after it. Nothing is completed on top of it.
+   */
+  private applyFix(fix: SourceFix) {
+    const area = this.renderRoot.querySelector('textarea')
+    if (!area || area.value.length < fix.end) return
+    area.focus()
+    area.setSelectionRange(fix.start, fix.end)
+    this.completing = true
+    document.execCommand('insertText', false, fix.text)
+    this.completing = false
+  }
+
   /** A draft the chat wrote, or what the editor held before it: in the editor, unsaved — the person saves it. */
   private takeDraft(source: string) {
     if (source === this.source) return
@@ -540,7 +566,15 @@ export class LlTemplates extends LitElement {
     }
     if (problems.length === 0) return nothing
     return html`<ul class="problems" aria-label=${strings.templateProblemsTitle}>
-      ${problems.map((p) => html`<li>${strings.templateProblem(p)}</li>`)}
+      ${problems.map(
+        (p) =>
+          html`<li>
+            ${strings.templateProblem(p)}
+            ${p.kind === 'unrecognized-field' && p.fix
+              ? html`<dc-button size="sm" @click=${() => this.applyFix(p.fix!)}>${strings.templateFix}</dc-button>`
+              : nothing}
+          </li>`,
+      )}
     </ul>`
   }
 

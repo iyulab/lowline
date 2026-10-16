@@ -296,13 +296,32 @@ describe('templateProblems from what the parser could not read', () => {
   const head = '---\nid: t\nversion: 1\n---\n'
   it('says a condition that is not one, and a line that looks like a field but is not one', () => {
     expect(templateProblems(`${head}@부서: [select options="영업,개발"]\n@비고: [text visible-if="부서 == 영업"]\n`)).toContainEqual({ kind: 'invalid-condition', field: '비고' })
-    expect(templateProblems(`${head}@경로: r{전화,메일}[]\n`)).toContainEqual({ kind: 'unrecognized-field', name: '경로', line: 5, fix: '@경로{전화,메일}: r[]' })
+    expect(templateProblems(`${head}@경로: r{전화,메일}[]\n`)).toContainEqual(
+      expect.objectContaining({ kind: 'unrecognized-field', name: '경로', line: 5, fix: expect.objectContaining({ text: '@경로{전화,메일}: r[]' }) }),
+    )
   })
 
-  it('says how to write a field written without its brackets', () => {
-    const [problem] = templateProblems(`${head}@처리_기한: date\n`)
-    expect(problem).toEqual({ kind: 'unrecognized-field', name: '처리_기한', line: 5, fix: '@처리_기한: [date]' })
-    expect(strings.templateProblem(problem)).toContain('대괄호 안에 씁니다: @처리_기한: [date]')
+  it('says how to write a field the parser can tell the meaning of, and where that text goes', () => {
+    for (const [line, meant] of [
+      ['@처리_기한: date', '@처리_기한: [date]'], // written without its brackets
+      ['@경로: r{전화,메일}[]', '@경로{전화,메일}: r[]'], // its braces after the colon
+    ]) {
+      const source = `${head}메모: ___@메모\n${line}\n끝.\n`
+      const problem = templateProblems(source).find((p) => p.kind === 'unrecognized-field')
+      const fix = problem?.kind === 'unrecognized-field' ? problem.fix : undefined
+      expect(fix?.text).toBe(meant)
+      expect(strings.templateProblem(problem!)).toContain(`이렇게 쓰면 칸이 됩니다: ${meant}`)
+      // Put in place of the text it is about, the line is a field and nothing else changed.
+      const fixed = source.slice(0, fix!.start) + fix!.text + source.slice(fix!.end)
+      expect(fixed).toBe(source.replace(line, meant))
+      expect(templateProblems(fixed).filter((p) => p.kind === 'unrecognized-field')).toEqual([])
+    }
+  })
+
+  it('says how a field is written when the parser cannot tell what a line meant', () => {
+    const text = strings.templateProblem({ kind: 'unrecognized-field', name: '메모', line: 5 })
+    expect(text).toContain('칸은 "@이름: [형식]"으로 씁니다')
+    expect(text).not.toContain('이렇게 쓰면')
   })
 })
 
