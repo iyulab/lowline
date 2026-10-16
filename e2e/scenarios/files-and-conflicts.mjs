@@ -51,7 +51,7 @@ export default {
     await app.cdp.waitFor(`!__e2e.one('nav button', '접수-1 충돌 사본 있음') && __e2e.all('p.conflict').length === 0`, 'the conflict settled', { timeoutMs: 15_000 })
   },
 
-  async "keeps a conflict copy in its original's place, and learns from it again"(app, vault) {
+  async "keeps a conflict copy in its original's place"(app, vault) {
     const trashedFrom = (folder) => trashed(join(vault, folder))
     const asked = (heading) =>
       app.cdp.waitFor(`__e2e.all('dc-confirm-dialog').some((d) => d.open && d.heading === ${q(heading)})`, `the question "${heading}"`)
@@ -87,17 +87,10 @@ export default {
         'the original’s name open, settled',
       )
 
-      // Settled, it is learned from again — with the value that was kept.
-      await app.newDocument(INTAKE)
-      await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
-      await app.fill('[data-field-name="요청"]', '노트북 배터리가 금방 닳아요')
-      await app.cdp.waitFor(
-        `__e2e.all('.formdown-suggestion').some((el) => { const n = el.closest('[data-formdown-note]').textContent; return n.includes('요청: 노트북 배터리가 금방 닳아요') && n.includes('총무') })`,
-        '총무 suggested alongside 접수-1\'s request',
-        { timeoutMs: 15_000 },
-      )
+      // Settled, it shows the value that was kept. (That memory leaves out a document while it has a copy and takes it
+      // back once settled is the sidecar's to check: one request seen once settles no suggestion on screen here.)
+      await app.cdp.waitFor(`__e2e.one('select[name="담당"]')?.value === '총무'`, 'the kept value in the original’s place')
       await app.templateOf(INTAKE)
-      await app.answerUnsaved('편집 버리기')
     } finally {
       await rm(join(vault, copyDocPath), { force: true })
       await writeFile(originalDoc, before)

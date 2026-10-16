@@ -63,6 +63,8 @@ export default {
     await app.learning()
     const said = await app.cdp.waitFor(replay, 'the replay of 결재 · 승인, without opening the view again', { timeoutMs: 30_000 })
     assert.match(said, /^저장된 \d+건을 순서대로 다시 물으면 \d+%에 제안, 그중 \d+% 맞음/)
+    // On so few answers what to expect is a floor below what they scored, with how many it rests on.
+    assert.match(said, / — 앞으로는 적어도 \d+% 맞으리라 봅니다\(제안 \d+건으로 셈\)$/)
 
     await app.newDocument(APPROVE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')

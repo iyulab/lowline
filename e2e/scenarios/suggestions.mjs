@@ -168,8 +168,12 @@ export default {
     await app.cdp.waitFor(`__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === '접수-1'`, 'the other document open')
     await app.noAlert()
   },
-  async 'imports rows copied from a spreadsheet, and suggests from them'(app, vault) {
+  async 'imports rows copied from a spreadsheet as confirmed records'(app, vault) {
     const before = new Set(await documentsIn(vault))
+    // How many records the replay of 담당 asks before the import — earlier scenarios have saved some.
+    const asked = await app.cdp.evaluate(
+      `(async () => (await window.__TAURI_INTERNALS__.invoke('host_curves')).find((c) => c.template?.startsWith('intake@') && c.field === '담당')?.replay?.lookups ?? 0)()`,
+    )
     await app.documentsOf(INTAKE)
     await app.click('dc-button', '가져오기')
     const rows = [
@@ -215,16 +219,17 @@ export default {
     assert.deepEqual([toner?.template, toner?.부서, toner?.담당], ['intake@1', '영업', '총무'])
     assert.equal(values.find((v) => v.요청 === '회의실 프로젝터가\n안 켜져요')?.담당, '경비', 'kept as written, line break and all')
 
-    // Imported records are confirmed values: the same request again gets the imported answer suggested.
+    // Imported records are confirmed values: what is learned replays the two imported with the rest. (A request seen
+    // once settles nothing by itself here: 부서 has decided 담당 all along, and the imported rows go against it.)
+    await app.learning()
+    const replay = `(() => { const h = __e2e.all('h2').find((el) => el.textContent.trim() === '접수 · 담당'); const t = h?.parentElement.querySelector('.replay')?.textContent.replace(/\\s+/g, ' ').trim(); return t?.startsWith('저장된 ${asked + 2}건') && t })()`
+    await app.cdp.waitFor(replay, 'the replay of 접수 · 담당 with the imported records', { timeoutMs: 30_000 })
+
+    // Left as the next scenario starts: a new document typed into.
+    await app.documentsOf(INTAKE)
     await app.newDocument(INTAKE)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')
     await app.fill('[data-field-name="요청"]', '프린터 토너가 떨어졌어요')
-    const suggestion = await app.cdp.waitFor(
-      `__e2e.all('.formdown-suggestion').map((el) => el.closest('[data-formdown-note]').textContent.replace(/\\s+/g, ' ').trim())[0]`,
-      'a suggestion for 담당',
-      { timeoutMs: 30_000 },
-    )
-    assert.ok(suggestion.includes('총무'), `suggested from the import: ${suggestion}`)
     await app.noAlert()
   },
   async 'shows how often suggestions were right, from the event files'(app, vault) {

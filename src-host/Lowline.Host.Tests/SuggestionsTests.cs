@@ -117,6 +117,19 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public async Task Learns_from_a_document_again_once_which_copy_holds_is_settled()
+    {
+        var document = Document("문서/1.md", """{"요청": "노트북 배터리가 금방 닳아요", "담당": "총무"}""");
+        await using var vault = await Vault(document with { Conflicted = true });
+        var request = new SuggestRequest("intake@1", "담당", Values("""{"요청": "노트북 배터리가 금방 닳아요"}"""));
+        Assert.Equal(Abstention.NoHistory, (await vault.SuggestAsync(request, Ct))!.Reason);
+
+        // The copy kept took the original's place: its values are confirmed again.
+        await vault.IngestAsync(new VaultSnapshot([Intake], [document]), Ct);
+        Assert.NotEqual(Abstention.NoHistory, (await vault.SuggestAsync(request, Ct))!.Reason);
+    }
+
+    [Fact]
     public async Task Does_not_learn_a_value_another_program_proposed()
     {
         // Every 담당 was written by another program as a suggestion: nobody has confirmed one yet.
