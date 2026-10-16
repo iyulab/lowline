@@ -30,10 +30,10 @@ public sealed class ChatAuthoringMeasureTests
         """;
 
     /// <summary>
-    /// A request, the fields it names (a field counts when its name holds the word, spaces and underscores aside), and the
-    /// ones it asks a person to judge from a closed list.
+    /// A request, the fields it names (a field counts when its name holds the word, spaces and underscores aside), the
+    /// ones it asks a person to judge from a closed list, and the ones it asks to show or require only on another's answer.
     /// </summary>
-    private sealed record Case(string Id, string Ask, string[] Fields, string[] Judged);
+    private sealed record Case(string Id, string Ask, string[] Fields, string[] Judged, string[]? Conditional = null);
 
     private static readonly Case[] Cases =
     [
@@ -49,6 +49,16 @@ public sealed class ChatAuthoringMeasureTests
             ["위치", "발견일", "내용", "종류", "책임"], ["종류", "책임"]),
         new("quote", "견적 요청 서식으로 바꿔 줘. 회사명, 담당자, 이메일, 품목과 수량, 희망 납기를 받고, 우선순위(일반·우선·긴급)는 사람이 판단해 고르는 칸으로 해 줘.",
             ["회사", "담당자", "이메일", "품목", "수량", "납기", "우선순위"], ["우선순위"]),
+        // Requests drawn from published blank forms (statute appendix forms): more fields, choices of several, fields
+        // that apply only on another's answer, and a table of rows the language has no field for.
+        new("disclosure", "정보공개청구서 서식으로 바꿔 줘. 청구인의 성명, 생년월일, 주소(소재지), 전화번호, 전자우편을 받고 청구 내용을 길게 적게 해 줘. 공개 방법(열람ㆍ시청·사본ㆍ출력물·전자파일·복제ㆍ인화물)과 수령 방법(직접 방문·우편·팩스·정보통신망·전자우편)은 여러 개를 고를 수 있게 하고, 수수료(감면 대상임·감면 대상 아님)를 고르게 한 뒤 감면 대상일 때만 감면 사유를 적게 해 줘.",
+            ["성명", "생년월일", "주소", "전화", "전자우편", "청구", "공개", "수령", "수수료", "감면사유"], [], ["감면사유"]),
+        new("accident", "산업재해조사표 서식으로 바꿔 줘. 사업장명, 근로자 수, 업종, 재해자 성명, 입사일, 고용형태(상용·임시·일용·무급가족종사자·자영업자), 근무형태(정상·2교대·3교대·4교대·시간제), 상해종류, 상해부위, 휴업예상일수, 사망 여부, 발생일시, 발생장소, 재해발생 당시 상황, 재발방지계획을 받아 줘. 업종이 건설업일 때만 공사종류와 공정률을 받고, 재해 원인 분류(떨어짐·끼임·넘어짐·부딪힘·기타)는 사람이 판단해 고르는 칸으로 해 줘.",
+            ["사업장", "근로자수", "업종", "성명", "입사일", "고용형태", "근무형태", "상해종류", "상해부위", "휴업", "사망", "발생일시", "발생장소", "상황", "재발방지", "공사종류", "공정률", "원인"], ["원인"], ["공사종류", "공정률"]),
+        new("event-safety", "체육행사 안전점검표를 만들어 줘. 행사명, 개최자, 종목, 참석예정 인원, 안전관리책임자를 받고, 비상구 개폐·비상등 점등과 응급 용품 사용 가능 여부 두 항목은 각각 점검일자와 결과(양호·미흡)를 받되 결과가 미흡일 때만 조치사항을 적게 해 줘. 종합 판정(진행·조건부 진행·연기)은 사람이 판단해 고르는 칸으로 해 줘.",
+            ["행사명", "개최자", "종목", "참석", "안전관리책임자", "비상구", "응급", "조치", "종합"], ["종합"], ["조치"]),
+        new("requisition", "물품청구서 서식으로 바꿔 줘. 운용부서명, 예산과목, 청구일을 받고, 품목마다 품명, 청구량, 단가, 금액, 용도를 열다섯 줄까지 적을 수 있게 해 줘.",
+            ["운용부서", "예산과목", "청구일", "품명", "청구량", "단가", "금액", "용도"], []),
     ];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerOptions.Web) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -72,7 +82,7 @@ public sealed class ChatAuthoringMeasureTests
                 local, TimeSpan.FromMinutes(5), ct);
             clock.Stop();
             Assert.True(reply.Ok, $"{c.Id}: {reply.Failure}");
-            lines.Add(JsonSerializer.Serialize(new { c.Id, c.Ask, c.Fields, c.Judged, reply = reply.Text, ms = clock.ElapsedMilliseconds }, Json));
+            lines.Add(JsonSerializer.Serialize(new { c.Id, c.Ask, c.Fields, c.Judged, conditional = c.Conditional ?? [], reply = reply.Text, ms = clock.ElapsedMilliseconds }, Json));
         }
         await File.WriteAllLinesAsync(output!, lines, ct);
     }
