@@ -28,7 +28,7 @@ import { currentRefs, revisedRef, templateId, templateVersion } from './template
 import { describeError } from './errors.js'
 import { JudgmentController } from './judgment-controller.js'
 import { cellText, referenceTargets, type CaseHit, type DocumentSnapshot, type Suggestion, type TemplateSnapshot } from './projection.js'
-import { namedEvidence, referenceChoices, referringDocuments } from './references.js'
+import { namedEvidence, referenceChoices, referringDocuments, referringTable } from './references.js'
 import { strings } from './strings.js'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { failureKind, host, removedBy, touches, vault, type VaultChanged, type VaultEntry, type VaultInfo } from './vault-client.js'
@@ -47,6 +47,9 @@ import './keep-copy-control.js'
 
 /** How long typing in the list's filter pauses before the documents' values are looked in. */
 const SEARCH_DELAY_MS = 250
+
+/** What the view is asked from elsewhere to show: a document to open, or a new one started with values. */
+export type Opening = { path: string } | { values: FieldValues }
 
 /** What is open in the editor: a new document from a template, or an existing document. */
 type Draft =
@@ -129,24 +132,13 @@ export class LlDocuments extends LitElement {
       font-size: 0.875em;
       color: var(--dc-color-text-muted);
     }
-    .referring ul {
-      list-style: none;
-      margin: 0;
-      padding: 0;
+    .referring-head {
+      display: flex;
+      align-items: center;
+      gap: var(--dc-space-2);
     }
-    .referring button {
-      text-align: left;
-      width: 100%;
-      padding: var(--dc-space-1) var(--dc-space-2);
-      border: 1px solid transparent;
-      border-radius: var(--dc-radius-md);
-      background: none;
-      font: inherit;
-      color: inherit;
-      cursor: pointer;
-    }
-    .referring button:hover {
-      background: var(--dc-color-surface);
+    .referring dc-data-table {
+      font-size: 13px;
     }
     .similar summary {
       cursor: pointer;
@@ -213,8 +205,11 @@ export class LlDocuments extends LitElement {
   @property({ attribute: false }) vaultInfo!: VaultInfo
   /** Whose documents: a template, or `null` for those naming none the vault has. */
   @property({ attribute: false }) scope: TemplateItem | null = null
-  /** A document to open as soon as the view shows. */
-  @property({ attribute: false }) openPath?: string
+  /**
+   * What to show as soon as the view shows, asked for from elsewhere: a document to open, or a new one started with
+   * values filled in — one naming the document a person was on, say.
+   */
+  @property({ attribute: false }) opening?: Opening
   /** The model set up for the chat, if any: importing can have it read records out of text. */
   @property({ attribute: false }) model: ModelSettings | null = null
 
@@ -287,7 +282,7 @@ export class LlDocuments extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this.refresh()
-    if (this.openPath) void this.open(this.openPath)
+    if (this.opening) void this.openAsked(this.opening)
     this.unlisten = onVaultChanged((change) => void this.outsideChange(change))
   }
 
@@ -305,9 +300,8 @@ export class LlDocuments extends LitElement {
       this.draft = undefined
       void this.refresh()
     }
-    // Asked to open a document while already showing — one that names the document open here, say. The first
-    // one is opened as the view connects.
-    if (changed.has('openPath') && this.hasUpdated && this.openPath) void this.open(this.openPath)
+    // Asked to open a document, or start one, while already showing. The first is opened as the view connects.
+    if (changed.has('opening') && this.hasUpdated && this.opening) void this.openAsked(this.opening)
   }
 
   updated(changed: Map<string, unknown>) {
@@ -469,12 +463,17 @@ export class LlDocuments extends LitElement {
     this.message = strings.reloadedOutside
   }
 
-  private async startNew(templatePath: string) {
+  private async openAsked(opening: Opening) {
+    if ('path' in opening) await this.open(opening.path)
+    else if (this.scope) await this.startNew(this.scope.path, opening.values)
+  }
+
+  private async startNew(templatePath: string, values: FieldValues = {}) {
     this.reset()
     try {
       const templateSource = await vault.read(templatePath)
       const { ref } = templateInfo(templateSource)
-      this.setValues({})
+      this.setValues(values)
       this.initialValues = this.values
       this.draft = { kind: 'new', templateSource, templateRef: ref }
       this.opened++
@@ -899,7 +898,8 @@ export class LlDocuments extends LitElement {
 
   /**
    * Under a document of a template other documents refer to — a customer — the documents that name it, by
-   * template, the newest first. One of another template opens in its own place.
+   * template, the newest first, as a table: the rows a paper form lists under it (the items of a requisition), each
+   * a document of its own. A new one is started naming it. One of another template opens in its own place.
    */
   private renderReferring(id: string) {
     const scope = this.scope
@@ -907,16 +907,22 @@ export class LlDocuments extends LitElement {
     const groups = referringDocuments(id, templateId(scope.ref), this.vaultTemplates, this.vaultDocuments)
     return html`<div class="referring" role="region" aria-label=${strings.referringTitle}>
       <h3>${strings.referringTitle}</h3>
-      ${groups.length === 0
-        ? html`<p class="message">${strings.referringNone}</p>`
-        : groups.map(
-            (group) => html`<h4>${strings.referringGroup(this.templateNames.get(group.template) ?? group.template, group.documents.length)}</h4>
-              <ul>
-                ${group.documents.map(
-                  (d) => html`<li><button @click=${() => this.leaveFor(async () => this.openNaming(group.template, d.path))}>${d.name}</button></li>`,
-                )}
-              </ul>`,
-          )}
+      ${groups.map((group) => {
+        const name = this.templateNames.get(group.template) ?? group.template
+        const table = referringTable(group, this.vaultTemplates.find((t) => t.ref === group.template), this.vaultTemplates, this.vaultDocuments, this.templateNames)
+        return html`<div class="referring-head">
+            <h4>${strings.referringGroup(name, group.documents.length)}</h4>
+            <dc-button size="sm" variant="secondary" @click=${() => this.leaveFor(() => this.startNaming(group.template, { [group.fields[0]]: id }))}
+              >${strings.referringAdd(name)}</dc-button
+            >
+          </div>
+          <dc-data-table
+            .columns=${table.columns}
+            .rows=${table.rows}
+            empty-label=${strings.referringNone}
+            @activate=${(e: CustomEvent<{ id: string }>) => this.leaveFor(() => this.openNaming(group.template, e.detail.id))}
+          ></dc-data-table>`
+      })}
     </div>`
   }
 
@@ -925,6 +931,14 @@ export class LlDocuments extends LitElement {
     if (this.scope && templateId(template) === templateId(this.scope.ref)) return this.open(path)
     this.dispatchEvent(
       new CustomEvent('ll-open-document', { detail: { path, template: revisedRef(template, this.currentRefs) }, bubbles: true, composed: true }),
+    )
+  }
+
+  /** Starts a document naming the one open here: in this view if it is of this template, else in its own place. */
+  private async startNaming(template: string, values: FieldValues) {
+    if (this.scope && templateId(template) === templateId(this.scope.ref)) return this.startNew(this.scope.path, values)
+    this.dispatchEvent(
+      new CustomEvent('ll-new-document', { detail: { template: revisedRef(template, this.currentRefs), values }, bubbles: true, composed: true }),
     )
   }
 

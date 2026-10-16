@@ -4,7 +4,7 @@
 // nothing in the files that name it.
 
 import { fileName, fileNameTitle, type FieldValues } from './documents.js'
-import type { DocumentSnapshot, ProjectionTable, TemplateSnapshot } from './projection.js'
+import { PATH_COLUMN, cellText, type DocumentSnapshot, type ProjectionTable, type TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { templateId } from './template-revision.js'
 
@@ -115,15 +115,20 @@ export function withReferenceNames(
   }
 }
 
-/** The documents of one template that name a document, newest first. */
+/**
+ * The documents of one template that name a document, newest first, and the template's fields that can name it —
+ * `fields[0]` is the one a new document of the template is started naming it by.
+ */
 export interface Referring {
   template: string
-  documents: { path: string; name: string }[]
+  fields: string[]
+  documents: { path: string; name: string; values: Record<string, unknown> }[]
 }
 
 /**
  * The documents whose reference fields name document `id` of template `target` (by id), by template in the
- * vault's order, each template's newest first — what a customer's page lists under the customer.
+ * vault's order, each template's newest first — what a customer's page lists under the customer. A template whose
+ * fields can name it is listed with none yet too: a first one can be added from there.
  */
 export function referringDocuments(
   id: string,
@@ -137,9 +142,43 @@ export function referringDocuments(
     const naming = documents
       .filter((d) => templateId(d.template) === templateId(template.ref) && d.id !== id && fields.some((f) => d.values[f] === id))
       .sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0) || a.path.localeCompare(b.path))
-      .map((d) => ({ path: d.path, name: fileName(d.path, '.md') }))
-    return naming.length ? [{ template: template.ref, documents: naming }] : []
+      .map((d) => ({ path: d.path, name: fileName(d.path, '.md'), values: d.values }))
+    return [{ template: template.ref, fields, documents: naming }]
   })
+}
+
+/** A table of documents to show: its columns, and a row per document keyed by its path. */
+export interface ShownTable {
+  columns: { key: string; label: string }[]
+  rows: { id: string; cells: Record<string, string> }[]
+}
+
+/**
+ * The documents naming one as a table, the way the paper form's rows read under it: each by its name, then the
+ * template's fields but the ones naming it — they would only say it again — a document named by its name.
+ */
+export function referringTable(
+  referring: Referring,
+  template: TemplateSnapshot | undefined,
+  templates: readonly TemplateSnapshot[],
+  documents: readonly DocumentSnapshot[],
+  names: ReadonlyMap<string, string>,
+): ShownTable {
+  const fields = (template?.fields ?? []).filter((f) => !referring.fields.includes(f.name))
+  const shown = withReferenceNames(
+    { template: referring.template, columns: [], rows: referring.documents.map((d) => ({ path: d.path, values: d.values })) },
+    template,
+    templates,
+    documents,
+    names,
+  )
+  return {
+    columns: [{ key: PATH_COLUMN, label: strings.referringName }, ...fields.map((f) => ({ key: f.name, label: f.label }))],
+    rows: shown.rows.map((row) => ({
+      id: row.path,
+      cells: { [PATH_COLUMN]: fileName(row.path, '.md'), ...Object.fromEntries(fields.map((f) => [f.name, cellText(row.values[f.name])])) },
+    })),
+  }
 }
 
 /**

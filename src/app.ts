@@ -21,7 +21,8 @@ import { UpdateWatch, update, type AvailableUpdate } from './updates.js'
 import { DEFAULT_SETTINGS, settings as deviceSettings, type ModelSettings, type Settings } from './settings.js'
 import './templates-view.js'
 import './documents-view.js'
-import type { LlDocuments } from './documents-view.js'
+import type { LlDocuments, Opening } from './documents-view.js'
+import type { FieldValues } from './documents.js'
 import './table-view.js'
 import './learning-view.js'
 import './about-dialog.js'
@@ -138,8 +139,8 @@ export class LlApp extends LitElement {
   private readonly updates = new UpdateWatch(update.check, (found) => (this.available = found))
   /** Where the app was when it was last used, to be shown once the vault it reopened is read. */
   private resumeAt?: { place: Place; tab: Tab }
-  /** A document to open in the documents view, asked for from elsewhere (a table row). */
-  @state() private openPath?: string
+  /** What the documents view is to show, asked for from elsewhere: a table row's document, a new one naming another. */
+  @state() private opening?: Opening
   /** The unsaved-edits question is showing; the answer settles the promise it was asked with. */
   @state() private asking = false
   private answer?: (discard: boolean) => void
@@ -217,14 +218,17 @@ export class LlApp extends LitElement {
     void this.loadSettings()
     this.addEventListener('ll-open-document', (e) => {
       const { path, template } = (e as CustomEvent<{ path: string; template: string }>).detail
-      this.openPath = path
-      this.place = { kind: 'template', ref: template }
-      this.tab = 'documents'
+      this.openIn(template, { path })
+    })
+    // A new document of another template, started with values — one naming the document a person was on.
+    this.addEventListener('ll-new-document', (e) => {
+      const { template, values } = (e as CustomEvent<{ template: string; values: FieldValues }>).detail
+      this.openIn(template, { values })
     })
     // The template showing was deleted: its place is gone, and the app shows the next one.
     this.addEventListener('ll-template-deleted', async (e) => {
       const { permanently } = (e as CustomEvent<{ permanently: boolean }>).detail
-      this.openPath = undefined
+      this.opening = undefined
       this.place = undefined
       await this.refreshPlaces()
       this.notice = strings.templateDeleted(permanently, this.hasOrphans)
@@ -387,11 +391,18 @@ export class LlApp extends LitElement {
     this.answer = undefined
   }
 
+  /** Shows a template's documents with one opened, or a new one started, there; unsaved edits were let go first. */
+  private openIn(template: string, opening: Opening) {
+    this.opening = opening
+    this.place = { kind: 'template', ref: template }
+    this.tab = 'documents'
+  }
+
   /** Goes to a place once unsaved edits are let go; otherwise the sidebar shows the place kept. */
   private async go(place: Place) {
     if (this.place && placeId(place) === placeId(this.place)) return
     if (!(await confirmDiscard())) return this.requestUpdate()
-    this.openPath = undefined
+    this.opening = undefined
     this.notice = ''
     this.place = place
     void this.refreshPlaces() // a template kept while it showed, gone outside, leaves the list
@@ -400,7 +411,7 @@ export class LlApp extends LitElement {
   private async switchTab(tab: Tab) {
     if (tab === this.tab) return
     if (!(await confirmDiscard())) return this.requestUpdate()
-    this.openPath = undefined
+    this.opening = undefined
     this.notice = ''
     this.tab = tab
   }
@@ -424,7 +435,7 @@ export class LlApp extends LitElement {
       await this.refreshPlaces()
       const made = this.templates.find((t) => t.path === path)
       if (made) {
-        this.openPath = undefined
+        this.opening = undefined
         this.place = { kind: 'template', ref: made.ref }
         this.tab = 'template'
       }
@@ -537,7 +548,7 @@ export class LlApp extends LitElement {
           : html`<ll-documents
               .vaultInfo=${info}
               .scope=${template}
-              .openPath=${this.openPath}
+              .opening=${this.opening}
               .model=${this.settings?.model ?? null}
             ></ll-documents>`}
     </div>`

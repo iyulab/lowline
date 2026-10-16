@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentSnapshot, TemplateSnapshot } from '../projection.js'
-import { namedEvidence, referenceChoices, referringDocuments, withReferenceNames } from '../references.js'
+import { namedEvidence, referenceChoices, referringDocuments, referringTable, withReferenceNames } from '../references.js'
 
 const field = (name: string, reference?: string) => ({ name, label: name, type: 'select', multiple: false, options: [], ...(reference ? { reference } : {}) })
 const customer: TemplateSnapshot = { ref: 'customer@2', fields: [field('등급')], suggest: [] }
@@ -74,12 +74,42 @@ describe('referringDocuments', () => {
 
   it('lists the documents naming one, by template, the newest first', () => {
     expect(referringDocuments('c-2', 'customer', [customer, inquiry], all)).toEqual([
-      { template: 'inquiry@1', documents: [{ path: '문서/문의 b.md', name: '문의 b' }, { path: '문서/문의 a.md', name: '문의 a' }] },
+      {
+        template: 'inquiry@1',
+        fields: ['고객'],
+        documents: [
+          { path: '문서/문의 b.md', name: '문의 b', values: { 고객: 'c-2' } },
+          { path: '문서/문의 a.md', name: '문의 a', values: { 고객: 'c-2' } },
+        ],
+      },
     ])
   })
 
-  it('has none for a document nothing names', () => {
-    expect(referringDocuments('c-9', 'customer', [customer, inquiry], all)).toEqual([])
+  it('lists a template that can name it with none yet, so a first one can be added', () => {
+    expect(referringDocuments('c-9', 'customer', [customer, inquiry], all)).toEqual([{ template: 'inquiry@1', fields: ['고객'], documents: [] }])
+  })
+
+  it('has no template when none can name it', () => {
+    expect(referringDocuments('c-9', 'nothing', [customer, inquiry], all)).toEqual([])
+  })
+})
+
+describe('referringTable', () => {
+  const all = [
+    ...documents,
+    { path: '문서/문의 a.md', id: 'q-a', template: 'inquiry@1', values: { 고객: 'c-2', 상위: 'q-1', 분류: ['장비', '설치'] }, modified: 1 },
+  ]
+
+  it('shows each document by its name, then the fields but the one naming the document, another document by its name', () => {
+    const [group] = referringDocuments('c-2', 'customer', [customer, inquiry], all)
+    expect(referringTable(group, inquiry, [customer, inquiry], all, names)).toEqual({
+      columns: [
+        { key: '$path', label: '이름' },
+        { key: '상위', label: '상위' },
+        { key: '분류', label: '분류' },
+      ],
+      rows: [{ id: '문서/문의 a.md', cells: { $path: '문의 a', 상위: '문의 1', 분류: '장비, 설치' } }],
+    })
   })
 })
 

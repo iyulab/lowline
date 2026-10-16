@@ -337,16 +337,18 @@ export default {
         { timeoutMs: 15_000 },
       )
 
-      // A customer lists the inquiries naming it, and one opens in its own place.
+      // A customer lists the inquiries naming it as a table — each by its name, then its fields but 고객 — and one
+      // opens in its own place.
       const inquiryName = saved.replace(/\.md$/, '')
       await app.openDocument(CUSTOMER, '한빛상사')
-      await app.cdp.waitFor(
-        `__e2e.all('div.referring button').some((b) => b.textContent.trim() === ${q(inquiryName)})`,
+      const row = await app.cdp.waitFor(
+        `__e2e.all('div.referring dc-data-table').flatMap((t) => [...t.shadowRoot.querySelectorAll('tbody tr')]).map((r) => r.textContent.replace(/\\s+/g, ' ').trim()).find((t) => t.startsWith(${q(inquiryName)}))`,
         'the inquiry naming 한빛상사',
         { timeoutMs: 15_000 },
       )
+      assert.ok(row.includes('견적 요청') && !row.includes('한빛상사'), `the inquiry's fields but the one naming the customer: ${row}`)
       assert.ok(await app.cdp.evaluate(`__e2e.all('div.referring h4').some((h) => h.textContent.trim() === '문의 1건')`))
-      await app.click('div.referring button', inquiryName)
+      await app.click('tbody th button', inquiryName) // the table's rows are its own: one opens by its name
       await app.cdp.waitFor(
         `__e2e.one('nav button[aria-current="true"]')?.textContent.trim() === ${q(inquiryName)} && __e2e.one('select[name="고객"]')?.value === 'c-hanbit'`,
         'the inquiry open in its own place',
@@ -354,7 +356,10 @@ export default {
       )
       assert.equal((await app.where()).place, '문의')
       await app.openDocument(CUSTOMER, '가나상회')
-      await app.cdp.waitFor(`__e2e.all('div.referring p').some((p) => p.textContent.trim() === '아직 이 문서를 가리키는 문서가 없습니다.')`, 'nothing naming 가나상회')
+      await app.cdp.waitFor(
+        `__e2e.all('div.referring h4').some((h) => h.textContent.trim() === '문의 0건') && __e2e.all('div.referring dc-data-table').flatMap((t) => [...t.shadowRoot.querySelectorAll('tbody tr')]).length === 0`,
+        'nothing naming 가나상회',
+      )
 
       // Rows pasted into the inquiries name their customers by name: each comes in holding the customer's id, and a
       // name no customer has is kept as written and said.
@@ -385,6 +390,25 @@ export default {
       await app.cdp.waitFor(`__e2e.all('div.referring h4').some((h) => h.textContent.trim() === '문의 1건')`, 'the imported inquiry naming 가나상회', {
         timeoutMs: 15_000,
       })
+
+      // A row added under the customer: a new inquiry, started naming it, in the inquiries' place.
+      const addedBefore = new Set(await readdir(join(vault, '문서')))
+      await app.click('div.referring dc-button', '새 문의')
+      await app.cdp.waitFor(`__e2e.one('select[name="고객"]')?.value === 'c-gana'`, 'a new inquiry naming 가나상회', { timeoutMs: 15_000 })
+      assert.equal((await app.where()).place, '문의')
+      await app.fill('[data-field-name="내용"]', '설치 문의')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
+      const added = (await readdir(join(vault, '문서'))).find((f) => !addedBefore.has(f))
+      assert.ok(added, 'the new inquiry saved')
+      files.push([join(vault, '문서', added)])
+      assert.equal((await fileValues(join(vault, '문서', added))).고객, 'c-gana', 'it names the customer by id')
+      await app.openDocument(CUSTOMER, '가나상회')
+      await app.cdp.waitFor(
+        `__e2e.all('div.referring h4').some((h) => h.textContent.trim() === '문의 2건') && __e2e.all('div.referring dc-data-table').flatMap((t) => [...t.shadowRoot.querySelectorAll('tbody tr')]).some((r) => r.textContent.includes('설치 문의'))`,
+        'the added inquiry under 가나상회',
+        { timeoutMs: 15_000 },
+      )
       await app.noAlert()
     } finally {
       await app.learning()

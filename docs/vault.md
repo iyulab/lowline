@@ -85,7 +85,7 @@ template: inquiry@1
 ---
 ```
 
-A value naming a document the vault does not have is kept as it is, and shown as missing with the start of its id. A document that others name — a customer named by inquiries — lists them under it, by template and the latest first; one opens in its own template's place. The templates fields refer to lead the sidebar, in a group of their own; nothing else marks them.
+A value naming a document the vault does not have is kept as it is, and shown as missing with the start of its id. A document that others name — a customer named by inquiries, a requisition named by its items — lists them under it as a table for each template that can name it, the latest first: each by its name, then that template's fields but the one naming it. A row opens its document in its own template's place, and **New** beside the table starts one there naming this document — the rows of a paper form's table, each a document of its own. The templates fields refer to lead the sidebar, in a group of their own; nothing else marks them.
 
 ## Tables, finding and importing
 
