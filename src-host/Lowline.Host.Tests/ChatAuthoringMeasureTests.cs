@@ -86,4 +86,42 @@ public sealed class ChatAuthoringMeasureTests
         }
         await File.WriteAllLinesAsync(output!, lines, ct);
     }
+
+    /// <summary>A draft the app asks for again: its request, the first reply, and what the app says is wrong with it.</summary>
+    private sealed record AskedAgain(string Id, string Ask, string First, string Retry);
+
+    /// <summary>
+    /// The second time the chat asks, as it does when a draft has problems: the conversation as it went — the request and
+    /// the first reply — and the app's message saying what is wrong (<c>retryMessage</c>), from the file the app's side
+    /// wrote (<c>LOWLINE_CHAT_AUTHORING_RETRIES</c>). The replies go to <c>LOWLINE_CHAT_AUTHORING_SECOND</c> for the app's
+    /// side to judge as what a person is shown.
+    /// </summary>
+    [Fact]
+    public async Task Measures_second_drafts_after_the_app_says_what_is_wrong()
+    {
+        var retries = Environment.GetEnvironmentVariable("LOWLINE_CHAT_AUTHORING_RETRIES");
+        var output = Environment.GetEnvironmentVariable("LOWLINE_CHAT_AUTHORING_SECOND");
+        Assert.SkipWhen(string.IsNullOrEmpty(retries) || string.IsNullOrEmpty(output),
+            "set LOWLINE_CHAT_AUTHORING_RETRIES and LOWLINE_CHAT_AUTHORING_SECOND to measure second drafts");
+        var model = Environment.GetEnvironmentVariable("LOWLINE_CHAT_MODEL") ?? LocalModels.Offered[0];
+        var generators = new LmSupplyGenerators();
+        Assert.SkipUnless(generators.IsDownloaded(model), $"{model} is not on this computer");
+        var ct = TestContext.Current.CancellationToken;
+        await using var local = new LocalModels(generators);
+        List<string> lines = [];
+        foreach (var line in await File.ReadAllLinesAsync(retries!, ct))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var retry = JsonSerializer.Deserialize<AskedAgain>(line, Json)!;
+            var clock = Stopwatch.StartNew();
+            var reply = await ChatAuthoring.ReplyAsync(
+                new ChatAuthorRequest(ChatAuthoring.LocalPreset, null, null, model, Starter,
+                    [new ChatTurn("user", retry.Ask), new ChatTurn("assistant", retry.First), new ChatTurn("user", retry.Retry)]),
+                local, TimeSpan.FromMinutes(5), ct);
+            clock.Stop();
+            Assert.True(reply.Ok, $"{retry.Id}: {reply.Failure}");
+            lines.Add(JsonSerializer.Serialize(new { retry.Id, reply = reply.Text, ms = clock.ElapsedMilliseconds }, Json));
+        }
+        await File.WriteAllLinesAsync(output!, lines, ct);
+    }
 }
