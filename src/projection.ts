@@ -260,6 +260,12 @@ export interface FieldCurve {
    * Empty when no number of characters reached the target; absent or null for a field whose value is picked.
    */
   typing?: TypedReplay[] | null
+  /**
+   * For a field whose template names a class (`lowline.coarse`), once a strength was chosen for the class: of the
+   * documents whose value the replay left unsuggested, the share given a class and the share of those right, with what
+   * to expect next as for `replay`. Absent or null otherwise.
+   */
+  coarse?: { threshold: number; precision: number; promise: number; promiseOver: number; answerRate: number; answered: number; lookups: number } | null
 }
 
 export interface TypedReplay {

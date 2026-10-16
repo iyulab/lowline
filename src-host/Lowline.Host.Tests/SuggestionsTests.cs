@@ -739,6 +739,12 @@ public sealed class SuggestionsTests
         Assert.Equal("32", suggestion.Value);
         Assert.Equal("설비: 펌프", suggestion.Source);
 
+        // The learning screen says how the class did where the value was not suggested, as it does for the value.
+        var curve = (await vault.CurvesAsync(Ct)).Single(c => c.Field == "코드");
+        Assert.NotNull(curve.Coarse);
+        Assert.True(curve.Coarse.Precision >= Suggestions.TargetPrecision);
+        Assert.True(curve.Coarse.Answered >= Suggestions.MinimumAnswered);
+
         // Nothing settled under a 설비 never seen: no class either.
         var unknown = await vault.SuggestAsync(new SuggestRequest("fault@1", "코드", Values("""{"설비": "냉각탑"}""")), Ct);
         Assert.Equal(SuggestionMode.Abstain, unknown!.Mode);

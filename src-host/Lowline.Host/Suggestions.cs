@@ -264,6 +264,13 @@ public sealed class Suggestions
     public IReadOnlyList<ThresholdChoice?>? Typed(string template, string field) =>
         _thresholds.GetValueOrDefault((template, field)) is { SelectedAt: not null, Typed: { } typed } ? typed : null;
 
+    /// <summary>
+    /// For a field whose template names a class, how the class did on the lookups its value left and the strength chosen
+    /// for it; null until one was, or when none was right often enough.
+    /// </summary>
+    public ThresholdChoice? CoarseChoice(string template, string field) =>
+        _thresholds.GetValueOrDefault((template, field)) is { SelectedAt: not null, Coarse: { } coarse } ? coarse : null;
+
     /// <summary>The fields the replay chose to key a judgment field; null when every value filled in counts.</summary>
     public IReadOnlyList<string>? KeyFields(string template, string field) =>
         _thresholds.GetValueOrDefault((template, field))?.KeyFields;

@@ -61,11 +61,14 @@ public sealed class ReplayTests
                 var asked = new SuggestRequest(document.Template, field, values, document.Identity);
                 var suggestion = (await vault.SuggestAsync(asked, ct))!;
                 var settled = document.Values.TryGetValue(field, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-                var (right, wrong, abstained) = tally.GetValueOrDefault(field);
+                // A class is right when the value saved is of it; it is tallied apart from the values.
+                var classed = suggestion.Mode == SuggestionMode.Coarse;
+                var counted = classed ? $"{field} class" : field;
+                var (right, wrong, abstained) = tally.GetValueOrDefault(counted);
                 if (suggestion.Value is null) abstained++;
-                else if (suggestion.Value == settled) right++;
+                else if (classed ? settled?.StartsWith(suggestion.Value, StringComparison.Ordinal) == true : suggestion.Value == settled) right++;
                 else wrong++;
-                tally[field] = (right, wrong, abstained);
+                tally[counted] = (right, wrong, abstained);
                 await offers.WriteLineAsync(JsonSerializer.Serialize(
                     new Offered(document.Identity, field, suggestion, before, Promised: await PromisedAsync(vault, document.Template, field, suggestion, null, ct)), Json));
 
@@ -95,12 +98,16 @@ public sealed class ReplayTests
                 + $" ({(t.Value.Right + t.Value.Wrong == 0 ? 0 : 100.0 * t.Value.Right / (t.Value.Right + t.Value.Wrong)):F0}% right)")), ct);
     }
 
-    /// <summary>What the field's curve promises for what was offered: its replay's promise, or its replay at that many characters.</summary>
+    /// <summary>
+    /// What the field's curve promises for what was offered: its replay's promise, its class's for a class, or its replay at
+    /// that many characters.
+    /// </summary>
     private static async Task<double?> PromisedAsync(
         VaultProjection vault, string template, string field, Suggestion offered, string? typed, CancellationToken ct)
     {
         if (offered.Value is null) return null;
         var curve = (await vault.CurvesAsync(ct)).Single(c => c.Template == template && c.Field == field);
+        if (offered.Mode == SuggestionMode.Coarse) return curve.Coarse?.Promise;
         return typed is null
             ? curve.Replay?.Promise
             : curve.Typing?.FirstOrDefault(t => t.Characters == typed.Length)?.Precision;

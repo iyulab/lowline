@@ -189,6 +189,11 @@ export default {
     await app.sidebar(FAULT.name, { timeoutMs: 30_000 })
     await app.learning()
     await app.cdp.waitFor(replay, 'the replay of 결함 코드 · 코드', { timeoutMs: 30_000 })
+    // Beneath it, how the class did where the code was not suggested.
+    const classLine = await app.cdp.evaluate(
+      `__e2e.all('h2').find((el) => el.textContent.trim() === '결함 코드 · 코드')?.parentElement.querySelector('.class')?.textContent.replace(/\\s+/g, ' ').trim()`,
+    )
+    assert.match(classLine, /^앞부분\(분류\): 값을 제안하지 못한 \d+건 중 \d+%에 분류를 제안, 그중 \d+% 맞음/)
 
     await app.newDocument(FAULT)
     await app.cdp.waitFor(`__e2e.one('[data-field-name="요청"]')?.textContent === ''`, 'an empty form')

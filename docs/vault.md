@@ -23,6 +23,16 @@ lowline:
 
 The file stays a plain Formdown template: `lowline` is a key other Formdown tools ignore.
 
+A judgment field whose values name a broader class in their first characters — the chapter of a fault code, the class of a part number — can say how many characters, under `coarse`. Where its value cannot be suggested, its class may be (see [Suggestions](suggestions.md)):
+
+```yaml
+lowline:
+  suggest: [고장코드]
+  coarse: { 고장코드: 2 }
+```
+
+Only a judgment field that takes one value counts, with a whole number of characters from one; anything else under `coarse` is ignored. It is written in the source; the template's page has no control for it.
+
 On a template's page:
 
 - Judgment fields are turned on and off with a checkbox per field, written into `lowline.suggest`.

@@ -207,6 +207,12 @@ export class LlLearning extends LitElement {
     return html`<p class="secondary typing">${strings.learningTyping(curve.typing)}</p>`
   }
 
+  /** How the field's class did on replay where its value was not suggested, when its template names a class. */
+  private renderClass(curve: FieldCurve) {
+    if (!curve.coarse) return nothing
+    return html`<p class="secondary class">${strings.learningClass(curve.coarse)}</p>`
+  }
+
   private label(curve: FieldCurve): string {
     const template = this.templates.find((t) => t.ref === curve.template)
     return template?.fields.find((f) => f.name === curve.field)?.label ?? curve.field
@@ -285,7 +291,7 @@ export class LlLearning extends LitElement {
             ? strings.learningReplay(curve.replay)
             : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
         </p>
-        ${this.renderDependsOn(curve)}${this.renderTyping(curve)}
+        ${this.renderDependsOn(curve)}${this.renderTyping(curve)}${this.renderClass(curve)}
       </section>`
     const last = points[points.length - 1]
     const recent = Math.min(points.length, WINDOW)
@@ -311,7 +317,7 @@ export class LlLearning extends LitElement {
           ? strings.learningReplay(curve.replay)
           : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
       </p>
-      ${this.renderDependsOn(curve)}${this.renderTyping(curve)}
+      ${this.renderDependsOn(curve)}${this.renderTyping(curve)}${this.renderClass(curve)}
       ${this.renderChart(curve, label)}
       <details>
         <summary>${strings.learningTable}</summary>

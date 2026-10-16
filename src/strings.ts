@@ -1,6 +1,25 @@
 // Every user-facing string lives here, so a change of UI language touches one file.
 import type { TemplateProblem } from './documents.js'
 import type { Abstention, FieldCurve, TypedReplay } from './projection.js'
+/** How a replay did: the share of lookups given a suggestion, the share right, and what to expect next. */
+interface Replayed {
+  answerRate: number
+  precision: number
+  promise: number
+  promiseOver: number
+  lookups: number
+}
+
+/**
+ * What to expect next, when it differs from the whole replay: a replay's precision keeps a time a field did better long
+ * after, and the latest stretch is what the next suggestions are like.
+ */
+function promiseTail(replay: Replayed): string {
+  return Math.round(replay.promise * 100) === Math.round(replay.precision * 100)
+    ? ''
+    : ` — 최근 ${replay.promiseOver.toLocaleString('ko-KR')}건만 보면 ${Math.round(replay.promise * 100)}% 맞음, 앞으로 기대할 값은 이쪽`
+}
+
 export const strings = {
   appName: 'Lowline',
   navLabel: '탐색',
@@ -277,12 +296,12 @@ export const strings = {
   // Decisions on suggestions from similar records stay in the curve; no new ones are made.
   learningMemoryRetired: '비슷한 기록에서는 이제 제안하지 않습니다 — 이 수는 그 전의 결정입니다.',
   // The replay also counts the fields memory left blank, which the curve does not.
-  learningReplay: (replay: { answerRate: number; precision: number; promise: number; promiseOver: number; lookups: number }) =>
+  learningReplay: (replay: Replayed) =>
     `저장된 ${replay.lookups}건을 순서대로 다시 물으면 ${Math.round(replay.answerRate * 100)}%에 제안, 그중 ${Math.round(replay.precision * 100)}% 맞음` +
-    // The whole replay keeps a time the field did better long after; what to expect next is the latest stretch.
-    (Math.round(replay.promise * 100) === Math.round(replay.precision * 100)
-      ? ''
-      : ` — 최근 ${replay.promiseOver.toLocaleString('ko-KR')}건만 보면 ${Math.round(replay.promise * 100)}% 맞음, 앞으로 기대할 값은 이쪽`),
+    promiseTail(replay),
+  learningClass: (replay: Replayed) =>
+    `앞부분(분류): 값을 제안하지 못한 ${replay.lookups}건 중 ${Math.round(replay.answerRate * 100)}%에 분류를 제안, 그중 ${Math.round(replay.precision * 100)}% 맞음` +
+    promiseTail(replay),
   learningTyping: (typing: TypedReplay[]) =>
     typing.length === 0
       ? '칠 때: 앞 제안이 맞지 않은 기록을 앞에서부터 쳐 보아도 아직 목표만큼 맞히는 글자 수가 없어, 치는 동안에도 제안하지 않습니다.'

@@ -112,15 +112,18 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       if (i < broughtIn) return
       const at = new Date(made[i])
       const offers = new Map<string, Offer>()
+      // A class taken leaves the field open for the rest of the value: what the save says about it is kept apart, as the app keeps it.
+      const classes = new Map<string, Offer>()
       for (const o of byDoc.get(document.id) ?? []) {
         if (o.suggestion.value === null) continue
         // Taken or changed the moment it showed, at what had been typed: a replay has no person to take time over it.
         const typed = charactersTyped(o.typed ?? undefined)
         const offer: Offer = { suggestion: o.suggestion, shown: at, filled: o.filled, typed, decided: at, decidedTyped: typed }
-        offers.set(o.field, offer)
+        ;(o.suggestion.mode === 'coarse' ? classes : offers).set(o.field, offer)
         shown.push(presentation(document.template, o.field, offer))
       }
-      events.push(...suggestionEvents(offers, new Set(), document.values as FieldValues, document.id, at, document.template))
+      for (const kept of [classes, offers])
+        events.push(...suggestionEvents(kept, new Set(), document.values as FieldValues, document.id, at, document.template))
     })
     fs.writeFileSync(`${out}/events.jsonl`, events.map((e) => JSON.stringify(e)).join('\n') + '\n')
 
@@ -157,16 +160,19 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
     // Quarter by quarter, for each field: how often a value was offered before typing and while typing, how often it
     // was the one saved, and what its replay promised when it was offered — what the app shows under the field's curve.
     const tally = () => ({ asked: 0, offered: 0, right: 0, promised: 0, promises: 0 })
-    const summary: Record<string, Record<string, { before: ReturnType<typeof tally>; typing: ReturnType<typeof tally> }>> = {}
+    const summary: Record<string, Record<string, { before: ReturnType<typeof tally>; typing: ReturnType<typeof tally>; class: ReturnType<typeof tally> }>> = {}
     const start = Date.parse(weekOf(made[broughtIn]))
     for (const o of offered) {
       const i = Number(o.doc.slice('replay-'.length))
       const quarter = `q${Math.floor((Date.parse(weekOf(made[i])) - start) / (13 * 7 * DAY)) + 1}`
-      const cell = ((summary[o.field] ??= {})[quarter] ??= { before: tally(), typing: tally() })[o.typed === null ? 'before' : 'typing']
-      if (o.typed === null) cell.asked++
+      const cells = ((summary[o.field] ??= {})[quarter] ??= { before: tally(), typing: tally(), class: tally() })
+      if (o.typed === null) cells.before.asked++
       if (o.suggestion.value === null) continue
+      // A class is offered where the value is not: it is counted apart, against the asks before typing.
+      const cell = o.suggestion.mode === 'coarse' ? cells.class : cells[o.typed === null ? 'before' : 'typing']
       cell.offered++
-      if (o.suggestion.value === String(documents[i].values[o.field])) cell.right++
+      const saved = String(documents[i].values[o.field])
+      if (o.suggestion.mode === 'coarse' ? saved.startsWith(o.suggestion.value) : o.suggestion.value === saved) cell.right++
       if (o.promised !== null) {
         cell.promised += o.promised
         cell.promises++
@@ -181,6 +187,8 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       console.log(`  ${field}: ` + quarters.map(([q, { before }]) => `${q} ${read(before)}`).join(' · '))
       if (quarters.some(([, { typing }]) => typing.offered > 0))
         console.log(`  ${field} while typing: ` + quarters.map(([q, { typing }]) => `${q} ${read(typing)}`).join(' · '))
+      if (quarters.some(([, c]) => c.class.offered > 0))
+        console.log(`  ${field} class: ` + quarters.map(([q, c]) => `${q} ${read(c.class)}`).join(' · '))
     }
     expect(form).toEqual({ form: 1, confirmed: documents.length, outside: 0, weeks, perWeek: Math.round((documents.length / weeks) * 100) / 100 })
   })

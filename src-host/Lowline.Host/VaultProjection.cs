@@ -425,7 +425,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            return [.. _curves.Select(Typing).Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
+            return [.. _curves.Select(Typing).Select(Classed).Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
                 ? c with
                 {
                     Replay = new FieldReplay(
@@ -445,6 +445,16 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
             _gate.Release();
         }
     }
+
+    /// <summary>A curve with how its field's class did on replay, when its template names one and a strength was chosen.</summary>
+    private FieldCurve Classed(FieldCurve curve) => _suggestions?.CoarseChoice(curve.Template, curve.Field) is { } coarse
+        ? curve with
+        {
+            Coarse = new ClassReplay(
+                coarse.Threshold, coarse.Precision, coarse.Promise, Gil.Forms.ThresholdSelection.RecentDocuments, coarse.AnswerRate,
+                coarse.Answered, coarse.Lookups),
+        }
+        : curve;
 
     /// <summary>A curve with how its field did on replay as typed from its start, when it is a field typed out.</summary>
     private FieldCurve Typing(FieldCurve curve) => _suggestions?.Typed(curve.Template, curve.Field) is { } typed

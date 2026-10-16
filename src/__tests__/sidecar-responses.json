@@ -5,7 +5,8 @@
     "projections": [
       "intake@1",
       "faults@1",
-      "handover@1"
+      "handover@1",
+      "chapters@1"
     ],
     "skipped": [
       {
@@ -242,7 +243,8 @@
           "accepted": 0
         }
       ],
-      "typing": null
+      "typing": null,
+      "coarse": null
     },
     {
       "template": "intake@1",
@@ -261,7 +263,8 @@
         "target": 0
       },
       "bySource": [],
-      "typing": null
+      "typing": null,
+      "coarse": null
     },
     {
       "template": "faults@1",
@@ -285,7 +288,8 @@
       "whyNoReplay": null,
       "closest": null,
       "bySource": [],
-      "typing": null
+      "typing": null,
+      "coarse": null
     },
     {
       "template": "handover@1",
@@ -313,7 +317,36 @@
           "answered": 0,
           "lookups": 0
         }
-      ]
+      ],
+      "coarse": null
+    },
+    {
+      "template": "chapters@1",
+      "field": "코드",
+      "accepted": 0,
+      "corrected": 0,
+      "rejected": 0,
+      "points": [],
+      "replay": null,
+      "whyNoReplay": "below-target",
+      "closest": {
+        "precision": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0,
+        "target": 0
+      },
+      "bySource": [],
+      "typing": [],
+      "coarse": {
+        "threshold": 0,
+        "precision": 0,
+        "promise": 0,
+        "promiseOver": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0
+      }
     }
   ],
   "suggestions": [
@@ -333,6 +366,12 @@
       "value": null,
       "mode": "rejected",
       "source": null,
+      "reason": null
+    },
+    {
+      "value": "32",
+      "mode": "coarse",
+      "source": "장비: 펌프",
       "reason": null
     }
   ],

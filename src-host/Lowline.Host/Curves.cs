@@ -14,12 +14,13 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// decisions by where each suggestion came from: each source promises the target on its own replay, so each is
 /// read against it apart; values another program proposed (<see cref="SuggestionSource.Proposed"/>) and classes offered
 /// where the value was not (<see cref="SuggestionMode.Coarse"/>) are counted there alone, not in the curve. <see cref="Typing"/>, for a field whose value is typed out, says how its replay did as typed
-/// from its start — whether or not <see cref="Replay"/> found a strength without typing.
+/// from its start — whether or not <see cref="Replay"/> found a strength without typing. <see cref="Coarse"/>, for a field
+/// whose template names a class, says how the class did on the lookups the value left, once a strength was chosen for it.
 /// </summary>
 public sealed record FieldCurve(
     string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
     FieldReplay? Replay = null, string? WhyNoReplay = null, FieldShortfall? Closest = null,
-    IReadOnlyList<SourceCount>? BySource = null, IReadOnlyList<TypedReplay>? Typing = null);
+    IReadOnlyList<SourceCount>? BySource = null, IReadOnlyList<TypedReplay>? Typing = null, ClassReplay? Coarse = null);
 
 /// <summary>
 /// How a field's saved documents did when typed from their start, with <see cref="Characters"/> typed, on the replay that
@@ -28,6 +29,13 @@ public sealed record FieldCurve(
 /// right. Only the numbers of characters a strength was chosen for are listed.
 /// </summary>
 public sealed record TypedReplay(int Characters, double Threshold, double Precision, double AnswerRate, int Answered, int Lookups);
+
+/// <summary>
+/// How a field's class did on replay, on the lookups its value left: <see cref="AnswerRate"/> of them got a class and
+/// <see cref="Precision"/> of those were right, with what to expect next (<see cref="Promise"/>, as for <see cref="FieldReplay"/>).
+/// </summary>
+public sealed record ClassReplay(
+    double Threshold, double Precision, double Promise, int PromiseOver, double AnswerRate, int Answered, int Lookups);
 
 /// <summary>Of a field's decisions about suggestions from one source, how many there were and how many were accepted.</summary>
 public sealed record SourceCount(string Source, int Decided, int Accepted);

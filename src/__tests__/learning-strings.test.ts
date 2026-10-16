@@ -55,3 +55,10 @@ describe('what a replay promises', () => {
     expect(strings.learningReplay({ ...replay, promise: 0.81 })).toContain('최근 5,000건만 보면 81% 맞음, 앞으로 기대할 값은 이쪽')
   })
 })
+
+describe('what a class promises', () => {
+  it('says how often a class was offered where the value was not, and how often it was right', () => {
+    const coarse = { answerRate: 0.17, precision: 0.95, promise: 0.95, promiseOver: 5000, lookups: 429 }
+    expect(strings.learningClass(coarse)).toBe('앞부분(분류): 값을 제안하지 못한 429건 중 17%에 분류를 제안, 그중 95% 맞음')
+  })
+})

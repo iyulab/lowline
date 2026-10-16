@@ -51,6 +51,18 @@ const curve: Shape<FieldCurve> = {
     },
   },
   whyNoReplay: 'optional',
+  coarse: {
+    presence: 'optional',
+    inside: {
+      threshold: 'required',
+      precision: 'required',
+      promise: 'required',
+      promiseOver: 'required',
+      answerRate: 'required',
+      answered: 'required',
+      lookups: 'required',
+    },
+  },
   closest: {
     presence: 'optional',
     inside: { precision: 'required', answerRate: 'required', answered: 'required', lookups: 'required', target: 'required' },
