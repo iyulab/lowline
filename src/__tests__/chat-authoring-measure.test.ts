@@ -13,9 +13,9 @@
 // template starts as.
 import { describe, expect, it } from 'vitest'
 import { parseFormdown } from '@formdown/core'
-import { draftOf, draftProblems, retryMessage, tidyDraft } from '../chat-authoring.js'
+import { draftOf, draftProblems, draftsOf, retryMessage, rowProblems, sourceId, spreadRows, tidyDraft } from '../chat-authoring.js'
 import { templateSnapshot, type TemplateSnapshot } from '../projection.js'
-import { starterTemplate } from '../strings.js'
+import { starterTemplate, strings } from '../strings.js'
 
 interface NodeProcess {
   env: Record<string, string | undefined>
@@ -27,6 +27,9 @@ interface NodeProcess {
 const process = (globalThis as { process?: NodeProcess }).process
 const env = process?.env ?? {}
 
+/** The id of the template a new one starts as, which every request is made from. */
+const STARTER_ID = 'new-template'
+
 /** A name as compared with a word asked for: spaces and underscores aside. */
 const plain = (name: string) => name.replace(/[\s_]+/g, '')
 
@@ -37,17 +40,26 @@ interface Asked {
   judged: string[]
   conditional?: string[]
   computed?: string[]
+  /** The fields of a row repeated down a table: asked to be a template of their own, pointing at this one's documents. */
+  rows?: string[]
   reply: string
   ms: number
 }
 
 /** How one reply reads as a draft, against what its request asked for. */
 function judge(asked: Asked, reply: string) {
-  const draft = draftOf(reply)
+  const drafts = draftsOf(reply, STARTER_ID)
+  const draft = drafts?.draft ?? null
   const tidied = draft === null ? null : tidyDraft(draft)
   const problems = tidied === null ? [] : draftProblems(tidied)
   const snapshot: TemplateSnapshot | null = tidied !== null && problems.length === 0 ? templateSnapshot(tidied) : null
-  const names = snapshot?.fields.map((f) => plain(f.name)) ?? []
+  // Row templates that work beside it: their fields count as asked-for fields too.
+  const parent = tidied === null ? null : (sourceId(tidied) ?? STARTER_ID)
+  const rowSnapshots = (drafts?.rows ?? []).map((r) => tidyDraft(r)).filter((r) => rowProblems(r, parent).length === 0).map((r) => templateSnapshot(r))
+  const rowNames = rowSnapshots.flatMap((r) => r.fields.map((f) => plain(f.name)))
+  // A row spread over numbered fields (`품목_1_품명`, `품명_15`) instead.
+  const numbered = snapshot?.fields.some((f) => /\d/.test(f.name)) ?? false
+  const names = [...(snapshot?.fields.map((f) => plain(f.name)) ?? []), ...rowNames]
   const has = (word: string) => names.some((n) => n.includes(plain(word)))
   const closedJudged = (word: string) =>
     snapshot?.fields.some((f) => plain(f.name).includes(plain(word)) && snapshot.suggest.includes(f.name) && f.options.length > 0) ?? false
@@ -55,7 +67,11 @@ function judge(asked: Asked, reply: string) {
   const conditioned = snapshot ? parseFormdown(tidied!).forms.filter((f) => f.conditions && Object.keys(f.conditions).length > 0).map((f) => plain(f.name)) : []
   const conditional = asked.conditional ?? []
   // A field asked to be worked out from others' numbers (`compute="…"`).
-  const worked = snapshot ? parseFormdown(tidied!).forms.filter((f) => f.compute).map((f) => plain(f.name)) : []
+  const worked = snapshot
+    ? [tidied!, ...(drafts?.rows ?? []).map((r) => tidyDraft(r))].flatMap((source) => parseFormdown(source).forms.filter((f) => f.compute).map((f) => plain(f.name)))
+    : []
+  // Asked for a repeated row: a row template that works beside the template, and no numbered fields left in it.
+  const rowsKept = asked.rows?.length ? rowSnapshots.length > 0 && !numbered && asked.rows.every((w) => rowNames.some((n) => n.includes(plain(w)))) : null
   return {
     draft,
     problems,
@@ -65,6 +81,11 @@ function judge(asked: Asked, reply: string) {
     closed: asked.judged.filter(closedJudged),
     onCondition: conditional.filter((word) => conditioned.some((n) => n.includes(plain(word)))),
     computed: (asked.computed ?? []).filter((word) => worked.some((n) => n.includes(plain(word)))),
+    rowsKept,
+    numbered,
+    // As the chat says when it asks again (`chat-panel.ts`).
+    spread: tidied === null ? [] : spreadRows(tidied),
+    reversed: (drafts?.reversed ?? []).map((r) => strings.chatRowReversed(r.match(/^#[ \t]+(.+)$/m)?.[1].trim() ?? '', parent ?? '')),
   }
 }
 
@@ -91,6 +112,7 @@ function report(model: string, title: string, rows: [Asked, Judged, number][]) {
         ` · judged ${closed.length}/${asked.judged.length}` +
         (conditional.length ? ` · on a condition ${onCondition.length}/${conditional.length}` : '') +
         (asked.computed?.length ? ` · computed ${computed.length}/${asked.computed.length}` : '') +
+        (judged.rowsKept === null ? '' : ` · rows ${judged.rowsKept ? 'a template of their own' : judged.numbered ? 'spread over numbered fields' : 'not apart'}`) +
         ` · ${snapshot?.fields.map((f) => `${f.name}:${f.type}`).join(' ') ?? ''}`,
     )
   }
@@ -112,8 +134,8 @@ describe.runIf(env.LOWLINE_CHAT_AUTHORING_MEASURE)('drafts a model on this compu
     // What the chat would say back: only a draft that has problems is asked for again.
     if (env.LOWLINE_CHAT_AUTHORING_RETRIES_OUT) {
       const retries = first
-        .filter(([, j]) => j.draft !== null && j.problems.length > 0)
-        .map(([a, j]) => JSON.stringify({ id: a.id, ask: a.ask, first: a.reply, retry: retryMessage(j.problems) }))
+        .filter(([, j]) => j.draft !== null && (j.problems.length > 0 || j.spread.length > 0 || j.reversed.length > 0))
+        .map(([a, j]) => JSON.stringify({ id: a.id, ask: a.ask, first: a.reply, retry: retryMessage([...j.problems, ...j.spread.map(strings.chatRowsSpread), ...j.reversed]) }))
       fs.writeFileSync(env.LOWLINE_CHAT_AUTHORING_RETRIES_OUT, retries.join('\n') + (retries.length ? '\n' : ''))
       console.log(`${model} · ${retries.length} drafts to ask for again`)
     }
@@ -130,7 +152,7 @@ describe.runIf(env.LOWLINE_CHAT_AUTHORING_MEASURE)('drafts a model on this compu
       )
       const shown = first.map(([a, j, ms]): [Asked, Judged, number] => {
         const again = second.get(a.id)
-        if (!again || draftOf(again.reply) === null) return [a, j, ms]
+        if (!again || draftOf(again.reply, STARTER_ID) === null) return [a, j, ms]
         return [a, judge(a, again.reply), ms + again.ms]
       })
       report(model, 'after the chat asks once more', shown)

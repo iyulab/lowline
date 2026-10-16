@@ -678,6 +678,7 @@ export class LlTemplates extends LitElement {
                   .model=${this.model}
                   .template=${this.source}
                   .saved=${this.loaded}
+                  .templatesDir=${this.vaultInfo.templatesDir}
                   @ll-chat-draft=${(e: CustomEvent<{ source: string }>) => this.takeDraft(e.detail.source)}
                 ></ll-chat-panel>`
               : nothing}

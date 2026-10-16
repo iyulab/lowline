@@ -13,8 +13,11 @@ namespace Lowline.Host.Tests;
 /// </summary>
 public sealed class ChatAuthoringMeasureTests
 {
-    /// <summary>What a new template starts as (the app's <c>starterTemplate</c>); the app's side checks it still is.</summary>
-    private const string Starter = """
+    /// <summary>
+    /// What a new template starts as (the app's <c>starterTemplate</c>); the app's side checks it still is. Its line breaks
+    /// are the app's, whatever this file was checked out with.
+    /// </summary>
+    private static readonly string Starter = """
         ---
         id: new-template
         version: 1
@@ -27,14 +30,16 @@ public sealed class ChatAuthoringMeasureTests
 
         @메모: [textarea rows=4]
 
-        """;
+        """.ReplaceLineEndings("\n");
 
     /// <summary>
     /// A request, the fields it names (a field counts when its name holds the word, spaces and underscores aside), the
     /// ones it asks a person to judge from a closed list, the ones it asks to show or require only on another's answer,
-    /// and the ones worked out from others' numbers.
+    /// the ones worked out from others' numbers, and the fields of a row repeated down a table — asked to be a template of
+    /// their own whose documents point at this one's.
     /// </summary>
-    private sealed record Case(string Id, string Ask, string[] Fields, string[] Judged, string[]? Conditional = null, string[]? Computed = null);
+    private sealed record Case(
+        string Id, string Ask, string[] Fields, string[] Judged, string[]? Conditional = null, string[]? Computed = null, string[]? Rows = null);
 
     private static readonly Case[] Cases =
     [
@@ -59,7 +64,7 @@ public sealed class ChatAuthoringMeasureTests
         new("event-safety", "체육행사 안전점검표를 만들어 줘. 행사명, 개최자, 종목, 참석예정 인원, 안전관리책임자를 받고, 비상구 개폐·비상등 점등과 응급 용품 사용 가능 여부 두 항목은 각각 점검일자와 결과(양호·미흡)를 받되 결과가 미흡일 때만 조치사항을 적게 해 줘. 종합 판정(진행·조건부 진행·연기)은 사람이 판단해 고르는 칸으로 해 줘.",
             ["행사명", "개최자", "종목", "참석", "안전관리책임자", "비상구", "응급", "조치", "종합"], ["종합"], ["조치"]),
         new("requisition", "물품청구서 서식으로 바꿔 줘. 운용부서명, 예산과목, 청구일을 받고, 품목마다 품명, 청구량, 단가, 금액, 용도를 열다섯 줄까지 적을 수 있게 해 줘.",
-            ["운용부서", "예산과목", "청구일", "품명", "청구량", "단가", "금액", "용도"], [], Computed: ["금액"]),
+            ["운용부서", "예산과목", "청구일", "품명", "청구량", "단가", "금액", "용도"], [], Computed: ["금액"], Rows: ["품명", "청구량", "단가", "금액", "용도"]),
     ];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerOptions.Web) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -75,7 +80,9 @@ public sealed class ChatAuthoringMeasureTests
         var ct = TestContext.Current.CancellationToken;
         await using var local = new LocalModels(generators);
         List<string> lines = [JsonSerializer.Serialize(new { model, template = Starter }, Json)];
-        foreach (var c in Cases)
+        // `LOWLINE_CHAT_AUTHORING_CASES` (ids, comma-separated) asks only those.
+        var only = Environment.GetEnvironmentVariable("LOWLINE_CHAT_AUTHORING_CASES")?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        foreach (var c in Cases.Where(c => only is not { Length: > 0 } || only.Contains(c.Id)))
         {
             var clock = Stopwatch.StartNew();
             var reply = await ChatAuthoring.ReplyAsync(
@@ -83,7 +90,7 @@ public sealed class ChatAuthoringMeasureTests
                 local, TimeSpan.FromMinutes(5), ct);
             clock.Stop();
             Assert.True(reply.Ok, $"{c.Id}: {reply.Failure}");
-            lines.Add(JsonSerializer.Serialize(new { c.Id, c.Ask, c.Fields, c.Judged, conditional = c.Conditional ?? [], computed = c.Computed ?? [], reply = reply.Text, ms = clock.ElapsedMilliseconds }, Json));
+            lines.Add(JsonSerializer.Serialize(new { c.Id, c.Ask, c.Fields, c.Judged, conditional = c.Conditional ?? [], computed = c.Computed ?? [], rows = c.Rows ?? [], reply = reply.Text, ms = clock.ElapsedMilliseconds }, Json));
         }
         await File.WriteAllLinesAsync(output!, lines, ct);
     }

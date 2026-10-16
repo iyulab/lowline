@@ -388,6 +388,20 @@ export const strings = {
       .filter(Boolean)
       .join(' '),
   chatDraftProblems: '고친 뒤에도 남은 문제가 있습니다 — 편집기 위 목록을 보세요.',
+  // A template for one of the draft's repeated rows, whose documents point at this template's: the person makes it.
+  chatRowDrafted: (title: string) => `되풀이되는 줄을 서식 «${title}»로 따로 썼습니다 — 줄마다 그 서식의 문서가 되고, 이 서식의 문서 화면에 표로 보입니다.`,
+  chatRowMake: (title: string) => `«${title}» 서식 만들기`,
+  chatRowMade: (title: string) => `서식 «${title}»을 만들었습니다 — 사이드바에서 엽니다.`,
+  chatRowProblem: (title: string, problem: string) => `줄 서식 «${title}»: ${problem}`,
+  // Asking again: a row of a table spread over numbered fields instead of a template of its own.
+  chatRowsSpread: (shape: string) =>
+    `칸 «${shape}»(N = 1, 2, 3…)처럼 같은 줄을 번호로 펼쳤습니다. 그 한 줄을 서식 하나로 따로 써서 두 번째 formdown 블록에 담고(새 id, 맨 앞 칸은 이 서식의 문서를 가리키는 칸), 이 서식에서는 그 칸들을 빼 주세요.`,
+  chatRowsSpreadLeft: '같은 줄을 번호로 펼친 칸이 남았습니다 — 줄마다 문서가 되게 하려면 «줄은 서식 하나로 따로»라고 다시 부탁해 보세요.',
+  chatRowReversed: (title: string, parent: string) =>
+    `이 서식이 줄 서식 «${title}»의 문서를 가리킵니다 — 거꾸로입니다. 이 서식에서 그 칸을 빼고, 줄 서식 맨 앞에 \`@이름 -> ${parent}: [select]\` 칸을 넣어 줄이 이 서식의 문서를 가리키게 해 주세요.`,
+  chatRowSameId: '줄 서식의 id가 이 서식과 같습니다 — 다른 id를 써야 합니다.',
+  chatRowNoParent: (parent: string) =>
+    `이 서식(${parent})의 문서를 가리키는 칸이 없습니다 — 맨 앞에 \`@이름 -> ${parent}: [select]\` 칸을 넣어야 줄이 이 서식의 문서에 이어집니다.`,
   chatUndo: '넣기 전으로',
   chatFailed: (why: string) => `답을 받지 못했습니다. ${why}`,
   chatModes: '채팅이 할 일',

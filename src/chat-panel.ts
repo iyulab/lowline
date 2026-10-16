@@ -6,11 +6,11 @@ import '@iyulab/chat-components/dist/components/prompt/UPrompt.js'
 import '@iyulab/chat-components/dist/components/blocks/UMarkedBlock.js'
 import { strings } from './strings.js'
 import { failureText, modelLabel } from './model-settings.js'
-import { draftOf, draftProblems, fieldChanges, retryMessage, tidyDraft, wordsOf } from './chat-authoring.js'
+import { draftProblems, draftsOf, fieldChanges, retryMessage, rowProblems, sourceId, spreadRows, tidyDraft, wordsOf } from './chat-authoring.js'
 import { planWords, queryPlan, type ReadPlan } from './chat-query.js'
-import { fileName } from './documents.js'
+import { fileName, fileNameFor } from './documents.js'
 import { cellText, countColumns, referringTemplates, templateSnapshot, type AggregateAnswer, type CountColumn, type TemplateField, type TemplateSnapshot } from './projection.js'
-import { host, model as models, type ChatTurn } from './vault-client.js'
+import { host, model as models, vault, type ChatTurn } from './vault-client.js'
 import { SidecarUnavailable, readVault, syncVault } from './vault-snapshot.js'
 import { documentNames, type DocumentNames } from './references.js'
 import { templateId } from './template-revision.js'
@@ -25,8 +25,23 @@ interface Shown {
   note?: string
   before?: string
   failed?: boolean
+  /** The templates of the draft's repeated rows, for the person to make: each with what stands in its way, and where it was made. */
+  rows?: Row[]
   /** An answer from the vault: what was counted, in words, and the counts with the documents behind each. */
   answer?: Answer
+}
+
+/** A row template a reply drafted beside the template: its source, its title, its problems, and its path once made. */
+interface Row {
+  source: string
+  title: string
+  problems: string[]
+  made?: string
+}
+
+/** A template's title: its first heading, or its id. */
+function titleOf(source: string): string {
+  return /^#[ \t]+(.+)$/m.exec(source)?.[1].trim() ?? sourceId(source) ?? strings.newTemplateName
 }
 
 /** What a question was answered with: every number from the vault's aggregate, none from the model. */
@@ -102,7 +117,8 @@ export class LlChatPanel extends LitElement {
       align-items: center;
       gap: var(--dc-space-2);
     }
-    .failed {
+    .failed,
+    .row .problems {
       color: var(--dc-color-danger-text);
     }
     .answer {
@@ -170,6 +186,8 @@ export class LlChatPanel extends LitElement {
   @property({ attribute: false }) template = ''
   /** The template as saved: whose records a question is asked of. */
   @property({ attribute: false }) saved = ''
+  /** Where the vault keeps its templates: a row template the chat drafted is made there. */
+  @property({ attribute: false }) templatesDir = ''
 
   @state() private settingUp = false
   @state() private mode: Mode = 'author'
@@ -275,20 +293,33 @@ export class LlChatPanel extends LitElement {
     this.writing = true
     try {
       const template = this.template
+      const id = sourceId(template)
+      // The template and, for a table of repeated rows, a template for one row whose documents point at it — each checked.
+      const read = (text: string | null) => {
+        const drafts = text ? draftsOf(text, id) : null
+        if (!drafts) return { draft: null, rows: [] as Row[], problems: [] as string[], spread: [] as string[] }
+        const parent = sourceId(drafts.draft) ?? id
+        const rows = drafts.rows.map((r) => tidyDraft(r)).map((source) => ({ source, title: titleOf(source), problems: rowProblems(source, parent) }))
+        const problems = [
+          ...draftProblems(tidyDraft(drafts.draft)),
+          ...rows.flatMap((r) => r.problems.map((p) => strings.chatRowProblem(r.title, p))),
+          ...drafts.reversed.map((r) => strings.chatRowReversed(titleOf(r), parent ?? '')),
+        ]
+        // A row spread over numbered fields works, but is no row: said when asking again, not as a problem in the editor.
+        return { draft: drafts.draft, rows, problems, spread: spreadRows(tidyDraft(drafts.draft)) }
+      }
       let reply = await models.author(model, template, this.turns)
       if (ask !== this.asked) return
-      let draft = reply.ok && reply.text ? draftOf(reply.text) : null
-      let problems = draft ? draftProblems(tidyDraft(draft)) : []
-      if (reply.ok && draft && problems.length > 0) {
+      let { draft, rows, problems, spread } = read(reply.ok ? reply.text : null)
+      if (reply.ok && draft && (problems.length > 0 || spread.length > 0)) {
         // Asked once more, with what is wrong — the conversation as it went, the retry not shown.
-        const again = [...this.turns, { role: 'assistant' as const, text: reply.text! }, { role: 'user' as const, text: retryMessage(problems) }]
+        const again = [...this.turns, { role: 'assistant' as const, text: reply.text! }, { role: 'user' as const, text: retryMessage([...problems, ...spread.map(strings.chatRowsSpread)]) }]
         const second = await models.author(model, template, again)
         if (ask !== this.asked) return
-        const secondDraft = second.ok && second.text ? draftOf(second.text) : null
-        if (secondDraft) {
+        const retried = read(second.ok ? second.text : null)
+        if (retried.draft) {
           reply = second
-          draft = secondDraft
-          problems = draftProblems(tidyDraft(secondDraft))
+          ;({ draft, rows, problems, spread } = retried)
         }
       }
       if (!reply.ok || reply.text === null) {
@@ -302,8 +333,10 @@ export class LlChatPanel extends LitElement {
       }
       const tidy = tidyDraft(draft)
       const { added, removed } = fieldChanges(template, tidy)
-      const note = [strings.chatDraftPut(added, removed), problems.length ? strings.chatDraftProblems : ''].filter(Boolean).join(' ')
-      this.shown = [...this.shown, { role: 'assistant', text: words, note, before: template }]
+      const note = [strings.chatDraftPut(added, removed), problems.length ? strings.chatDraftProblems : '', spread.length ? strings.chatRowsSpreadLeft : '']
+        .filter(Boolean)
+        .join(' ')
+      this.shown = [...this.shown, { role: 'assistant', text: words, note, before: template, ...(rows.length ? { rows } : {}) }]
       this.put(tidy)
     } catch {
       if (ask === this.asked) this.shown = [...this.shown, { role: 'assistant', text: strings.chatFailed(strings.modelCheckFailed), failed: true }]
@@ -316,6 +349,17 @@ export class LlChatPanel extends LitElement {
     this.asked++
     this.writing = false
     this.shown = [...this.shown, { role: 'assistant', text: strings.chatStopped, failed: true }]
+  }
+
+  /** Makes a row template the chat drafted — the person's act, as saving is — in the vault's templates folder. */
+  private async make(line: Shown, row: Row) {
+    try {
+      const made = await vault.create(this.templatesDir, fileNameFor(row.title, '.fd.md') ?? `${strings.newTemplateName}.fd.md`, row.source)
+      line.rows = line.rows!.map((r) => (r === row ? { ...r, made } : r))
+    } catch (e) {
+      line.rows = line.rows!.map((r) => (r === row ? { ...r, problems: [...r.problems, describeError(e)] } : r))
+    }
+    this.shown = [...this.shown]
   }
 
   private put(source: string) {
@@ -398,6 +442,15 @@ export class LlChatPanel extends LitElement {
             <dc-button size="sm" variant="ghost" @click=${() => this.put(line.before!)}>${strings.chatUndo}</dc-button>
           </p>`
         : nothing}
+      ${(line.rows ?? []).map(
+        (row) => html`<p class="note row" role="status">
+          ${row.made
+            ? strings.chatRowMade(row.title)
+            : html`${strings.chatRowDrafted(row.title)}
+                <dc-button size="sm" @click=${() => void this.make(line, row)}>${strings.chatRowMake(row.title)}</dc-button>
+                ${row.problems.length ? html`<span class="problems">${row.problems.join(' · ')}</span>` : nothing}`}
+        </p>`,
+      )}
     </u-message>`
   }
 

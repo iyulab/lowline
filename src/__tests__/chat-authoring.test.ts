@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { draftOf, draftProblems, fieldChanges, retryMessage, tidyDraft, wordsOf } from '../chat-authoring.ts'
+import { draftOf, draftProblems, draftsOf, fieldChanges, retryMessage, rowProblems, sourceId, tidyDraft, wordsOf } from '../chat-authoring.ts'
 
 const fence = '```'
 const before = '---\nid: intake\nversion: 1\n---\n# 접수\n\n@요청: [textarea rows=3]\n'
 const after = '---\nid: intake\nversion: 1\n---\n# 접수\n\n@요청: [textarea rows=3]\n\n@기한: [date]\n'
 
 describe('the chat that writes templates', () => {
-  it('takes the template from the last block of a reply, and the words from the rest', () => {
+  it('takes the template from the block of a reply, and the words from the rest', () => {
     const reply = `기한 칸을 넣었습니다.\n\n${fence}formdown\n${after}${fence}\n\n저장해 주세요.`
     expect(draftOf(reply)).toBe(after)
-    expect(wordsOf(reply)).toBe('기한 칸을 넣었습니다.\n\n\n\n저장해 주세요.')
+    expect(wordsOf(reply)).toBe('기한 칸을 넣었습니다.\n\n저장해 주세요.')
   })
 
   it('takes a block without a language too, and passes over one that holds no template', () => {
@@ -36,6 +36,33 @@ describe('the chat that writes templates', () => {
     const twice = draftProblems('---\nid: t\nversion: 1\n---\n@요청: [text]\n@요청: [text]\n')
     expect(twice.some((p) => p.includes('요청'))).toBe(true)
     expect(retryMessage(['a', 'b'])).toMatch(/\n- a\n- b$/)
+  })
+
+  it('takes a table of repeated rows apart: the template in the editor, each row template whose documents point at it to make', () => {
+    const parent = '---\nid: requisition\nversion: 1\n---\n# 물품청구서\n\n@운용부서: [text]\n@청구일: [date]\n'
+    const row = '---\nid: requisition-item\nversion: 1\n---\n# 청구 품목\n\n@청구서 -> requisition: [select]\n@품명: [text]\n@청구량: [number]\n'
+    const block = (source: string) => `${fence}formdown\n${source}${fence}`
+    const reply = `품목을 줄 서식으로 나눴습니다.\n\n${block(parent)}\n\n${block(row)}`
+    expect(draftsOf(reply, 'requisition')).toEqual({ draft: parent, rows: [row], reversed: [] })
+    // Sent the other way round, the template is still the one with its id.
+    expect(draftsOf(`${block(row)}\n${block(parent)}`, 'requisition')).toEqual({ draft: parent, rows: [row], reversed: [] })
+    // A new template, its id not yet the one the editor had: the block not pointing at another is the template.
+    expect(draftsOf(reply, 'template-abc')).toEqual({ draft: parent, rows: [row], reversed: [] })
+    // The template pointing at its row template instead: the reference the wrong way round, said as such.
+    const pointing = `${parent}@품목 -> requisition-item: [select]\n`
+    const loose = row.replace('@청구서 -> requisition: [select]\n', '')
+    expect(draftsOf(`${block(pointing)}\n${block(loose)}`, 'requisition')).toEqual({ draft: pointing, rows: [], reversed: [loose] })
+    // A small model often leaves the first fence open: the next template fence starts the next block.
+    const unclosed = `나눴습니다.\n\n${fence}formdown\n${parent}\n${block(row)}\n끝.`
+    expect(draftsOf(unclosed, 'requisition')).toEqual({ draft: parent, rows: [row], reversed: [] })
+    // A field naming another template's documents is left as written; only spaces in a name become underscores.
+    expect(tidyDraft(row)).toBe(row)
+    expect(tidyDraft('@청구 품목 -> requisition: [select]\n')).toBe('@청구_품목 -> requisition: [select]\n')
+    expect(wordsOf(unclosed)).toBe('나눴습니다.\n\n끝.')
+    expect(sourceId(row)).toBe('requisition-item')
+    expect(rowProblems(row, 'requisition')).toEqual([])
+    expect(rowProblems(row.replace('-> requisition', ''), 'requisition').some((p) => p.includes('requisition'))).toBe(true)
+    expect(rowProblems(row.replace('id: requisition-item', 'id: requisition'), 'requisition').length).toBeGreaterThan(0)
   })
 
   it('names the fields a draft adds and takes away', () => {

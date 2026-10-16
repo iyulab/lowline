@@ -265,7 +265,14 @@ export default {
       }
       void bodyOf(req).then((body) => {
         asked.push(JSON.parse(body))
-        const text = asked.length === 1 ? `넣었습니다.\n\n${fence}formdown\n${draft('@제목: [text]\n')}${fence}` : `고쳤습니다.\n\n${fence}formdown\n${draft('')}${fence}`
+        // Asked a third time, for a table of repeated rows: the template, and a template of one row pointing at it.
+        const row = `---\nid: bug-step\nversion: 1\n---\n# 재현 단계\n\n@버그 리포트 -> bug-report: [select]\n@순서: [number]\n@동작: [text]\n`
+        const text =
+          asked.length === 1
+            ? `넣었습니다.\n\n${fence}formdown\n${draft('@제목: [text]\n')}${fence}`
+            : asked.length === 2
+              ? `고쳤습니다.\n\n${fence}formdown\n${draft('')}${fence}`
+              : `단계를 줄 서식으로 나눴습니다.\n\n${fence}formdown\n${draft('')}${fence}\n\n${fence}formdown\n${row}${fence}`
         res.end(JSON.stringify({ id: 'c', object: 'chat.completion', created: 0, model: 'large-8b', choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }] }))
       })
     })
@@ -341,6 +348,24 @@ export default {
       await app.click('dc-button', '저장')
       await app.status('저장했습니다')
       await app.noAlert()
+
+      // A table of repeated rows comes as a template of its own, pointing at this one: the person makes it.
+      await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = '재현 단계를 여러 줄 적게 해 줘'; p.submit(); return true })()`)
+      const make = `[...${chat}.querySelectorAll('.note.row dc-button')].find((b) => b.textContent.includes('재현 단계'))`
+      await app.cdp.waitFor(`!!${make}`, 'the row template offered to make', { timeoutMs: 30_000 })
+      assert.equal(asked.length, 3, 'a draft whose row template works is not asked for again')
+      assert.ok(!(await readdir(join(vault, '서식'))).includes('재현 단계.fd.md'), 'nothing made until the person makes it')
+      await app.cdp.evaluate(`${make}.click()`)
+      await app.cdp.waitFor(`${chat}.querySelector('.note.row')?.textContent.includes('만들었습니다')`, 'the row template made')
+      assert.match(await readFile(join(vault, '서식', '재현 단계.fd.md'), 'utf8'), /^@버그_리포트 -> bug-report: \[select\]$/m, 'tidied as a draft is, still pointing at this template')
+      await app.cdp.waitFor(`!!__e2e.one('button.item', '재현 단계')`, 'the row template in the sidebar')
+      // Left as it was: the row template gone, the editor's draft put back.
+      await rm(join(vault, '서식', '재현 단계.fd.md'))
+      await app.cdp.waitFor(`!__e2e.one('button.item', '재현 단계')`, 'the row template gone from the sidebar')
+      await app.cdp.evaluate(`[...${chat}.querySelectorAll('.note[role=status]')].at(-2).querySelector('dc-button').click()`)
+      await app.cdp.waitFor(`__e2e.one('textarea')?.value === ${JSON.stringify(before)}`, 'the source as it was again')
+      await app.click('dc-button', '저장')
+      await app.status('저장했습니다')
 
       // In a window too narrow for three columns, the chat takes the place of the fields and the preview.
       const side = `getComputedStyle(__e2e.all('ll-templates')[0].shadowRoot.querySelector('section.side')).display`
