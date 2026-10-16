@@ -76,7 +76,13 @@ function refersTo(source: string, id: string): boolean {
  */
 export function draftsOf(reply: string, id: string | null): { draft: string; rows: string[]; reversed: string[] } | null {
   const blocks = templateBlocks(reply)
-  const draft = blocks.find((b) => id !== null && sourceId(b) === id) ?? blocks.find((b) => id === null || !refersTo(b, id)) ?? blocks[0]
+  // The last block that is the template — a reply may show the template as it was before the one it changed — and not
+  // one of its rows (a block pointing at another block sent with it).
+  const rowOfAnother = (b: string) => blocks.some((o) => o !== b && sourceId(o) !== null && refersTo(b, sourceId(o)!))
+  const own = (b: string) => id !== null && sourceId(b) === id
+  const candidates = blocks.filter((b) => !rowOfAnother(b))
+  const last = (list: string[], test: (b: string) => boolean) => [...list].reverse().find(test)
+  const draft = last(candidates, own) ?? last(blocks, own) ?? last(candidates, (b) => id === null || !refersTo(b, id)) ?? blocks.at(-1)
   if (draft === undefined) return null
   const target = sourceId(draft) ?? id
   const rows = target === null ? [] : blocks.filter((b) => b !== draft && refersTo(b, target))

@@ -48,6 +48,9 @@ describe('the chat that writes templates', () => {
     expect(draftsOf(`${block(row)}\n${block(parent)}`, 'requisition')).toEqual({ draft: parent, rows: [row], reversed: [] })
     // A new template, its id not yet the one the editor had: the block not pointing at another is the template.
     expect(draftsOf(reply, 'template-abc')).toEqual({ draft: parent, rows: [row], reversed: [] })
+    // A reply showing the template as it was, then as changed: the changed one, the last.
+    expect(draftsOf(`${block(before)}\n${block(after)}`, 'intake')?.draft).toBe(after)
+    expect(draftOf(`${block(before)}\n${block(after)}`)).toBe(after)
     // The template pointing at its row template instead: the reference the wrong way round, said as such.
     const pointing = `${parent}@품목 -> requisition-item: [select]\n`
     const loose = row.replace('@청구서 -> requisition: [select]\n', '')

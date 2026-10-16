@@ -397,7 +397,8 @@ export const strings = {
   chatRowsSpread: (shape: string) =>
     `칸 «${shape}»(N = 1, 2, 3…)처럼 같은 줄을 번호로 펼쳤습니다. 그 한 줄을 서식 하나로 따로 써서 두 번째 formdown 블록에 담고(새 id, 맨 앞 칸은 이 서식의 문서를 가리키는 칸), 이 서식에서는 그 칸들을 빼 주세요.`,
   chatRowsSpreadLeft: '같은 줄을 번호로 펼친 칸이 남았습니다 — 줄마다 문서가 되게 하려면 «줄은 서식 하나로 따로»라고 다시 부탁해 보세요.',
-  chatRowReversed: (title: string, parent: string) =>
+  chatRowSaveFirst: '이 서식을 먼저 저장하세요 — 줄 서식이 가리킬 서식이 볼트에 있어야 줄이 이어집니다.',
+  chatRowReversed:(title: string, parent: string) =>
     `이 서식이 줄 서식 «${title}»의 문서를 가리킵니다 — 거꾸로입니다. 이 서식에서 그 칸을 빼고, 줄 서식 맨 앞에 \`@이름 -> ${parent}: [select]\` 칸을 넣어 줄이 이 서식의 문서를 가리키게 해 주세요.`,
   chatRowSameId: '줄 서식의 id가 이 서식과 같습니다 — 다른 id를 써야 합니다.',
   chatRowNoParent: (parent: string) =>

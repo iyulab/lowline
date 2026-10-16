@@ -36,6 +36,8 @@ interface Row {
   source: string
   title: string
   problems: string[]
+  /** The id of the template its documents point at. */
+  parent: string | null
   made?: string
 }
 
@@ -299,7 +301,7 @@ export class LlChatPanel extends LitElement {
         const drafts = text ? draftsOf(text, id) : null
         if (!drafts) return { draft: null, rows: [] as Row[], problems: [] as string[], spread: [] as string[] }
         const parent = sourceId(drafts.draft) ?? id
-        const rows = drafts.rows.map((r) => tidyDraft(r)).map((source) => ({ source, title: titleOf(source), problems: rowProblems(source, parent) }))
+        const rows = drafts.rows.map((r) => tidyDraft(r)).map((source) => ({ source, title: titleOf(source), problems: rowProblems(source, parent), parent }))
         const problems = [
           ...draftProblems(tidyDraft(drafts.draft)),
           ...rows.flatMap((r) => r.problems.map((p) => strings.chatRowProblem(r.title, p))),
@@ -349,6 +351,14 @@ export class LlChatPanel extends LitElement {
     this.asked++
     this.writing = false
     this.shown = [...this.shown, { role: 'assistant', text: strings.chatStopped, failed: true }]
+  }
+
+  /**
+   * Whether the template a row template points at is not yet saved under that id: its rows would name a template the
+   * vault does not have, so it is saved first.
+   */
+  private unsavedParent(row: Row): boolean {
+    return row.parent !== null && sourceId(this.saved) !== row.parent
   }
 
   /** Makes a row template the chat drafted — the person's act, as saving is — in the vault's templates folder. */
@@ -447,7 +457,8 @@ export class LlChatPanel extends LitElement {
           ${row.made
             ? strings.chatRowMade(row.title)
             : html`${strings.chatRowDrafted(row.title)}
-                <dc-button size="sm" @click=${() => void this.make(line, row)}>${strings.chatRowMake(row.title)}</dc-button>
+                <dc-button size="sm" ?disabled=${this.unsavedParent(row)} @click=${() => void this.make(line, row)}>${strings.chatRowMake(row.title)}</dc-button>
+                ${this.unsavedParent(row) ? html`<span>${strings.chatRowSaveFirst}</span>` : nothing}
                 ${row.problems.length ? html`<span class="problems">${row.problems.join(' · ')}</span>` : nothing}`}
         </p>`,
       )}
