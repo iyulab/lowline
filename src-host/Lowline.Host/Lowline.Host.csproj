@@ -17,6 +17,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Measurements that replay records through Gil with the sidecar's own forms and documents. -->
+    <InternalsVisibleTo Include="Lowline.Host.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Formbase.Core" Version="0.22.0" />
     <PackageReference Include="Formbase.Sqlite" Version="0.22.0" />
     <PackageReference Include="Formbase.DependencyInjection" Version="0.22.0" />

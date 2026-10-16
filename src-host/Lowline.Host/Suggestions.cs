@@ -304,7 +304,7 @@ public sealed class Suggestions
             : null;
 
     /// <summary>A template as a Gil form, or null when its author turned suggestions on for no field.</summary>
-    private static FormDefinition? Form(TemplateSnapshot template, Func<string, FieldThreshold> threshold)
+    internal static FormDefinition? Form(TemplateSnapshot template, Func<string, FieldThreshold> threshold)
     {
         var judged = template.Suggest ?? [];
         if (!template.Fields.Any(f => judged.Contains(f.Name))) return null;
@@ -338,7 +338,7 @@ public sealed class Suggestions
     /// program proposed is filled in, not settled by a person (<see cref="SettlementKind.Fill"/>): it stays in the
     /// document, and memory neither learns it nor asks about it when choosing thresholds.
     /// </summary>
-    private static SettledDocument Settled(TemplateSnapshot template, DocumentSnapshot document)
+    internal static SettledDocument Settled(TemplateSnapshot template, DocumentSnapshot document)
     {
         var settled = new SettledDocument(document.Identity, Texts(document.Values), DateTimeOffset.FromUnixTimeMilliseconds(document.Modified ?? 0));
         var filled = (document.Proposed ?? []).Where(f => template.Suggest!.Contains(f)).ToList();
