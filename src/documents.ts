@@ -208,13 +208,21 @@ export function documentFileName(date: Date, title: string | undefined): string 
     String(date.getMonth() + 1).padStart(2, '0'),
     String(date.getDate()).padStart(2, '0'),
   ].join('-')
-  const cleaned = (title ?? '')
+  const cleaned = fileNameTitle(title ?? '')
+  return cleaned ? `${day}-${cleaned}.md` : `${day}.md`
+}
+
+/**
+ * A title as a new document's file name holds it, after its day: characters a file name cannot hold become spaces,
+ * runs of space one, and it is cut to 60 characters, without a dot or space at its end.
+ */
+export function fileNameTitle(title: string): string {
+  return title
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 60)
     .replace(/[. ]+$/, '')
-  return cleaned ? `${day}-${cleaned}.md` : `${day}.md`
 }
 
 /** The name a file is shown by (R-1): its file name, without `suffix`. */

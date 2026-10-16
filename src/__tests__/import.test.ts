@@ -103,6 +103,8 @@ version: 1
   const names = documentNames([
     { path: '문서/2026-10-01-가나상사.md', id: 'c-1', template: 'customer@1', values: {} },
     { path: '문서/한빛상사.md', id: 'c-2', template: 'customer@1', values: {} },
+    // Named after a title holding what a file name cannot: the title still names it.
+    { path: '문서/2026-10-01-A S 센터.md', id: 'c-5', template: 'customer@1', values: {} },
     // One name after two days: the name says neither.
     { path: '문서/2026-10-01-같은이름.md', id: 'c-3', template: 'customer@1', values: {} },
     { path: '문서/2026-10-02-같은이름.md', id: 'c-4', template: 'customer@1', values: {} },
@@ -112,9 +114,11 @@ version: 1
 
   it('knows which template it refers to', () => {
     expect(inquiry.find((f) => f.name === '고객')).toMatchObject({ reference: 'customer', options: [] })
+    // A template id as templates are usually named.
+    expect(importFields('@업소 -> food-business: [select]')).toMatchObject([{ name: '업소', reference: 'food-business' }])
   })
 
-  it("holds the id of the document a cell names — by its file name, or without the day the app put before it — or keeps an id it already holds", () => {
+  it("holds the id of the document a cell names — by its file name, or by the title the app named it by — or keeps an id it already holds", () => {
     const plan = planImport(
       [
         ['고객', '내용'],
@@ -122,12 +126,13 @@ version: 1
         ['2026-10-01-가나상사', '반품 문의'],
         ['한빛상사', '견적 요청'],
         ['c-2', '재견적'],
+        ['A/S 센터', '수리 요청'],
       ],
       inquiry,
       undefined,
       names,
     )
-    expect(plan.documents.map((d) => d.values['고객'])).toEqual(['c-1', 'c-1', 'c-2', 'c-2'])
+    expect(plan.documents.map((d) => d.values['고객'])).toEqual(['c-1', 'c-1', 'c-2', 'c-2', 'c-5'])
     expect(plan.problems).toEqual([])
   })
 

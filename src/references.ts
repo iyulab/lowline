@@ -3,7 +3,7 @@
 // shows it by that document's file name. The file keeps the id alone, so renaming the document changes
 // nothing in the files that name it.
 
-import { fileName, type FieldValues } from './documents.js'
+import { fileName, fileNameTitle, type FieldValues } from './documents.js'
 import type { DocumentSnapshot, ProjectionTable, TemplateSnapshot } from './projection.js'
 import { strings } from './strings.js'
 import { templateId } from './template-revision.js'
@@ -22,8 +22,8 @@ const NAMED_DAY = /^\d{4}-\d{2}-\d{2}-(?=.)/
 
 /**
  * The names of `documents`, each among its own template's — as a reference field offers them. A name is a document's
- * file name; one said without the day the app put before it (`가나상사` for `2026-10-16-가나상사`) names it too, when
- * no document has that file name and only one has it after its day.
+ * file name; the title the app named a new document by names it too (`가나상사` for `2026-10-16-가나상사`, `A/S 센터` for
+ * `2026-10-16-A S 센터`), when no document has that file name and only one was named by it.
  */
 export function documentNames(documents: readonly DocumentSnapshot[]): DocumentNames {
   const names = new Map<string, string>()
@@ -41,7 +41,7 @@ export function documentNames(documents: readonly DocumentSnapshot[]): DocumentN
   return {
     idOf: (target, name) => {
       const key = `${target}\n${name}`
-      return (ids.has(key) ? ids.get(key) : undated.get(key)) || undefined
+      return (ids.has(key) ? ids.get(key) : undated.get(`${target}\n${fileNameTitle(name)}`)) || undefined
     },
     nameOf: (target, id) => names.get(`${target}\n${id}`),
   }
