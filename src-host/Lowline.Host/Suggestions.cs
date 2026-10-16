@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Gil;
 using Gil.Forms;
+using Gil.Memory;
 
 namespace Lowline.Host;
 
@@ -15,10 +16,11 @@ public sealed record SuggestRequest(
 /// <summary>
 /// A suggestion for one field. <see cref="Value"/> is null when there is none to make (<c>abstain</c>) —
 /// nothing is guessed to fill the gap — and <see cref="Reason"/> then says why, as one of
-/// <see cref="Abstention"/>'s. <see cref="Source"/> is the document whose confirmed value it comes from. Every value
-/// offered rests on values settled alongside ones the document holds — its observed values, and judgments already
-/// confirmed in it (<c>key</c>): only that layer keeps the precision its replay promises. Similar documents are never
-/// offered as a suggestion — the person looks at them when they choose to, with the values they confirmed.
+/// <see cref="Abstention"/>'s. <see cref="Source"/> is what it rests on: the value settled alongside (<c>key</c>, <c>coarse</c>),
+/// or the similar document whose confirmed value it is (<c>memory</c>). A value rests first on values settled alongside ones
+/// the document holds — its observed values, and judgments already confirmed in it; a similar document answers only where
+/// those settle nothing, and only on a field whose replay showed that layer right often enough over enough answers
+/// (<see cref="Suggestions.SimilarMinimumAnswered"/>) — each layer keeps the precision its own replay promises.
 /// </summary>
 public sealed record Suggestion(string? Value, string Mode, string? Source, string? Reason = null);
 
@@ -27,6 +29,12 @@ public static class SuggestionMode
 {
     /// <summary>A value settled alongside one the document has.</summary>
     public const string Key = "key";
+
+    /// <summary>
+    /// The value a similar document confirmed, where no value settled alongside answers — on a field whose replay showed
+    /// similar documents right often enough over at least <see cref="Suggestions.SimilarMinimumAnswered"/> answers.
+    /// </summary>
+    public const string Memory = "memory";
 
     /// <summary>No value; <see cref="Suggestion.Reason"/> says why.</summary>
     public const string Abstain = "abstain";
@@ -93,17 +101,24 @@ public sealed class Suggestions
     /// </summary>
     public const int MinimumAnswered = Curves.Window;
 
+    /// <summary>
+    /// The fewest replayed answers the similar documents layer's promise must rest on for a field to be offered its values.
+    /// That layer answers the documents values settled alongside could not, and its precision swings far more from field to
+    /// field: on public records replayed as the app asks, every field it answered thirty times or more kept the target with an
+    /// honest promise, and every field that fell short had fewer.
+    /// </summary>
+    public const int SimilarMinimumAnswered = 30;
+
     /// <summary>The document a draft is asked about: it has no saved version to leave out of the evidence.</summary>
     private const string Unsaved = "\u0000unsaved";
 
     /// <summary>
-    /// Every saved document goes into its memory; asking writes nothing to it. One layer answers: values settled
-    /// alongside the document's other values, once replay has shown they decide the field
-    /// (<see cref="FieldDefinition.KeyThreshold"/>). Similar documents are left out — until a form has many thousands
-    /// of confirmed documents they are right well below the precision their replay promises, and a form here rarely
-    /// has — so no document memory is kept.
+    /// Every saved document goes into its memory; asking writes nothing to it. Values settled alongside the document's other
+    /// values answer first, once replay has shown they decide the field (<see cref="FieldDefinition.KeyThreshold"/>); similar
+    /// documents answer where those settle nothing, on a field whose own replay of that layer earned it
+    /// (<see cref="FieldDefinition.MemoryThreshold"/> — see <see cref="FieldThreshold.SimilarThreshold"/>).
     /// </summary>
-    private readonly FormResolver _resolver = new(new FieldMemory(), documentMemory: null);
+    private readonly FormResolver _resolver = new(new FieldMemory(), new LexicalMemory());
     private readonly Dictionary<string, TemplateSnapshot> _templates;
     private readonly Dictionary<string, List<SettledDocument>> _settled;
     private Dictionary<(string Template, string Field), FieldThreshold> _thresholds;
@@ -183,8 +198,12 @@ public sealed class Suggestions
     /// Whether a field's threshold should be chosen again: it never was, or the field has gained or lost a
     /// tenth of its confirmed documents since — the right threshold moves as memory grows.
     /// </summary>
-    public bool NeedsSelection => _thresholds.Values.Any(t =>
-        t.SelectedAt is not { } at || Math.Abs(t.Confirmed - at) * 10 >= Math.Max(at, 10));
+    public bool NeedsSelection => _thresholds.Values.Any(Due);
+
+    /// <summary>Whether a judgment field's threshold should be chosen again (see <see cref="NeedsSelection"/>).</summary>
+    public bool Due(string template, string field) => _thresholds.GetValueOrDefault((template, field)) is { } threshold && Due(threshold);
+
+    private static bool Due(FieldThreshold t) => t.SelectedAt is not { } at || Math.Abs(t.Confirmed - at) * 10 >= Math.Max(at, 10);
 
     /// <summary>
     /// Chooses the strength at which each judgment field's values settled alongside the document's other values answer, by
@@ -216,19 +235,26 @@ public sealed class Suggestions
                 () => new FieldMemory(), concentrated, field, _settled[template], TargetPrecision, MinimumAnswered,
                 typedLongest: typeable ? TypedLongest : 0);
             var key = keyed.Chosen;
+            // Similar documents answer only the lookups values settled alongside leave, so their strength is replayed on those,
+            // with the fields that key the judgment as just chosen.
+            var keying = new FieldThreshold(null, 0, 0, KeyFields: keyed.KeyFields, KeyConcentrations: concentrations);
+            var layers = await ThresholdSelection.SelectLayersAsync(
+                new FieldMemory(), new LexicalMemory(), Form(_templates[template], f => f == field ? keying : new FieldThreshold(null, 0, 0))!,
+                field, _settled[template], TargetPrecision, MinimumAnswered, cancellationToken);
             var threshold = new FieldThreshold(
                 key.Chosen, current.Confirmed, current.Confirmed, key.MostPrecise, DomainOf(_templates[template], field),
                 keyed.KeyFields, keyed.Typed?.ByLength.Select(r => r.Chosen).ToList(), CoarseOf(_templates[template], field),
-                KeyConcentrations: concentrations);
+                KeyConcentrations: concentrations, Similar: layers.Memory.Chosen);
             // A class is offered where the value is not, so its strength is replayed on the lookups the value's leaves.
             if (threshold.CoarsePrefix is not null)
             {
-                var valued = Form(_templates[template], f => f == field ? threshold : new FieldThreshold(null, 0, 0))!;
-                // The resolver keeps no document memory, so neither does the replay: only its key threshold is read.
-                var layers = await ThresholdSelection.SelectCoarseAsync(
+                var valued = Form(_templates[template], f => f == field ? threshold with { Similar = null } : new FieldThreshold(null, 0, 0))!;
+                // A class is offered only from values settled alongside, so the replay keeps no document memory: only its key
+                // threshold is read.
+                var classed = await ThresholdSelection.SelectCoarseAsync(
                     new FieldMemory(), memory: null, valued, field, _settled[template], TargetPrecision,
                     MinimumAnswered, cancellationToken);
-                threshold = threshold with { Coarse = layers.Key.Chosen };
+                threshold = threshold with { Coarse = classed.Key.Chosen };
             }
             chosen[(template, field)] = threshold;
         }
@@ -278,6 +304,13 @@ public sealed class Suggestions
     public ThresholdChoice? CoarseChoice(string template, string field) =>
         _thresholds.GetValueOrDefault((template, field)) is { SelectedAt: not null, Coarse: { } coarse } ? coarse : null;
 
+    /// <summary>
+    /// How similar documents did on the lookups values settled alongside left, and the strength chosen for them; null until
+    /// one was, or when none was right often enough. They are offered only once <see cref="FieldThreshold.SimilarOffered"/>.
+    /// </summary>
+    public FieldThreshold? SimilarChoice(string template, string field) =>
+        _thresholds.GetValueOrDefault((template, field)) is { SelectedAt: not null, Similar: not null } threshold ? threshold : null;
+
     /// <summary>The fields the replay chose to key a judgment field; null when every value filled in counts.</summary>
     public IReadOnlyList<string>? KeyFields(string template, string field) =>
         _thresholds.GetValueOrDefault((template, field))?.KeyFields;
@@ -326,6 +359,7 @@ public sealed class Suggestions
             ? new FieldDefinition(f.Name, FieldRole.Judged)
             {
                 KeyThreshold = threshold(f.Name).KeyThreshold,
+                MemoryThreshold = threshold(f.Name).SimilarThreshold,
                 KeyFields = threshold(f.Name).KeyFields,
                 KeyConcentrations = threshold(f.Name).KeyConcentrations,
                 TypedKeyThresholds = threshold(f.Name).Typed?.Select(c => c?.Threshold).ToList(),
@@ -383,9 +417,12 @@ public sealed class Suggestions
         var suggestion = await _resolver.SuggestAsync(
             form, request.Document ?? Unsaved, request.Field, held, sets: null, typing ? request.Typed : null, cancellationToken);
 
-        // Only the layer that keeps its promise is offered: anything else leaves the field to the person.
+        // Only a layer that keeps its promise is offered: anything else leaves the field to the person. Similar documents
+        // were replayed before typing only, so once a person types, the field is left to values settled alongside.
         if (suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SettledFieldMemory } answer, ..] })
             return new Suggestion(answer.Value, SuggestionMode.Key, answer.Evidence);
+        if (!typing && suggestion is { Answered: true, Candidates: [{ Source: FieldSource.SimilarDocument } similar, ..] })
+            return new Suggestion(similar.Value, SuggestionMode.Memory, similar.Evidence);
         // Where the value is not, its class may be — on the same layer, at the strength its own replay chose.
         if (suggestion?.Coarse is { Trusted: true, Source: FieldSource.SettledFieldMemory } coarse)
             return new Suggestion(coarse.Value, SuggestionMode.Coarse, coarse.Evidence);
@@ -452,10 +489,14 @@ public sealed class Suggestions
 /// How readily each field's keys were believed after a few settlements when the strengths were chosen — they set the scale
 /// of the scores those strengths are on; null when every field's was the usual one.
 /// </param>
+/// <param name="Similar">
+/// How similar documents did on the lookups values settled alongside left, and the strength chosen for them; null when none
+/// was right often enough.
+/// </param>
 public sealed record FieldThreshold(
     ThresholdChoice? Choice, int Confirmed, int? SelectedAt, ThresholdChoice? Closest = null, IReadOnlyList<string>? Domain = null,
     IReadOnlyList<string>? KeyFields = null, IReadOnlyList<ThresholdChoice?>? Typed = null, int? CoarsePrefix = null,
-    ThresholdChoice? Coarse = null, IReadOnlyDictionary<string, double>? KeyConcentrations = null)
+    ThresholdChoice? Coarse = null, IReadOnlyDictionary<string, double>? KeyConcentrations = null, ThresholdChoice? Similar = null)
 {
     /// <summary>Whether it was chosen over the choices <paramref name="domain"/> lists (null: an open value).</summary>
     public bool ChosenOver(IReadOnlyList<string>? domain) =>
@@ -466,4 +507,13 @@ public sealed record FieldThreshold(
 
     /// <summary>The strength the field's values settled alongside answer at; none — nothing is offered — until one has been chosen.</summary>
     public double? KeyThreshold => Choice?.Threshold;
+
+    /// <summary>
+    /// The strength similar documents answer at — none, so they are not offered, until their replay chose one whose promise
+    /// rests on at least <see cref="Suggestions.SimilarMinimumAnswered"/> answers.
+    /// </summary>
+    public double? SimilarThreshold => Similar is { PromiseAnswered: >= Suggestions.SimilarMinimumAnswered } similar ? similar.Threshold : null;
+
+    /// <summary>Whether similar documents are offered for the field (see <see cref="SimilarThreshold"/>).</summary>
+    public bool SimilarOffered => SimilarThreshold is not null;
 }

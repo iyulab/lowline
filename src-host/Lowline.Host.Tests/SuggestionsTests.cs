@@ -50,9 +50,10 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
-    public async Task Does_not_offer_the_value_a_similar_document_confirmed()
+    public async Task Does_not_offer_a_similar_documents_value_before_its_replay_rests_on_enough_answers()
     {
-        // The request is nearly 문서/1's, but its 부서 settles nothing: a similar document's value is not a promise.
+        // The request is nearly 문서/1's, but its 부서 settles nothing — and thirty documents give similar documents too few
+        // answers for their promise to be offered on.
         await using var vault = await Selected(new VaultSnapshot([Intake], Decided()));
 
         var suggestion = await vault.SuggestAsync(
@@ -60,6 +61,91 @@ public sealed class SuggestionsTests
 
         Assert.Equal(new Suggestion(null, "abstain", null, Abstention.Undecided), suggestion);
         Assert.True(vault.MemoryReady);
+    }
+
+    /// <summary>
+    /// A hundred and twenty requests, each worded once, whose words say which kind it is: no value settled alongside ever
+    /// repeats, so only similar documents can answer 분류 — and they do over far more answers than they must rest on.
+    /// </summary>
+    private static readonly TemplateSnapshot Kinds = new("kinds@1",
+        [new TemplateField("내용", "textarea"), new TemplateField("분류", "select", Options: ["인쇄", "화면", "연결"])],
+        Suggest: ["분류"]);
+
+    private static DocumentSnapshot[] KindRequests(int count) =>
+    [
+        .. Enumerable.Range(0, count).Select(i => new DocumentSnapshot($"분류/{i}.md", "kinds@1",
+            Values($$"""{"내용": "{{KindWords[i % 3]}} {{i}}번째", "분류": "{{KindNames[i % 3]}}"}"""), Modified: i)),
+    ];
+
+    private static readonly string[] KindNames = ["인쇄", "화면", "연결"];
+    private static readonly string[] KindWords = ["프린터 용지 걸림", "모니터 화면 깜빡임", "네트워크 연결 끊김"];
+
+    [Fact]
+    public async Task Offers_a_similar_documents_value_on_a_field_whose_replay_of_them_rests_on_enough_answers()
+    {
+        await using var vault = await Selected(new VaultSnapshot([Kinds], KindRequests(120)));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("kinds@1", "분류", Values("""{"내용": "모니터 화면 깜빡임 또"}""")), Ct);
+
+        Assert.Equal("화면", suggestion?.Value);
+        Assert.Equal(SuggestionMode.Memory, suggestion?.Mode);
+        Assert.StartsWith("분류/", suggestion?.Source);
+        var similar = (await vault.CurvesAsync(Ct)).Single(c => c.Field == "분류").Similar!;
+        Assert.True(similar.Offered);
+        Assert.True(similar.PromiseAnswered >= Suggestions.SimilarMinimumAnswered);
+    }
+
+    [Fact]
+    public async Task Says_how_similar_documents_did_and_does_not_offer_them_while_their_promise_rests_on_too_few_answers()
+    {
+        // Twenty-five requests: similar documents are right on every one they answer, but over fewer answers than they must rest on.
+        await using var vault = await Selected(new VaultSnapshot([Kinds], KindRequests(25)));
+
+        var suggestion = await vault.SuggestAsync(
+            new SuggestRequest("kinds@1", "분류", Values("""{"내용": "모니터 화면 깜빡임 또"}""")), Ct);
+
+        Assert.Equal(SuggestionMode.Abstain, suggestion?.Mode);
+        var similar = (await vault.CurvesAsync(Ct)).Single(c => c.Field == "분류").Similar!;
+        Assert.False(similar.Offered);
+        Assert.True(similar.PromiseAnswered < Suggestions.SimilarMinimumAnswered);
+    }
+
+    [Fact]
+    public async Task Similar_documents_are_not_offered_while_the_person_types()
+    {
+        // Replayed before typing only: once a character is typed, the field is left to values settled alongside.
+        var typed = Kinds with { Fields = [new TemplateField("내용", "textarea"), new TemplateField("분류", "text")] };
+        await using var vault = await Selected(new VaultSnapshot([typed], KindRequests(120)));
+
+        var before = await vault.SuggestAsync(new SuggestRequest("kinds@1", "분류", Values("""{"내용": "모니터 화면 깜빡임 또"}""")), Ct);
+        var typing = await vault.SuggestAsync(
+            new SuggestRequest("kinds@1", "분류", Values("""{"내용": "모니터 화면 깜빡임 또"}"""), Typed: "화"), Ct);
+
+        Assert.Equal(SuggestionMode.Memory, before?.Mode);
+        Assert.NotEqual(SuggestionMode.Memory, typing?.Mode);
+    }
+
+    [Fact]
+    public void How_similar_documents_did_is_kept_with_the_thresholds()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            var similar = new Gil.Forms.ThresholdChoice(0.3, 0.86, 0.4, 56, 140) { Promise = 0.83, PromiseAnswered = 56 };
+            ThresholdStore.Save(file, new Dictionary<(string, string), FieldThreshold>
+            {
+                [("kinds@1", "분류")] = new(null, 140, 140, Similar: similar),
+            });
+            var kept = ThresholdStore.Load(file)[("kinds@1", "분류")];
+            Assert.Equal(0.3, kept.Similar!.Threshold);
+            Assert.Equal(56, kept.Similar.PromiseAnswered);
+            Assert.Equal(0.3, kept.SimilarThreshold);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
     }
 
     [Fact]

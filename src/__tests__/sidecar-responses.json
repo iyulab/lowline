@@ -6,7 +6,8 @@
       "intake@1",
       "faults@1",
       "handover@1",
-      "chapters@1"
+      "chapters@1",
+      "kinds@1"
     ],
     "skipped": [
       {
@@ -245,7 +246,9 @@
         }
       ],
       "typing": null,
-      "coarse": null
+      "coarse": null,
+      "similar": null,
+      "rechoosing": false
     },
     {
       "template": "intake@1",
@@ -265,7 +268,9 @@
       },
       "bySource": [],
       "typing": null,
-      "coarse": null
+      "coarse": null,
+      "similar": null,
+      "rechoosing": false
     },
     {
       "template": "faults@1",
@@ -292,7 +297,9 @@
       "closest": null,
       "bySource": [],
       "typing": null,
-      "coarse": null
+      "coarse": null,
+      "similar": null,
+      "rechoosing": false
     },
     {
       "template": "handover@1",
@@ -321,7 +328,9 @@
           "lookups": 0
         }
       ],
-      "coarse": null
+      "coarse": null,
+      "similar": null,
+      "rechoosing": false
     },
     {
       "template": "chapters@1",
@@ -350,7 +359,36 @@
         "answerRate": 0,
         "answered": 0,
         "lookups": 0
-      }
+      },
+      "similar": null,
+      "rechoosing": false
+    },
+    {
+      "template": "kinds@1",
+      "field": "분류",
+      "accepted": 0,
+      "corrected": 0,
+      "rejected": 0,
+      "points": [],
+      "replay": null,
+      "whyNoReplay": "below-target",
+      "closest": null,
+      "bySource": [],
+      "typing": null,
+      "coarse": null,
+      "similar": {
+        "threshold": 0,
+        "precision": 0,
+        "promise": 0,
+        "promiseAnswered": 0,
+        "promiseOver": 0,
+        "answerRate": 0,
+        "answered": 0,
+        "lookups": 0,
+        "offered": true,
+        "offeredFrom": 0
+      },
+      "rechoosing": false
     }
   ],
   "suggestions": [
@@ -376,6 +414,12 @@
       "value": "32",
       "mode": "coarse",
       "source": "장비: 펌프",
+      "reason": null
+    },
+    {
+      "value": "화면",
+      "mode": "memory",
+      "source": "분류/001.md",
       "reason": null
     }
   ],
@@ -600,6 +644,7 @@
   "words": {
     "mode": [
       "key",
+      "memory",
       "abstain",
       "rejected",
       "coarse"

@@ -802,9 +802,13 @@ export class LlDocuments extends LitElement {
     return html`<p class="message judgment">${strings.judgmentFields(template.suggest.map((f) => this.judgment.label(f)))}</p>`
   }
 
-  /** What a suggestion rests on, in words: the value it was settled with. */
+  /** What a suggestion rests on, in words: the value it was settled with, or the similar document by its name. */
   private sourceOf(s: Suggestion): string {
     if (!s.source) return strings.suggestion
+    if (s.mode === 'memory') {
+      const path = this.vaultDocuments.find((d) => d.id === s.source)?.path
+      return strings.suggestionSimilar(path ? fileName(path, '.md') : s.source)
+    }
     const template = this.vaultTemplates.find((t) => t.ref === this.draft?.templateRef)
     return strings.suggestionKey(namedEvidence(s.source, template, this.vaultTemplates, this.vaultDocuments, this.templateNames))
   }

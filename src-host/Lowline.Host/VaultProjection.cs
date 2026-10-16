@@ -48,8 +48,8 @@ public sealed record DocumentSnapshot(
 /// What a person did with a suggestion (<c>accept</c>, <c>correct</c> or <c>reject</c>), read from the
 /// vault's event files. <see cref="Doc"/> is the document's <see cref="DocumentSnapshot.Identity"/>, <see cref="Template"/> its
 /// template (absent in events recorded before it was written down), <see cref="Source"/> where the suggestion came
-/// from — <c>key</c> (a value settled alongside one the document has) or <c>memory</c> (a similar record, offered
-/// before similar records stopped being suggested) — as the event file records it.
+/// from — <c>key</c> (a value settled alongside one the document has), <c>memory</c> (a similar record), <c>coarse</c> or
+/// <c>proposed</c> — as the event file records it.
 /// </summary>
 public sealed record SuggestionEvent(
     string At, string Doc, string Field, string Kind, string Suggested, string? Template = null, string? Source = null);
@@ -459,7 +459,7 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            return [.. _curves.Select(Typing).Select(Classed).Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
+            return [.. _curves.Select(Typing).Select(Classed).Select(Similar).Select(c => _suggestions?.Choice(c.Template, c.Field) is { } choice
                 ? c with
                 {
                     Replay = new FieldReplay(
@@ -472,13 +472,33 @@ public sealed class VaultProjection(string? cacheDirectory = null, HostFailures?
                     Closest = _suggestions?.Closest(c.Template, c.Field) is { } closest
                         ? new FieldShortfall(closest.Precision, closest.AnswerRate, closest.Answered, closest.Lookups, Suggestions.TargetPrecision)
                         : null,
-                })];
+                }).Select(Rechoosing)];
         }
         finally
         {
             _gate.Release();
         }
     }
+
+    /// <summary>
+    /// A curve whose field shows strengths chosen before — or that none was right often enough — while a replay over the history
+    /// it has grown or shrunk to chooses again: what it shows is from before until that replay is done. A field never chosen
+    /// says so by itself (<see cref="NoReplay.Pending"/>).
+    /// </summary>
+    private FieldCurve Rechoosing(FieldCurve curve) =>
+        !ThresholdsSelected.IsCompleted && curve.WhyNoReplay is not (NoReplay.Pending or NoReplay.Few) && _suggestions?.Due(curve.Template, curve.Field) == true
+            ? curve with { Rechoosing = true }
+            : curve;
+
+    /// <summary>A curve with how similar documents did on its field's replay, when a strength was chosen for them.</summary>
+    private FieldCurve Similar(FieldCurve curve) => _suggestions?.SimilarChoice(curve.Template, curve.Field) is { Similar: { } similar } threshold
+        ? curve with
+        {
+            Similar = new SimilarReplay(
+                similar.Threshold, similar.Precision, similar.Promise, similar.PromiseAnswered, Gil.Forms.ThresholdSelection.RecentDocuments,
+                similar.AnswerRate, similar.Answered, similar.Lookups, threshold.SimilarOffered, Suggestions.SimilarMinimumAnswered),
+        }
+        : curve;
 
     /// <summary>A curve with how its field's class did on replay, when its template names one and a strength was chosen.</summary>
     private FieldCurve Classed(FieldCurve curve) => _suggestions?.CoarseChoice(curve.Template, curve.Field) is { } coarse

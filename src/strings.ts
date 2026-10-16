@@ -295,6 +295,9 @@ export const strings = {
       : why === 'below-target'
         ? '저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없어, 이 칸은 아직 제안하지 않습니다. ' + strings.learningWhatSuggests
         : '저장된 기록을 순서대로 다시 물어 제안 기준을 고르는 중입니다 — 끝나면 여기에 나타납니다.',
+  // Shown after what the field's replay said before, while one over its grown history chooses again.
+  learningRechoosing: '(기록이 늘어 다시 고르는 중 — 끝나면 바뀝니다)',
+  learningSimilarOnly: '함께 확정된 값으로는 저장된 기록을 순서대로 다시 물어도 목표만큼 맞히는 기준이 없습니다 — 이 칸은 아래의 비슷한 기록으로만 제안합니다.',
   learningTitle: (template: string, field: string) => `${template} · ${field}`,
   // Counted over fields that got a suggestion; a field the memory left blank is not in it.
   learningRate: (rate: number, of: number) => `제안이 나온 최근 ${of}건 중 맞음 ${Math.round(rate * 100)}%`,
@@ -307,8 +310,6 @@ export const strings = {
     `${source === 'key' ? '함께 확정된 값' : source === 'memory' ? '비슷한 기록' : source === 'proposed' ? '다른 프로그램' : source === 'coarse' ? '앞부분(분류)' : source}에서 낸 제안 ${decided}건 중 ${accepted}건 수락${
       decided >= 10 ? ` (${Math.round((accepted / decided) * 100)}%)` : ''
     }`,
-  // Decisions on suggestions from similar records stay in the curve; no new ones are made.
-  learningMemoryRetired: '비슷한 기록에서는 이제 제안하지 않습니다 — 이 수는 그 전의 결정입니다.',
   // The replay also counts the fields memory left blank, which the curve does not.
   learningReplay: (replay: Replayed) =>
     `저장된 ${replay.lookups}건을 순서대로 다시 물으면 ${Math.round(replay.answerRate * 100)}%에 제안, 그중 ${Math.round(replay.precision * 100)}% 맞음` +
@@ -316,6 +317,12 @@ export const strings = {
   learningClass: (replay: Replayed) =>
     `앞부분(분류): 값을 제안하지 못한 ${replay.lookups}건 중 ${Math.round(replay.answerRate * 100)}%에 분류를 제안, 그중 ${Math.round(replay.precision * 100)}% 맞음` +
     promiseTail(replay),
+  // Similar records answer where values settled alongside did not — offered only once their promise rests on enough answers.
+  learningSimilar: (replay: Replayed & { offered: boolean; offeredFrom: number }) =>
+    `비슷한 기록: 함께 확정된 값이 제안하지 못한 ${replay.lookups}건 중 ${Math.round(replay.answerRate * 100)}%에 제안, 그중 ${Math.round(replay.precision * 100)}% 맞음` +
+    (replay.offered
+      ? promiseTail(replay)
+      : ` — 약속이 기댄 제안이 ${Math.round(replay.promiseAnswered)}건으로 ${replay.offeredFrom}건이 안 되어, 비슷한 기록에서는 아직 제안하지 않습니다.`),
   learningTyping: (typing: TypedReplay[]) =>
     typing.length === 0
       ? '칠 때: 앞 제안이 맞지 않은 기록을 앞에서부터 쳐 보아도 아직 목표만큼 맞히는 글자 수가 없어, 치는 동안에도 제안하지 않습니다.'
@@ -342,6 +349,8 @@ export const strings = {
   reviseDocument: '지금 판으로 옮기기',
   revised: '지금 판으로 옮겼습니다',
   suggestionKey: (value: string) => `제안 · 함께 확정된 값: ${value}`,
+  // A value a similar record confirmed, where none settled alongside answered: the record, by its name, is the evidence.
+  suggestionSimilar: (record: string) => `제안 · 비슷한 기록에서: ${record}`,
   // A class, not the value: its first characters, for the person to type the rest after.
   suggestionClass: (source: string) => `${source} · 값의 앞부분(분류)만 — 고르면 이어서 칩니다`,
   // A value another program wrote into the document as a suggestion: who wrote it, as the file names them.

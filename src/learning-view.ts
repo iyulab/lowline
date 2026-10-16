@@ -177,12 +177,12 @@ export class LlLearning extends LitElement {
   }
 
   /**
-   * While a field's replay is still choosing its strength, asks again until it has — what it chose shows up here
-   * when it is done, without the view having to be opened again.
+   * While a field's replay is still choosing its strength — for the first time, or again as its history grew — asks again
+   * until it has: what it chose shows up here when it is done, without the view having to be opened again.
    */
   private follow() {
     clearTimeout(this.following)
-    if (!this.isConnected || !this.curves.some((c) => c.whyNoReplay === 'pending')) return
+    if (!this.isConnected || !this.curves.some((c) => c.whyNoReplay === 'pending' || c.rechoosing)) return
     this.following = setTimeout(async () => {
       try {
         this.curves = await host.curves()
@@ -205,6 +205,20 @@ export class LlLearning extends LitElement {
   private renderTyping(curve: FieldCurve) {
     if (!curve.typing) return nothing
     return html`<p class="secondary typing">${strings.learningTyping(curve.typing)}</p>`
+  }
+
+  /**
+   * Why values settled alongside are not offered — and, when no strength was right often enough for them but similar records
+   * are offered, that the field is suggested from those alone.
+   */
+  private noReplay(curve: FieldCurve) {
+    return curve.whyNoReplay === 'below-target' && curve.similar?.offered ? strings.learningSimilarOnly : strings.learningNoReplay(curve.whyNoReplay, curve.closest)
+  }
+
+  /** How similar records did on replay where values settled alongside suggested nothing, and whether they are offered. */
+  private renderSimilar(curve: FieldCurve) {
+    if (!curve.similar) return nothing
+    return html`<p class="secondary similar">${strings.learningSimilar(curve.similar)}</p>`
   }
 
   /** How the field's class did on replay where its value was not suggested, when its template names a class. */
@@ -289,9 +303,9 @@ export class LlLearning extends LitElement {
         <p class="secondary replay">
           ${curve.replay
             ? strings.learningReplay(curve.replay)
-            : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
+            : this.noReplay(curve)}${curve.rechoosing ? ` ${strings.learningRechoosing}` : nothing}
         </p>
-        ${this.renderDependsOn(curve)}${this.renderTyping(curve)}${this.renderClass(curve)}
+        ${this.renderDependsOn(curve)}${this.renderSimilar(curve)}${this.renderTyping(curve)}${this.renderClass(curve)}
       </section>`
     const last = points[points.length - 1]
     const recent = Math.min(points.length, WINDOW)
@@ -307,17 +321,15 @@ export class LlLearning extends LitElement {
         <span class="secondary">${strings.learningCounts(curve.accepted, curve.corrected, curve.rejected)}</span>
         ${(curve.bySource ?? []).map(
           (s) =>
-            html`<span class="secondary by-source">${strings.learningBySource(s.source, s.decided, s.accepted)}</span>${s.source === 'memory'
-                ? html`<span class="secondary by-source retired">${strings.learningMemoryRetired}</span>`
-                : nothing}`,
+            html`<span class="secondary by-source">${strings.learningBySource(s.source, s.decided, s.accepted)}</span>`,
         )}
       </div>
       <p class="secondary replay">
         ${curve.replay
           ? strings.learningReplay(curve.replay)
-          : strings.learningNoReplay(curve.whyNoReplay, curve.closest)}
+          : this.noReplay(curve)}${curve.rechoosing ? ` ${strings.learningRechoosing}` : nothing}
       </p>
-      ${this.renderDependsOn(curve)}${this.renderTyping(curve)}${this.renderClass(curve)}
+      ${this.renderDependsOn(curve)}${this.renderSimilar(curve)}${this.renderTyping(curve)}${this.renderClass(curve)}
       ${this.renderChart(curve, label)}
       <details>
         <summary>${strings.learningTable}</summary>

@@ -256,9 +256,8 @@ export interface FieldCurve {
   points: { n: number; at: string; rate: number }[]
   /**
    * The decisions split by where each suggestion came from (`key` · `memory`, as {@link Suggestion.mode}), in that
-   * order — each source promises the target on its own, so each is read apart. `memory` (similar records) is
-   * history only: similar records are no longer offered as suggestions, so it no longer grows. Decisions recorded
-   * without a source are only in the totals.
+   * order — each source promises the target on its own, so each is read apart. Decisions recorded without a source
+   * are only in the totals.
    */
   bySource?: { source: string; decided: number; accepted: number }[] | null
   /**
@@ -306,6 +305,29 @@ export interface FieldCurve {
    * to expect next as for `replay`. Absent or null otherwise.
    */
   coarse?: { threshold: number; precision: number; promise: number; promiseAnswered: number; promiseOver: number; answerRate: number; answered: number; lookups: number } | null
+  /**
+   * Once a strength was chosen for similar records: of the documents values settled alongside left unsuggested, the share
+   * a similar record answered and the share of those right, with what to expect next as for `replay`. `offered`: whether
+   * the field is offered their values — only once that promise rests on at least `offeredFrom` answers. Absent or null
+   * otherwise.
+   */
+  /**
+   * The field's history has grown or shrunk by a tenth since its strengths were chosen, and they are being chosen again:
+   * what `replay`, `similar` and the rest say is from before until they are.
+   */
+  rechoosing: boolean
+  similar?: {
+    threshold: number
+    precision: number
+    promise: number
+    promiseAnswered: number
+    promiseOver: number
+    answerRate: number
+    answered: number
+    lookups: number
+    offered: boolean
+    offeredFrom: number
+  } | null
 }
 
 export interface TypedReplay {
@@ -340,12 +362,16 @@ export interface Suggestion {
   value: string | null
   /**
    * `key`: settled alongside a value this document has · `coarse`: not the value but its class — its leading characters,
-   * as the template's `lowline.coarse` counts them — kept to the same promise · `abstain` · `rejected` · `proposed`: the value another program
-   * wrote into the document as a suggestion (`lowline.proposed` — the app's own, never the sidecar's). Similar documents
-   * are never offered as a suggestion — they are shown, with the values they confirmed, only when the person opens "비슷한 사례".
+   * as the template's `lowline.coarse` counts them — kept to the same promise · `memory`: the value a similar document
+   * confirmed, where none settled alongside answered — only on a field whose replay of similar documents kept the target
+   * over enough answers · `abstain` · `rejected` · `proposed`: the value another program wrote into the document as a
+   * suggestion (`lowline.proposed` — the app's own, never the sidecar's).
    */
-  mode: 'key' | 'coarse' | 'abstain' | 'rejected' | 'proposed'
-  /** What it rests on: the other field's value (`부서: 영업`) — or, for a proposed value, who wrote it (empty: unsaid). */
+  mode: 'key' | 'coarse' | 'memory' | 'abstain' | 'rejected' | 'proposed'
+  /**
+   * What it rests on: the other field's value (`부서: 영업`) — for a similar document's value, that document's id — or, for a
+   * proposed value, who wrote it (empty: unsaid).
+   */
   source: string | null
   /** Why there is none, when `value` is null and the field was asked (`abstain`). */
   reason?: Abstention | null

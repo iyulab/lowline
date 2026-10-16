@@ -69,6 +69,22 @@ const curve: Shape<FieldCurve> = {
     presence: 'optional',
     inside: { precision: 'required', answerRate: 'required', answered: 'required', lookups: 'required', target: 'required' },
   },
+  rechoosing: 'required',
+  similar: {
+    presence: 'optional',
+    inside: {
+      threshold: 'required',
+      precision: 'required',
+      promise: 'required',
+      promiseAnswered: 'required',
+      promiseOver: 'required',
+      answerRate: 'required',
+      answered: 'required',
+      lookups: 'required',
+      offered: 'required',
+      offeredFrom: 'required',
+    },
+  },
   typing: {
     presence: 'optional',
     inside: {
@@ -129,7 +145,7 @@ const answers = {
 /** The words the UI branches on — every one its types allow, as the compiler holds them to. */
 const words = {
   // `proposed` is the app's own — a value read from the document — and never the sidecar's.
-  mode: { key: true, coarse: true, abstain: true, rejected: true } satisfies Record<Exclude<Suggestion['mode'], 'proposed'>, true>,
+  mode: { key: true, coarse: true, memory: true, abstain: true, rejected: true } satisfies Record<Exclude<Suggestion['mode'], 'proposed'>, true>,
   reason: { 'no-history': true, 'below-target': true, undecided: true } satisfies Record<Abstention, true>,
   whyNoReplay: { few: true, pending: true, 'below-target': true } satisfies Record<NonNullable<FieldCurve['whyNoReplay']>, true>,
   probeFailure: {

@@ -104,6 +104,24 @@ public sealed class ResponseContractTests
         }
     }
 
+    // Every request is worded once, so no value settled alongside ever repeats, but its words say which kind it is: only
+    // similar documents answer 분류, and well over enough times for it to be offered — so a curve carries how they did.
+    private static readonly TemplateSnapshot Kinds = new("kinds@1",
+        [new TemplateField("내용", "textarea"), new TemplateField("분류", "select", Options: ["인쇄", "화면", "연결"])],
+        Suggest: ["분류"]);
+
+    private static IEnumerable<DocumentSnapshot> KindRequests()
+    {
+        string[][] kinds = [["인쇄", "프린터 용지 걸림"], ["화면", "모니터 화면 깜빡임"], ["연결", "네트워크 연결 끊김"]];
+        for (var i = 0; i < 120; i++)
+        {
+            var (kind, words) = (kinds[i % 3][0], kinds[i % 3][1]);
+            yield return new DocumentSnapshot($"분류/{i:D3}.md", "kinds@1",
+                JsonSerializer.Deserialize<Dictionary<string, JsonElement>>($$"""{"내용": "{{words}} {{i}}번째", "분류": "{{kind}}"}""")!,
+                Modified: 3000 + i);
+        }
+    }
+
     private static SuggestionEvent Event(int minute, string kind) =>
         new($"2026-10-03T10:{minute:00}:00.000Z", "문서/1.md", "담당", kind, "장비", "intake@1", "key");
 
@@ -153,8 +171,8 @@ public sealed class ResponseContractTests
         // Fifteen documents that settle 담당 by 부서 and split 긴급 evenly; one with a 수량 that is not a number, one
         // of a template the vault does not have, and a suggestion for 담당 turned down on the first document.
         var snapshot = new VaultSnapshot(
-            [Intake, Faults, Handover, Chapters],
-            [.. Enumerable.Range(1, 15).Select(Document), .. FaultReports(), .. Handovers(), .. ChapterReports(), new DocumentSnapshot("문서/옛.md", "gone@1", new Dictionary<string, JsonElement>())],
+            [Intake, Faults, Handover, Chapters, Kinds],
+            [.. Enumerable.Range(1, 15).Select(Document), .. FaultReports(), .. Handovers(), .. ChapterReports(), .. KindRequests(), new DocumentSnapshot("문서/옛.md", "gone@1", new Dictionary<string, JsonElement>())],
             [Event(0, "accept"), Event(1, "correct"), Event(2, "reject")]);
         var ingest = await Post("/vault/ingest", snapshot);
         await factory.Services.GetRequiredService<VaultProjection>().ThresholdsSelected.WaitAsync(ct);
@@ -188,7 +206,8 @@ public sealed class ResponseContractTests
                 await Post("/suggest", new { template = "intake@1", field = "담당", values = observed }),
                 await Post("/suggest", new { template = "intake@1", field = "긴급", values = observed }),
                 await Post("/suggest", new { template = "intake@1", field = "담당", values = observed, document = "문서/1.md" }),
-                await Post("/suggest", new { template = "chapters@1", field = "코드", values = new Dictionary<string, object> { ["장비"] = "펌프" } })),
+                await Post("/suggest", new { template = "chapters@1", field = "코드", values = new Dictionary<string, object> { ["장비"] = "펌프" } }),
+                await Post("/suggest", new { template = "kinds@1", field = "분류", values = new Dictionary<string, object> { ["내용"] = "모니터 화면 깜빡임 또" } })),
             ["search"] = await Post("/search", new CaseQuery("모니터", Max: 1)),
             ["similar"] = await Post("/similar", new SimilarQuery("문서/3.md", Max: 1)),
             // 담당 counted per 부서 value among the fifteen intake documents, each count with its first two documents.

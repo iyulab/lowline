@@ -16,11 +16,15 @@ public sealed record CurvePoint(int N, string At, double Rate);
 /// where the value was not (<see cref="SuggestionMode.Coarse"/>) are counted there alone, not in the curve. <see cref="Typing"/>, for a field whose value is typed out, says how its replay did as typed
 /// from its start — whether or not <see cref="Replay"/> found a strength without typing. <see cref="Coarse"/>, for a field
 /// whose template names a class, says how the class did on the lookups the value left, once a strength was chosen for it.
+/// <see cref="Similar"/> says how similar documents did on the lookups values settled alongside left, once a strength was
+/// chosen for them — and whether they are offered. <see cref="Rechoosing"/>: the field's history has grown or shrunk by a
+/// tenth since its strengths were chosen and they are being chosen again — what is shown is from before, until they are.
 /// </summary>
 public sealed record FieldCurve(
     string Template, string Field, int Accepted, int Corrected, int Rejected, IReadOnlyList<CurvePoint> Points,
     FieldReplay? Replay = null, string? WhyNoReplay = null, FieldShortfall? Closest = null,
-    IReadOnlyList<SourceCount>? BySource = null, IReadOnlyList<TypedReplay>? Typing = null, ClassReplay? Coarse = null);
+    IReadOnlyList<SourceCount>? BySource = null, IReadOnlyList<TypedReplay>? Typing = null, ClassReplay? Coarse = null,
+    SimilarReplay? Similar = null, bool Rechoosing = false);
 
 /// <summary>
 /// How a field's saved documents did when typed from their start, with <see cref="Characters"/> typed, on the replay that
@@ -36,6 +40,16 @@ public sealed record TypedReplay(int Characters, double Threshold, double Precis
 /// </summary>
 public sealed record ClassReplay(
     double Threshold, double Precision, double Promise, double PromiseAnswered, int PromiseOver, double AnswerRate, int Answered, int Lookups);
+
+/// <summary>
+/// How similar documents did on replay, on the lookups values settled alongside left: <see cref="AnswerRate"/> of them got a
+/// value and <see cref="Precision"/> of those were right, with what to expect next (<see cref="Promise"/>, as for
+/// <see cref="FieldReplay"/>). <see cref="Offered"/>: whether the field is offered their values — only once the promise rests
+/// on at least <see cref="OfferedFrom"/> answers (<see cref="Suggestions.SimilarMinimumAnswered"/>).
+/// </summary>
+public sealed record SimilarReplay(
+    double Threshold, double Precision, double Promise, double PromiseAnswered, int PromiseOver, double AnswerRate, int Answered, int Lookups,
+    bool Offered, int OfferedFrom);
 
 /// <summary>Of a field's decisions about suggestions from one source, how many there were and how many were accepted.</summary>
 public sealed record SourceCount(string Source, int Decided, int Accepted);

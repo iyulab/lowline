@@ -9,10 +9,10 @@ namespace Lowline.Host.Tests;
 #pragma warning disable GIL0004 // SelectLayersAsync: Gil's experimental two-layer replay is what is measured here.
 
 /// <summary>
-/// Whether the similar documents layer, which the sidecar keeps off (no document memory), would keep its promise on
-/// a vault's records: each record asked about field by field in its form's order, with memory of the records before
-/// it, the two layers' thresholds chosen again as memory grows by a tenth — the layer that answers, whether it was
-/// right, and what its replay promised. It reads the snapshot <c>src/__tests__/replay.test.ts</c> writes
+/// Whether the similar documents layer keeps its promise on a vault's records as the sidecar offers it — only on a field
+/// whose replay of it rests on <see cref="Suggestions.SimilarMinimumAnswered"/> answers: each record asked about field by
+/// field in its form's order, with memory of the records before it, the two layers' thresholds chosen again as memory
+/// grows by a tenth — the layer that answers, whether it was right, and what its replay promised. It reads the snapshot <c>src/__tests__/replay.test.ts</c> writes
 /// (<c>LOWLINE_REPLAY_SNAPSHOT</c>) and runs only with <c>LOWLINE_REPLAY_SIMILAR=1</c>; nothing the app does changes.
 /// </summary>
 public sealed class SimilarLayerTests
@@ -83,7 +83,7 @@ public sealed class SimilarLayerTests
                         ? f with
                         {
                             KeyThreshold = c.Key?.Threshold,
-                            MemoryThreshold = c.Similar?.Threshold,
+                            MemoryThreshold = new FieldThreshold(null, 0, 0, Similar: c.Similar).SimilarThreshold,
                             KeyFields = c.Keyed.KeyFields,
                             KeyConcentrations = c.Keyed.KeyConcentrations,
                         }
