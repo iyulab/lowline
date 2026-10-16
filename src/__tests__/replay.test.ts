@@ -229,6 +229,23 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       }
     }
     fs.writeFileSync(`${out}/summary.json`, JSON.stringify(summary, null, 2) + '\n')
+    // The same before typing, by the field whose value the offer rested on (its `source`, `<field>: <value>`): a promise
+    // is one for the field, so keys of different worth answering under it show here apart.
+    const byKey: Record<string, Record<string, Record<string, ReturnType<typeof tally>>>> = {}
+    for (const o of offered) {
+      if (o.typed !== null || o.suggestion.value === null || o.suggestion.mode === 'coarse') continue
+      const i = Number(o.doc.slice('replay-'.length))
+      const quarter = `q${Math.floor((Date.parse(weekOf(made[i])) - start) / (13 * 7 * DAY)) + 1}`
+      const key = o.suggestion.source?.split(':')[0] ?? '-'
+      const cell = (((byKey[o.field] ??= {})[key] ??= {})[quarter] ??= tally())
+      cell.offered++
+      if (o.suggestion.value === String(documents[i].values[o.field])) cell.right++
+      if (o.promised !== null) {
+        cell.promised += o.promised
+        cell.promises++
+      }
+    }
+    fs.writeFileSync(`${out}/by-key.json`, JSON.stringify(byKey, null, 2) + '\n')
     const read = (t: ReturnType<typeof tally>) =>
       `${t.offered}${t.asked ? `/${t.asked}` : ''} right ${t.offered ? Math.round((100 * t.right) / t.offered) : 0}%` +
       (t.promises ? ` (promised ${Math.round((100 * t.promised) / t.promises)}%)` : '')
