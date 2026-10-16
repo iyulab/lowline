@@ -12,7 +12,7 @@ import { fileName } from './documents.js'
 import { cellText, countColumns, templateSnapshot, type AggregateAnswer, type CountColumn, type TemplateSnapshot } from './projection.js'
 import { host, model as models, type ChatTurn } from './vault-client.js'
 import { SidecarUnavailable, readVault, syncVault } from './vault-snapshot.js'
-import { templateId } from './template-revision.js'
+import { documentNames, type DocumentNames } from './references.js'
 import { describeError } from './errors.js'
 import type { ModelSettings } from './settings.js'
 import './model-settings.js'
@@ -33,8 +33,8 @@ interface Answer {
   template: TemplateSnapshot
   /** What it could be counted by: the template's fields and those of the documents they refer to. */
   columns: CountColumn[]
-  /** The name of each document a reference field may hold, by its template's id and its own (`<id>\n<document>`). */
-  names: ReadonlyMap<string, string>
+  /** The documents a reference field may hold, by name and by id. */
+  names: DocumentNames
   counted: string
   counts: AggregateAnswer
   total: number
@@ -219,7 +219,7 @@ export class LlChatPanel extends LitElement {
       const vaultNow = await readVault()
       const columns = countColumns(template, vaultNow.templates)
       const referred = columns.filter((c) => c.via).map((c) => ({ name: c.name, type: c.type, options: c.options }))
-      const names = new Map(vaultNow.documents.map((d) => [`${templateId(d.template)}\n${d.id}`, fileName(d.path, '.md')]))
+      const names = documentNames(vaultNow.documents)
       // The vault handed to the sidecar as it stands, as the table does before it counts — while the model reads.
       const [reply] = await Promise.all([models.query(model, this.saved, question, referred), syncVault()])
       if (ask !== this.asked) return
@@ -227,7 +227,7 @@ export class LlChatPanel extends LitElement {
         fail(strings.chatFailed(failureText(reply.failure, reply.statusCode)))
         return
       }
-      const read = queryPlan(reply.text, columns)
+      const read = queryPlan(reply.text, columns, new Date(), names)
       if (!('plan' in read)) {
         fail(notCounted(read))
         return
@@ -238,7 +238,7 @@ export class LlChatPanel extends LitElement {
       const top = read.plan.top ? { ...counts, groups: counts.groups.slice(0, read.plan.top) } : counts
       this.shown = [
         ...this.shown,
-        { role: 'assistant', text: '', answer: { template, columns, names, counted: planWords(read.plan, columns), counts: top, total } },
+        { role: 'assistant', text: '', answer: { template, columns, names, counted: planWords(read.plan, columns, names), counts: top, total } },
       ]
     } catch (e) {
       if (ask === this.asked) fail(e instanceof SidecarUnavailable ? strings.hostFailed(e.message) : describeError(e))
@@ -324,7 +324,7 @@ export class LlChatPanel extends LitElement {
       if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) return strings.queryBlank
       // A reference holds a document's id: shown by that document's name, as the table shows it.
       const target = field(name)?.reference
-      if (target && typeof value === 'string') return names.get(`${target}\n${value}`) ?? value
+      if (target && typeof value === 'string') return names.nameOf(target, value) ?? value
       const labels = field(name)?.optionLabels
       return Array.isArray(value) ? value.map((v) => labels?.[String(v)] ?? String(v)).join(', ') : (labels?.[String(value)] ?? cellText(value))
     }

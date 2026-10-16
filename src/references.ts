@@ -8,6 +8,32 @@ import type { DocumentSnapshot, ProjectionTable, TemplateSnapshot } from './proj
 import { strings } from './strings.js'
 import { templateId } from './template-revision.js'
 
+/**
+ * The documents reference fields name, both ways: a document's id by its name — the name a person, or a model, says it
+ * by — and its name by its id, among the documents of the template a field refers to.
+ */
+export interface DocumentNames {
+  idOf(target: string, name: string): string | undefined
+  nameOf(target: string, id: string): string | undefined
+}
+
+/** The names of `documents`, each among its own template's — as a reference field offers them. */
+export function documentNames(documents: readonly DocumentSnapshot[]): DocumentNames {
+  const names = new Map<string, string>()
+  const ids = new Map<string, string>()
+  for (const d of documents) {
+    const name = fileName(d.path, '.md')
+    names.set(`${templateId(d.template)}\n${d.id}`, name)
+    // Two documents of one template with one name: neither is the one a name says.
+    const key = `${templateId(d.template)}\n${name}`
+    ids.set(key, ids.has(key) ? '' : d.id)
+  }
+  return {
+    idOf: (target, name) => ids.get(`${target}\n${name}`) || undefined,
+    nameOf: (target, id) => names.get(`${target}\n${id}`),
+  }
+}
+
 /** A value a reference field can take: a document's id, shown by its name. */
 export interface ReferenceChoice {
   value: string

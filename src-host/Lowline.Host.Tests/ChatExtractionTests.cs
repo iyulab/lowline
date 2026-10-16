@@ -106,5 +106,6 @@ public sealed class ChatExtractionTests
         Assert.Contains("- `고객.지역` (선택지: 서울, 부산)", told);
         Assert.Contains("- `고객.등록일` (날짜)", told);
         Assert.Contains("- `고객.이름`", told);
+        Assert.Contains("그 칸(예: `고객`)에 `equal`과 그 문서의 이름", told);
     }
 }

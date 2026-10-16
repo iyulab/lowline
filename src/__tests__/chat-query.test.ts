@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { periodDays, planWords, queryPlan } from '../chat-query.ts'
 import { countColumns, templateSnapshot } from '../projection.ts'
+import { documentNames } from '../references.ts'
+import { strings } from '../strings.ts'
 
 const fence = '```'
 const fields = templateSnapshot(`---
@@ -147,5 +149,24 @@ version: 1
     })
     expect(queryPlan(reply('{"field": "고객.지역", "op": "equal", "value": "대구"}'), columns)).toEqual({ problem: 'bad-filter', field: '고객.지역' })
     expect(queryPlan(reply('{"field": "고객.담당자", "op": "empty"}'), columns)).toEqual({ problem: 'unknown-field', field: '고객.담당자' })
+  })
+
+  it('keeps a document named by its name in the field that refers to it as its id, and says it by its name', () => {
+    const names = documentNames([
+      { path: '문서/가나상사.md', id: 'c-1', template: 'customer@2', values: {} },
+      { path: '문서/다라무역.md', id: '문서/다라무역.md', template: 'customer@2', values: {} },
+      // Two of one name in one template: the name says neither.
+      { path: '서식2/같은이름.md', id: 'c-3', template: 'customer@2', values: {} },
+      { path: '서식3/같은이름.md', id: 'c-4', template: 'customer@2', values: {} },
+    ])
+    const reply = (value: string) => `${fence}json
+{"filters": [{"field": "고객", "op": "equal", "value": "${value}"}]}
+${fence}`
+    const kept = queryPlan(reply('가나상사'), columns, new Date(), names)
+    expect(kept).toEqual({ plan: { groupBy: [], filters: [{ column: '고객', op: 'equal', value: 'c-1' }] } })
+    expect('plan' in kept && planWords(kept.plan, columns, names)).toBe(strings.queryEqual('고객', '가나상사'))
+    // A name no document has, or two have, is kept as said: it counts what the vault holds under it — none.
+    for (const said of ['없는회사', '같은이름'])
+      expect(queryPlan(reply(said), columns, new Date(), names)).toEqual({ plan: { groupBy: [], filters: [{ column: '고객', op: 'equal', value: said }] } })
   })
 })

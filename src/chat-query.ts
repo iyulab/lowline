@@ -2,6 +2,7 @@
 // it. The model never writes a number: the counts, and the documents behind each, come from the vault's aggregate.
 
 import { DATE_TYPES, type ColumnFilter, type TemplateField } from './projection.js'
+import type { DocumentNames } from './references.js'
 import { strings } from './strings.js'
 
 /** What to count: by which fields, of which documents, and how many of the largest counts to show (all when unset). */
@@ -88,9 +89,10 @@ function objectOf(reply: string): Record<string, unknown> | null {
  * label), each condition one the vault asks, a value where it needs one — a choice field's value one of its choices.
  * A field named twice to count by counts once. A `period` of a date field — one relative to `today`, a month, a year —
  * becomes its first and last day;
- * of a date-and-time field, from the start of the first to the end of the last.
+ * of a date-and-time field, from the start of the first to the end of the last. A field that refers to other documents
+ * holds their ids: one named by its name in `names` is kept as its id.
  */
-export function queryPlan(reply: string, fields: readonly TemplateField[], today: Date = new Date()): ReadPlan {
+export function queryPlan(reply: string, fields: readonly TemplateField[], today: Date = new Date(), names?: DocumentNames): ReadPlan {
   const asked = objectOf(reply)
   if (!asked) return { problem: 'no-plan' }
   if (typeof asked.unanswerable === 'string') return { unanswerable: asked.unanswerable }
@@ -126,7 +128,8 @@ export function queryPlan(reply: string, fields: readonly TemplateField[], today
       continue
     }
     if (op === 'equal' && field.options.length > 0 && !field.options.includes(text)) return { problem: 'bad-filter', field: field.name }
-    filters.push({ column: field.name, op: op as ColumnFilter['op'], value: text })
+    const id = op === 'equal' && field.reference ? names?.idOf(field.reference, text) : undefined
+    filters.push({ column: field.name, op: op as ColumnFilter['op'], value: id ?? text })
   }
   const top = typeof asked.top === 'number' && Number.isInteger(asked.top) && asked.top > 0 ? asked.top : undefined
   return { plan: { groupBy, filters, ...(top ? { top } : {}) } }
@@ -136,10 +139,13 @@ export function queryPlan(reply: string, fields: readonly TemplateField[], today
  * What `plan` counts, in words — which documents, by what, how many — shown with every answer, so a question the
  * model took the wrong way is seen for what was counted. Fields by their labels, choices by what the form shows.
  */
-export function planWords(plan: QueryPlan, fields: readonly TemplateField[]): string {
+export function planWords(plan: QueryPlan, fields: readonly TemplateField[], names?: DocumentNames): string {
   const of = (name: string) => fields.find((f) => f.name === name)
   const label = (name: string) => of(name)?.label ?? name
-  const shown = (name: string, value: string) => of(name)?.optionLabels?.[value] ?? value
+  const shown = (name: string, value: string) => {
+    const target = of(name)?.reference
+    return (target && names?.nameOf(target, value)) || (of(name)?.optionLabels?.[value] ?? value)
+  }
   // A field's lower and upper bounds are one range, said where the first of them is.
   const said: (string | { column: string; from?: string; to?: string })[] = []
   for (const f of plan.filters) {

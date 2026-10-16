@@ -69,7 +69,7 @@ public static class ChatQuery
         : "\n" + $"""
             다른 서식의 문서를 가리키는 칸(`-> 서식`)은 그 문서의 칸으로도 셀 수 있습니다. 이름은 `칸.그 문서의 칸`입니다:
             {string.Join("\n", referred.Select(c => $"- `{c.Name}`" + (c.Options is { Count: > 0 } options ? $" (선택지: {string.Join(", ", options)})" : c.Type is "date" or "datetime-local" ? " (날짜)" : "")))}
-            가리키는 문서로 거르거나 묶을 때는 칸 자체(문서의 id)가 아니라 그 문서의 칸(예: 이름)을 씁니다.
+            가리키는 문서 하나로 거를 때는 그 칸(예: `{referred[0].Name[..referred[0].Name.IndexOf('.')]}`)에 `equal`과 그 문서의 이름을 씁니다.
             """;
 
     /// <summary>What to count for <paramref name="request"/>'s question, as the model's reply — or why there is none.</summary>

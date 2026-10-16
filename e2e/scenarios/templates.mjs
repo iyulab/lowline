@@ -525,6 +525,10 @@ export default {
       const told = asked.at(-1).messages[0].content
       assert.match(told, /- `고객\.지역` \(선택지: 서울, 부산\)/)
       assert.ok(!told.includes('가나상사'), 'no value of a referred document went to the model')
+      // A document named by its name in the field that refers to it: counted as the document it names.
+      const named = await ask('가나상사 문의는 몇 건?', '{"filters": [{"field": "고객", "op": "equal", "value": "가나상사"}]}')
+      assert.match(named, /센 것: 고객 = 가나상사/)
+      assert.match(named, /모두 2건/)
       // Counted by the reference itself: each document by its name, not its id.
       await ask('고객별로?', '{"groupBy": ["고객"]}')
       const byCustomer = await app.cdp.evaluate(`[...${chat}.querySelectorAll('u-message:last-of-type tbody tr')].map((tr) => tr.cells[0].textContent.trim())`)
