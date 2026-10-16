@@ -1,4 +1,4 @@
-import { readdir, readFile, rm } from 'node:fs/promises'
+import { readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -503,11 +503,46 @@ export default {
         `the document ${first} open`,
       )
       await app.noAlert()
+
+      // A template whose field refers to another's documents is counted by that document's fields as it holds them now.
+      await writeFile(join(vault, CUSTOMER.path), '---\nid: customer\nversion: 1\n---\n# 고객\n\n@이름: [text]\n\n@지역: [select options="서울,부산"]\n')
+      await writeFile(join(vault, INQUIRY.path), '---\nid: inquiry\nversion: 1\n---\n# 문의\n\n@고객 -> customer: [select]\n\n@내용: [text]\n')
+      const customers = [['가나상사', '서울', 'cust-a'], ['다라무역', '부산', 'cust-b']]
+      for (const [name, region, id] of customers)
+        await writeFile(join(vault, '문서', `${name}.md`), `---\ntemplate: customer@1\nlowline:\n  id: ${id}\n이름: ${name}\n지역: ${region}\n---\n`)
+      for (const [i, id] of ['cust-a', 'cust-a', 'cust-b'].entries())
+        await writeFile(join(vault, '문서', `문의-${i + 1}.md`), `---\ntemplate: inquiry@1\n고객: ${id}\n내용: 문의 ${i + 1}\n---\n`)
+      await app.sidebar(INQUIRY.name, { timeoutMs: 30_000 })
+      await app.templateOf(INQUIRY)
+      if (!(await app.cdp.evaluate(`!!${chat}?.querySelector('u-prompt')`))) await app.click('dc-button', '채팅')
+      await app.cdp.waitFor(`!!${chat}?.querySelector('u-prompt')`, 'the chat beside 문의')
+      await app.cdp.evaluate(`[...${chat}.querySelector('dc-segmented-control').shadowRoot.querySelectorAll('[role=radio]')].find((b) => b.textContent.includes('기록에 묻기')).click()`)
+      const byRegion = await ask('고객 지역별 문의 수?', '{"groupBy": ["고객.지역"]}')
+      assert.match(byRegion, /센 것: 모든 기록 · 고객\.지역별/)
+      const regions = await app.cdp.evaluate(`[...${chat}.querySelectorAll('u-message:last-of-type tbody tr')].map((tr) => [tr.cells[0].textContent.trim(), Number(tr.cells[1].textContent)])`)
+      assert.deepEqual(regions, [['서울', 2], ['부산', 1]])
+      // The model was told those fields by name and choices — and no customer's name or region was sent.
+      const told = asked.at(-1).messages[0].content
+      assert.match(told, /- `고객\.지역` \(선택지: 서울, 부산\)/)
+      assert.ok(!told.includes('가나상사'), 'no value of a referred document went to the model')
+      // Counted by the reference itself: each document by its name, not its id.
+      await ask('고객별로?', '{"groupBy": ["고객"]}')
+      const byCustomer = await app.cdp.evaluate(`[...${chat}.querySelectorAll('u-message:last-of-type tbody tr')].map((tr) => tr.cells[0].textContent.trim())`)
+      assert.deepEqual(byCustomer, ['가나상사', '다라무역'])
+      await app.noAlert()
     } finally {
       server.close()
       await useModel(null)
       for (let tries = 0; JSON.parse(await readFile(SETTINGS, 'utf8').catch(() => '{}')).model && tries < 50; tries++)
         await new Promise((r) => setTimeout(r, 100))
+      // Leave the vault as it was for the scenarios that follow — with no template of it open.
+      await app.learning()
+      for (const file of [CUSTOMER.path, INQUIRY.path, '문서/가나상사.md', '문서/다라무역.md', '문서/문의-1.md', '문서/문의-2.md', '문서/문의-3.md'])
+        await rm(join(vault, file), { force: true })
+      await app.cdp.waitFor(`!__e2e.one('button.item:not(.group-toggle)', '문의')`, 'the templates gone from the sidebar', { timeoutMs: 30_000 })
     }
   },
 }
+
+const CUSTOMER = { name: '고객', ref: 'customer@1', path: '서식/고객.fd.md' }
+const INQUIRY = { name: '문의', ref: 'inquiry@1', path: '서식/문의.fd.md' }

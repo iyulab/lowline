@@ -289,8 +289,12 @@ export const model = {
   author: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, turns: ChatTurn[]) =>
     invoke<ChatReply>('host_chat_author', { request: { ...setting, template, turns } }),
   /** What the model set up says to count for `question` about `template`'s documents — its reply, to be checked by the app. */
-  query: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, question: string) =>
-    invoke<ChatReply>('host_chat_query', { request: { ...setting, template, question } }),
+  query: (
+    setting: { preset: string; baseUrl: string | null; model: string },
+    template: string,
+    question: string,
+    referred: { name: string; type: string; options: string[] }[] = [],
+  ) => invoke<ChatReply>('host_chat_query', { request: { ...setting, template, question, referred } }),
   /** The records the model set up reads out of `text`, as values of `template`'s fields — its reply, to be read by the app. */
   extract: (setting: { preset: string; baseUrl: string | null; model: string }, template: string, text: string) =>
     invoke<ChatReply>('host_chat_extract', { request: { ...setting, template, text } }),

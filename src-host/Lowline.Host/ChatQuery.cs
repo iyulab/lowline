@@ -4,9 +4,18 @@ namespace Lowline.Host;
 
 /// <summary>
 /// What the shell asks to turn a question about a template's documents into a count to make: the model set up (the key
-/// read for this one request), the template's source, and the question.
+/// read for this one request), the template's source, the question, and the fields of the documents its fields refer to
+/// that can be counted by too (<see cref="Referred"/>) — names and choices, never a value.
 /// </summary>
-public sealed record ChatQueryRequest(string Preset, string? BaseUrl, string? ApiKey, string Model, string Template, string Question);
+public sealed record ChatQueryRequest(
+    string Preset, string? BaseUrl, string? ApiKey, string Model, string Template, string Question,
+    IReadOnlyList<ReferredColumn>? Referred = null);
+
+/// <summary>
+/// A field of the documents a field of the template refers to, as a column to count by: `<field>.<its field>`, its type,
+/// and its choices when it has them.
+/// </summary>
+public sealed record ReferredColumn(string Name, string Type, IReadOnlyList<string>? Options = null);
 
 /// <summary>
 /// Asking the vault: the model turns a question into what to count — which fields to count by, which documents to keep —
@@ -16,8 +25,11 @@ public sealed record ChatQueryRequest(string Preset, string? BaseUrl, string? Ap
 /// </summary>
 public static class ChatQuery
 {
-    /// <summary>What the model is told: what to answer with, the day it is — for "지난달" and the like — and the template.</summary>
-    public static string Instructions(string template, DateOnly today) => $$"""
+    /// <summary>
+    /// What the model is told: what to answer with, the day it is — for "지난달" and the like — the template, and the
+    /// fields of the documents it refers to that can be counted by.
+    /// </summary>
+    public static string Instructions(string template, DateOnly today, IReadOnlyList<ReferredColumn>? referred = null) => $$"""
         당신은 Lowline 기록에 대한 질문을 「무엇을 셀지」로 바꾸는 도우미입니다. 기록을 직접 보지 않습니다 — 세는 일은 Lowline이 합니다.
 
         답하는 법:
@@ -45,8 +57,20 @@ public static class ChatQuery
         서식:
         ```formdown
         {{template}}
-        ```
+        ```{{Referring(referred)}}
         """;
+
+    /// <summary>
+    /// The columns a field of the template brings from the documents it refers to — said apart, so a question about the
+    /// customer's region counts by it — or nothing when no field refers to another template's documents.
+    /// </summary>
+    private static string Referring(IReadOnlyList<ReferredColumn>? referred) => referred is not { Count: > 0 }
+        ? ""
+        : "\n" + $"""
+            다른 서식의 문서를 가리키는 칸(`-> 서식`)은 그 문서의 칸으로도 셀 수 있습니다. 이름은 `칸.그 문서의 칸`입니다:
+            {string.Join("\n", referred.Select(c => $"- `{c.Name}`" + (c.Options is { Count: > 0 } options ? $" (선택지: {string.Join(", ", options)})" : c.Type is "date" or "datetime-local" ? " (날짜)" : "")))}
+            가리키는 문서로 거르거나 묶을 때는 칸 자체(문서의 id)가 아니라 그 문서의 칸(예: 이름)을 씁니다.
+            """;
 
     /// <summary>What to count for <paramref name="request"/>'s question, as the model's reply — or why there is none.</summary>
     public static Task<ChatReply> ReplyAsync(ChatQueryRequest request, LocalModels local, TimeSpan timeout, CancellationToken cancellationToken)
@@ -54,7 +78,7 @@ public static class ChatQuery
         if (string.IsNullOrWhiteSpace(request.Question)) return Task.FromResult(new ChatReply(false, null, ModelFailure.Invalid, null));
         List<ChatMessage> messages =
         [
-            new(ChatRole.System, Instructions(request.Template, DateOnly.FromDateTime(DateTime.Now))),
+            new(ChatRole.System, Instructions(request.Template, DateOnly.FromDateTime(DateTime.Now), request.Referred)),
             new(ChatRole.User, request.Question),
         ];
         return ChatAuthoring.SendAsync(new ChatModel(request.Preset, request.BaseUrl, request.ApiKey, request.Model), messages, local, timeout, cancellationToken);

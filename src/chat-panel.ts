@@ -9,9 +9,10 @@ import { failureText, modelLabel } from './model-settings.js'
 import { draftOf, draftProblems, fieldChanges, retryMessage, tidyDraft, wordsOf } from './chat-authoring.js'
 import { planWords, queryPlan, type ReadPlan } from './chat-query.js'
 import { fileName } from './documents.js'
-import { cellText, templateSnapshot, type AggregateAnswer, type TemplateSnapshot } from './projection.js'
+import { cellText, countColumns, templateSnapshot, type AggregateAnswer, type CountColumn, type TemplateSnapshot } from './projection.js'
 import { host, model as models, type ChatTurn } from './vault-client.js'
-import { SidecarUnavailable, syncVault } from './vault-snapshot.js'
+import { SidecarUnavailable, readVault, syncVault } from './vault-snapshot.js'
+import { templateId } from './template-revision.js'
 import { describeError } from './errors.js'
 import type { ModelSettings } from './settings.js'
 import './model-settings.js'
@@ -30,6 +31,10 @@ interface Shown {
 /** What a question was answered with: every number from the vault's aggregate, none from the model. */
 interface Answer {
   template: TemplateSnapshot
+  /** What it could be counted by: the template's fields and those of the documents they refer to. */
+  columns: CountColumn[]
+  /** The name of each document a reference field may hold, by its template's id and its own (`<id>\n<document>`). */
+  names: ReadonlyMap<string, string>
   counted: string
   counts: AggregateAnswer
   total: number
@@ -209,14 +214,20 @@ export class LlChatPanel extends LitElement {
     }
     this.writing = true
     try {
+      // What the template's documents can be counted by — its fields, and those of the documents they refer to — is
+      // told the model by name and choices, never a value.
+      const vaultNow = await readVault()
+      const columns = countColumns(template, vaultNow.templates)
+      const referred = columns.filter((c) => c.via).map((c) => ({ name: c.name, type: c.type, options: c.options }))
+      const names = new Map(vaultNow.documents.map((d) => [`${templateId(d.template)}\n${d.id}`, fileName(d.path, '.md')]))
       // The vault handed to the sidecar as it stands, as the table does before it counts — while the model reads.
-      const [reply] = await Promise.all([models.query(model, this.saved, question), syncVault()])
+      const [reply] = await Promise.all([models.query(model, this.saved, question, referred), syncVault()])
       if (ask !== this.asked) return
       if (!reply.ok || reply.text === null) {
         fail(strings.chatFailed(failureText(reply.failure, reply.statusCode)))
         return
       }
-      const read = queryPlan(reply.text, template.fields)
+      const read = queryPlan(reply.text, columns)
       if (!('plan' in read)) {
         fail(notCounted(read))
         return
@@ -225,7 +236,10 @@ export class LlChatPanel extends LitElement {
       if (ask !== this.asked) return
       const total = counts.groups.reduce((sum, g) => sum + g.count, 0)
       const top = read.plan.top ? { ...counts, groups: counts.groups.slice(0, read.plan.top) } : counts
-      this.shown = [...this.shown, { role: 'assistant', text: '', answer: { template, counted: planWords(read.plan, template.fields), counts: top, total } }]
+      this.shown = [
+        ...this.shown,
+        { role: 'assistant', text: '', answer: { template, columns, names, counted: planWords(read.plan, columns), counts: top, total } },
+      ]
     } catch (e) {
       if (ask === this.asked) fail(e instanceof SidecarUnavailable ? strings.hostFailed(e.message) : describeError(e))
     } finally {
@@ -304,10 +318,13 @@ export class LlChatPanel extends LitElement {
     this.dispatchEvent(new CustomEvent('ll-open-document', { detail: { path, template }, bubbles: true, composed: true }))
   }
 
-  private renderAnswer({ template, counted, counts, total }: Answer) {
-    const field = (name: string) => template.fields.find((f) => f.name === name)
+  private renderAnswer({ template, columns, names, counted, counts, total }: Answer) {
+    const field = (name: string) => columns.find((f) => f.name === name)
     const shown = (name: string, value: unknown) => {
       if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) return strings.queryBlank
+      // A reference holds a document's id: shown by that document's name, as the table shows it.
+      const target = field(name)?.reference
+      if (target && typeof value === 'string') return names.get(`${target}\n${value}`) ?? value
       const labels = field(name)?.optionLabels
       return Array.isArray(value) ? value.map((v) => labels?.[String(v)] ?? String(v)).join(', ') : (labels?.[String(value)] ?? cellText(value))
     }

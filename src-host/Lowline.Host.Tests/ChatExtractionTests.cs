@@ -85,5 +85,26 @@ public sealed class ChatExtractionTests
         Assert.Contains("@긴급도: [radio options=\"낮음,보통,높음\"]", asked[0].Content);
         Assert.Equal("긴급도별로 몇 건?", asked[1].Content);
         Assert.False((await ChatQuery.ReplyAsync(new ChatQueryRequest(ChatAuthoring.LocalPreset, null, null, "gguf:qwen3-default", Template, " "), local, TimeSpan.FromSeconds(20), Ct)).Ok);
+        // No field refers to another template's documents: nothing is said about them.
+        Assert.DoesNotContain("다른 서식의 문서를 가리키는 칸", asked[0].Content);
+    }
+
+    [Fact]
+    public async Task A_question_is_told_the_fields_of_the_documents_the_template_refers_to_by_name_and_choices()
+    {
+        var lmsupply = new LocalModelsTests.StandIn { Reply = "```json\n{\"groupBy\": [\"고객.지역\"]}\n```" };
+        await using var local = new LocalModels(lmsupply);
+        ReferredColumn[] referred = [new("고객.지역", "select", ["서울", "부산"]), new("고객.등록일", "date"), new("고객.이름", "text")];
+
+        var reply = await ChatQuery.ReplyAsync(
+            new ChatQueryRequest(ChatAuthoring.LocalPreset, null, null, "gguf:qwen3-default", "@고객 -> customer: [select]", "지역별 문의 수?", referred),
+            local, TimeSpan.FromSeconds(20), Ct);
+
+        Assert.True(reply.Ok);
+        var told = lmsupply.Loaded.Single().Asked[0].Content;
+        Assert.Contains("다른 서식의 문서를 가리키는 칸", told);
+        Assert.Contains("- `고객.지역` (선택지: 서울, 부산)", told);
+        Assert.Contains("- `고객.등록일` (날짜)", told);
+        Assert.Contains("- `고객.이름`", told);
     }
 }

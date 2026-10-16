@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { periodDays, planWords, queryPlan } from '../chat-query.ts'
-import { templateSnapshot } from '../projection.ts'
+import { countColumns, templateSnapshot } from '../projection.ts'
 
 const fence = '```'
 const fields = templateSnapshot(`---
@@ -110,5 +110,42 @@ describe('what a plan counts, in words', () => {
     expect(planWords({ groupBy: ['지역'], filters: [{ column: '원인', op: 'empty', value: '' }, { column: '방문일', op: 'atMost', value: '2026-09-30' }] }, fields)).toBe(
       '원인 비어 있음 · 방문한 날 2026-09-30까지 · 지역별',
     )
+  })
+})
+
+describe('what a reply asks to count through a reference', () => {
+  const customer = templateSnapshot(`---
+id: customer
+version: 2
+---
+@이름: [text]
+@지역: [select options="서울,부산"]
+@담당자 -> staff: [select]
+`)
+  const inquiry = templateSnapshot(`---
+id: inquiry
+version: 1
+---
+@고객 -> customer: [select]
+@담당: [select options="장비,인사"]
+@접수일: [date]
+`)
+  const columns = countColumns(inquiry, [customer, inquiry])
+
+  it("counts by the fields of the documents a field refers to, one step: the other template's own references are not followed", () => {
+    expect(columns.filter((c) => c.via).map((c) => [c.name, c.label, c.type, c.options])).toEqual([
+      ['고객.이름', '고객.이름', 'text', []],
+      ['고객.지역', '고객.지역', 'select', ['서울', '부산']],
+    ])
+    expect(countColumns(inquiry, [inquiry]).filter((c) => c.via)).toEqual([]) // a template the vault does not have
+  })
+
+  it('checks a referred field as its own template has it — a choice one of its choices', () => {
+    const reply = (filters: string) => `${fence}json\n{"groupBy": ["담당"], "filters": [${filters}]}\n${fence}`
+    expect(queryPlan(reply('{"field": "고객.지역", "op": "equal", "value": "서울"}'), columns)).toEqual({
+      plan: { groupBy: ['담당'], filters: [{ column: '고객.지역', op: 'equal', value: '서울' }] },
+    })
+    expect(queryPlan(reply('{"field": "고객.지역", "op": "equal", "value": "대구"}'), columns)).toEqual({ problem: 'bad-filter', field: '고객.지역' })
+    expect(queryPlan(reply('{"field": "고객.담당자", "op": "empty"}'), columns)).toEqual({ problem: 'unknown-field', field: '고객.담당자' })
   })
 })

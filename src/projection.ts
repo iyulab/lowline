@@ -99,6 +99,31 @@ export function templateSnapshot(source: string): TemplateSnapshot {
 }
 
 /**
+ * A column a template's documents can be counted by: one of its fields, or — through `via`, a field of it naming one
+ * document of another template — a field of that document, named `<field>.<its field>` and labelled the same way.
+ */
+export interface CountColumn extends TemplateField {
+  via?: string
+}
+
+/**
+ * The columns `template`'s documents can be counted by, as the sidecar counts them: its fields, then for each field
+ * naming one document of a template in `templates`, that template's fields — not its own references: one step.
+ */
+export function countColumns(template: TemplateSnapshot, templates: readonly TemplateSnapshot[]): CountColumn[] {
+  const byId = new Map(templates.map((t) => [templateId(t.ref), t]))
+  return [
+    ...template.fields,
+    ...template.fields.flatMap((f) => {
+      const target = !f.multiple && f.reference ? byId.get(f.reference) : undefined
+      return (target?.fields ?? [])
+        .filter((g) => !g.reference)
+        .map((g) => ({ ...g, name: `${f.name}.${g.name}`, label: `${f.label}.${g.label}`, via: f.name }))
+    }),
+  ]
+}
+
+/**
  * The templates the vault's fields refer to, by id: a template is one whose documents are what other
  * documents are about (a customer, an item) because a field says so — nothing marks it otherwise. Only
  * templates in the vault count.
