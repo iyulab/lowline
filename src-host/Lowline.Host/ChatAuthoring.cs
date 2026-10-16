@@ -44,13 +44,14 @@ public static class ChatAuthoring
         서식의 규칙:
         - 맨 앞 front matter에 `id`(영문 소문자·숫자·하이픈)와 `version`(정수)이 있습니다. 사람이 바꾸라고 하지 않으면 `id`와 `version`은 그대로 둡니다.
         - 칸 하나는 `@칸이름: [형식 속성]`으로 씁니다. 형식과 속성은 반드시 대괄호 안에 씁니다(`@처리_기한: [date]`, `@처리_기한: date`는 칸이 되지 않습니다).
-        - 형식: `text`, `textarea rows=3`, `number`, `date`, `email`, `tel`, `select options="가,나,다"`, `radio options="가,나"`, `checkbox content="설명"`.
+        - 형식: `text`, `textarea rows=3`, `number`, `date`, `email`, `tel`, `select options="가,나,다"`, `radio options="가,나"`, 여러 개 고르기 `checkbox options="가,나"`, 예/아니오 하나 `checkbox content="설명"`.
         - 문장 안의 짧은 글 칸은 `제목: ___@제목`처럼 씁니다.
         - 칸 이름은 한 단어입니다. 띄어쓰기 대신 밑줄(`재현_절차`)을 쓰고, 한 서식에서 두 번 쓰지 않으며, `template`과 `lowline`은 쓰지 않습니다.
         - 다른 서식의 문서를 가리키는 칸은 `@고객 -> customer: [select]`처럼 그 서식의 id를 화살표 뒤에 씁니다.
+        - 다른 칸의 답이 어떠할 때만 보이거나 꼭 써야 하는 칸("~일 때만", "~이면")은 속성 `visible-if="칸이름=값"`과 `required-if="칸이름=값"`을 씁니다.
         - 판단 칸은 사람이 판단해 고르는 칸입니다. 닫힌 선택지(`select`/`radio`)로 만들고, 그 이름을 front matter의 `lowline:` 아래 `suggest:` 목록에 넣습니다. Lowline은 사람이 이전에 확정한 문서들에서 판단 칸의 값을 제안하고, 확정은 사람이 합니다.
 
-        판단 칸이 둘 있는 서식의 예:
+        판단 칸이 둘 있고, 긴급도가 높을 때만 정지 시간을 받는 서식의 예:
         ```formdown
         ---
         id: repair-request
@@ -65,6 +66,7 @@ public static class ChatAuthoring
         @접수일: [date]
         @긴급도: [radio options="낮음,보통,높음"]
         @담당_팀: [select options="설비,전기,시설"]
+        @정지_시간: [number visible-if="긴급도=높음" required-if="긴급도=높음"]
         ```
 
         답하는 법:
