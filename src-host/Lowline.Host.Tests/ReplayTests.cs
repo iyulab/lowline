@@ -95,14 +95,14 @@ public sealed class ReplayTests
                 + $" ({(t.Value.Right + t.Value.Wrong == 0 ? 0 : 100.0 * t.Value.Right / (t.Value.Right + t.Value.Wrong)):F0}% right)")), ct);
     }
 
-    /// <summary>The precision the field's curve promises for what was offered: its replay, or its replay at that many characters.</summary>
+    /// <summary>What the field's curve promises for what was offered: its replay's promise, or its replay at that many characters.</summary>
     private static async Task<double?> PromisedAsync(
         VaultProjection vault, string template, string field, Suggestion offered, string? typed, CancellationToken ct)
     {
         if (offered.Value is null) return null;
         var curve = (await vault.CurvesAsync(ct)).Single(c => c.Template == template && c.Field == field);
         return typed is null
-            ? curve.Replay?.Precision
+            ? curve.Replay?.Promise
             : curve.Typing?.FirstOrDefault(t => t.Characters == typed.Length)?.Precision;
     }
 

@@ -206,11 +206,15 @@ export interface FieldCurve {
    * value settled alongside its observed values: the share of lookups that got a suggestion and the share of those
    * that were right, at the strength the replay chose. Absent until the history is long enough to choose one from.
    * `dependsOn` names the fields the replay chose for the suggestions to rest on, when resting on them alone was
-   * suggested more often at the same precision; absent or null when every value filled in counts.
+   * suggested more often at the same precision; absent or null when every value filled in counts. `promise` is what to
+   * expect of the next suggestions: the precision of those among the latest `promiseOver` documents, or `precision`
+   * when they are too few to rest on.
    */
   replay?: {
     threshold: number
     precision: number
+    promise: number
+    promiseOver: number
     answerRate: number
     answered: number
     lookups: number

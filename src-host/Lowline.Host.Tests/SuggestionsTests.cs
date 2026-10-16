@@ -230,6 +230,27 @@ public sealed class SuggestionsTests
     }
 
     [Fact]
+    public void A_threshold_is_kept_with_what_it_promises()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            var choice = new Gil.Forms.ThresholdChoice(0.5, 0.9, 0.5, 20, 40) { Promise = 0.84, PromiseAnswered = 12 };
+            ThresholdStore.Save(file, new Dictionary<(string, string), FieldThreshold>
+            {
+                [("intake@1", "담당")] = new(choice, 40, 40, choice),
+            });
+            var kept = ThresholdStore.Load(file)[("intake@1", "담당")].Choice!;
+            Assert.Equal(0.84, kept.Promise);
+            Assert.Equal(12, kept.PromiseAnswered);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void The_fields_a_threshold_rests_on_are_kept_with_it()
     {
         var file = Path.GetTempFileName();

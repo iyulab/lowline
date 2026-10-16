@@ -182,6 +182,6 @@ describe.runIf(env.LOWLINE_REPLAY)('records played back through the app', () => 
       if (quarters.some(([, { typing }]) => typing.offered > 0))
         console.log(`  ${field} while typing: ` + quarters.map(([q, { typing }]) => `${q} ${read(typing)}`).join(' · '))
     }
-    expect(form).toEqual({ form: 1, confirmed: documents.length, weeks, perWeek: Math.round((documents.length / weeks) * 100) / 100 })
+    expect(form).toEqual({ form: 1, confirmed: documents.length, outside: 0, weeks, perWeek: Math.round((documents.length / weeks) * 100) / 100 })
   })
 })

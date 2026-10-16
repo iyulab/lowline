@@ -42,6 +42,8 @@ const curve: Shape<FieldCurve> = {
     inside: {
       threshold: 'required',
       precision: 'required',
+      promise: 'required',
+      promiseOver: 'required',
       answerRate: 'required',
       answered: 'required',
       lookups: 'required',

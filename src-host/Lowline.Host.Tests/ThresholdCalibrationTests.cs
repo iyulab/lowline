@@ -70,7 +70,7 @@ public sealed class ThresholdCalibrationTests
             {
                 if (suggestion.Value == document.Values["담당"].GetString()) right++;
                 else wrong++;
-                if ((await vault.CurvesAsync(ct)).Single().Replay?.Precision is { } precision) promised.Add(precision);
+                if ((await vault.CurvesAsync(ct)).Single().Replay?.Promise is { } promise) promised.Add(promise);
             }
             await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);
             await vault.ThresholdsSelected.WaitAsync(ct);
@@ -148,8 +148,8 @@ public sealed class ThresholdCalibrationTests
                 {
                     if (suggestion.Value == document.Values[field].GetString()) right++;
                     else wrong++;
-                    if ((await vault.CurvesAsync(ct)).Single(c => c.Field == field).Replay?.Precision is { } precision)
-                        promised.Add(precision);
+                    if ((await vault.CurvesAsync(ct)).Single(c => c.Field == field).Replay?.Promise is { } promise)
+                        promised.Add(promise);
                 }
                 tally[field] = (right, wrong, abstained, promised);
             }
@@ -225,7 +225,7 @@ public sealed class ThresholdCalibrationTests
             {
                 if (suggestion.Value == document.Values["고장"].GetString()) right++;
                 else wrong++;
-                if ((await vault.CurvesAsync(ct)).Single().Replay?.Precision is { } precision) promised.Add(precision);
+                if ((await vault.CurvesAsync(ct)).Single().Replay?.Promise is { } promise) promised.Add(promise);
             }
             await typing.TypeAsync(vault, new SuggestRequest("faults@1", "고장", values), suggestion, document.Values["고장"].GetString()!, ct);
             await vault.IngestAsync(new VaultSnapshot(all.Templates, [.. all.Documents.Take(i + 1)]), ct);

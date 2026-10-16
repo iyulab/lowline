@@ -20,6 +20,7 @@ use serde::Serialize;
 use tauri_kit_sidecar::loopback::{
     Client, Fault, Loopback, LoopbackOptions, Response, TransportError,
 };
+use tauri_kit_sidecar::Sink;
 
 /// Must match `HostAuth.TokenVariable` in `src-host/Lowline.Host`.
 pub const TOKEN_VARIABLE: &str = "LOWLINE_HOST_TOKEN";
@@ -89,7 +90,7 @@ impl Host {
         cmd.env(CACHE_VARIABLE, cache);
         let mut options = LoopbackOptions::new(TOKEN_VARIABLE, READY_PREFIX);
         options.ready_timeout = START_DEADLINE;
-        options.stderr = Some(stderr_log);
+        options.stderr = Sink::File(stderr_log);
         let sidecar =
             Loopback::start(cmd, &options).map_err(|e| format!("the host did not start: {e}"))?;
         let client = HostClient {

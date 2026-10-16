@@ -277,8 +277,12 @@ export const strings = {
   // Decisions on suggestions from similar records stay in the curve; no new ones are made.
   learningMemoryRetired: '비슷한 기록에서는 이제 제안하지 않습니다 — 이 수는 그 전의 결정입니다.',
   // The replay also counts the fields memory left blank, which the curve does not.
-  learningReplay: (answerRate: number, precision: number, lookups: number) =>
-    `저장된 ${lookups}건을 순서대로 다시 물으면 ${Math.round(answerRate * 100)}%에 제안, 그중 ${Math.round(precision * 100)}% 맞음`,
+  learningReplay: (replay: { answerRate: number; precision: number; promise: number; promiseOver: number; lookups: number }) =>
+    `저장된 ${replay.lookups}건을 순서대로 다시 물으면 ${Math.round(replay.answerRate * 100)}%에 제안, 그중 ${Math.round(replay.precision * 100)}% 맞음` +
+    // The whole replay keeps a time the field did better long after; what to expect next is the latest stretch.
+    (Math.round(replay.promise * 100) === Math.round(replay.precision * 100)
+      ? ''
+      : ` — 최근 ${replay.promiseOver.toLocaleString('ko-KR')}건만 보면 ${Math.round(replay.promise * 100)}% 맞음, 앞으로 기대할 값은 이쪽`),
   learningTyping: (typing: TypedReplay[]) =>
     typing.length === 0
       ? '칠 때: 앞 제안이 맞지 않은 기록을 앞에서부터 쳐 보아도 아직 목표만큼 맞히는 글자 수가 없어, 치는 동안에도 제안하지 않습니다.'
