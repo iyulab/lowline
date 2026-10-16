@@ -311,9 +311,11 @@ export default {
       const before = await app.value('textarea')
       await app.cdp.evaluate(`(() => { const p = ${chat}.querySelector('u-prompt'); p.value = '처리 기한 칸을 날짜로 넣어 줘'; p.submit(); return true })()`)
       await app.cdp.waitFor(`${chat}.querySelector('.note[role=status]')?.textContent.includes('넣은 칸: 처리_기한')`, 'the draft put into the editor', { timeoutMs: 30_000 })
-      assert.equal(asked.length, 2, 'asked once more after a draft with a problem')
+      // What each ask ended with, said when it is not as expected.
+      const ends = asked.map((a) => `${a.messages.length} messages, last ${a.messages.at(-1)?.role}: ${String(a.messages.at(-1)?.content).slice(0, 80)}`)
+      assert.equal(asked.length, 2, `asked once more after a draft with a problem: ${ends.join(' | ')}`)
       assert.match(asked[0].messages[0].content, /id: bug-report/, 'the template as it stood went with the question')
-      assert.match(asked[1].messages.at(-1).content, /다시 보내/, 'and what was wrong with the first draft')
+      assert.match(asked[1].messages.at(-1).content, /다시 보내/, `and what was wrong with the first draft: ${ends.join(' | ')}`)
       // The chat's words and the box to write in are in the type the rest of the window uses.
       const typeIn = `((sel) => { const find = (root) => root.querySelector(sel) ?? [...root.querySelectorAll('*')].map((el) => el.shadowRoot && find(el.shadowRoot)).find(Boolean)
         const el = find(${chat}); const s = getComputedStyle(el); return s.fontSize + ' ' + s.fontFamily })`
