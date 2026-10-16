@@ -20,7 +20,7 @@
     <PackageReference Include="Formbase.Core" Version="0.22.0" />
     <PackageReference Include="Formbase.Sqlite" Version="0.22.0" />
     <PackageReference Include="Formbase.DependencyInjection" Version="0.22.0" />
-    <PackageReference Include="Gil" Version="0.19.0" />
+    <PackageReference Include="Gil" Version="0.20.0" />
     <PackageReference Include="IronProw.Core" Version="0.16.1" />
     <PackageReference Include="IronProw.IronHive" Version="0.16.1" />
     <PackageReference Include="IronProw.LMSupply" Version="0.16.1" />

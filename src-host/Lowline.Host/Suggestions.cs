@@ -216,10 +216,9 @@ public sealed class Suggestions
             if (threshold.CoarsePrefix is not null)
             {
                 var valued = Form(_templates[template], f => f == field ? threshold : new FieldThreshold(null, 0, 0))!;
-                // TODO(upstream: Gil — a coarse replay for a resolver with no document memory): the resolver here keeps
-                // none, so the similar document half of this replay is never used; only its key threshold is read.
+                // The resolver keeps no document memory, so neither does the replay: only its key threshold is read.
                 var layers = await ThresholdSelection.SelectCoarseAsync(
-                    new FieldMemory(), new Gil.Memory.LexicalMemory(), valued, field, _settled[template], TargetPrecision,
+                    new FieldMemory(), memory: null, valued, field, _settled[template], TargetPrecision,
                     MinimumAnswered, cancellationToken);
                 threshold = threshold with { Coarse = layers.Key.Chosen };
             }
