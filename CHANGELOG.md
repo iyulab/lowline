@@ -16,4 +16,11 @@ All notable changes to this project are written here. The format follows
     `Settlement` per decided field — `Accept`, `Correct`, `Reject`, `Revert`, `Restore`, `Set`, `Enter`, `Fill`,
     and `AcceptOther` / `CorrectOther` for a value suggested by something other than the decider — so a value a
     person took from a suggestion is never counted as one they typed on their own.
-  - `serde` feature: the policy, suggestions, drafts and settlements read and write as JSON.
+  - `Form` — the fields a host hands over, in one shape whatever the form was written in: name, kind (`text`,
+    `number`, `date`, `choice`, `flag`, `reference`), choices, and what the form declares about suggesting (role,
+    policy, evidence, parent). `Form::resolve` works out the rest. With `Inference::ClosedChoices` (the default) a
+    form that declares no role has every closed choice field — two or more choices, nothing outside them — decided
+    and the rest observed; a single checkbox or switch is never decided that way, since it is often a consent. A
+    form that declares any role is taken at its word, and `Inference::DeclaredOnly` decides only what is declared.
+    A policy of `offer` or `confirm` declares a field decided.
+  - `serde` feature: forms, policies, suggestions, drafts and settlements read and write as JSON.
