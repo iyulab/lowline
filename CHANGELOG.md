@@ -22,5 +22,10 @@ All notable changes to this project are written here. The format follows
     form that declares no role has every closed choice field — two or more choices, nothing outside them — decided
     and the rest observed; a single checkbox or switch is never decided that way, since it is often a consent. A
     form that declares any role is taken at its word, and `Inference::DeclaredOnly` decides only what is declared.
-    A policy of `offer` or `confirm` declares a field decided.
+    A policy of `offer` or `confirm` declares a field decided. A field may also name how many leading characters of
+    its value are its class (`coarse`) and the values it must not miss (`must_catch`, one of its choices).
   - `serde` feature: forms, policies, suggestions, drafts and settlements read and write as JSON.
+  - `formdown` feature: `FormdownSchema` reads the JSON formdown's `getSchema()` gives, and turns into a `Form` —
+    fields in the form's order, buttons and file fields left out, select · radio · checkbox group as choices, a single
+    checkbox as a flag, a relation as a reference, `suggest:*` attributes as the field's role, policy, evidence,
+    parent, class and values not to miss (`judged` is decided). A password is never evidence.

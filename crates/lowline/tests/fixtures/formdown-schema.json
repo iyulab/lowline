@@ -1,0 +1,175 @@
+{
+  "received": {
+    "type": "date",
+    "label": "Received",
+    "required": true,
+    "position": 1,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "customer": {
+    "type": "select",
+    "label": "Customer",
+    "position": 2,
+    "suggest": {
+      "evidence": false
+    },
+    "relation": {
+      "target": "Customer",
+      "type": "fk"
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "summary": {
+    "type": "textarea",
+    "label": "Summary",
+    "position": 3,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "channel": {
+    "type": "radio",
+    "label": "Channel",
+    "position": 4,
+    "options": [
+      {
+        "value": "phone"
+      },
+      {
+        "value": "mail"
+      }
+    ],
+    "allowOther": true,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "handler": {
+    "type": "select",
+    "label": "Handler",
+    "position": 5,
+    "value": "kim",
+    "options": [
+      {
+        "value": "kim"
+      },
+      {
+        "value": "lee"
+      },
+      {
+        "value": "park"
+      }
+    ],
+    "suggest": {
+      "role": "judged",
+      "policy": "confirm",
+      "mustCatch": [
+        "park"
+      ]
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "fault_code": {
+    "type": "text",
+    "label": "Fault Code",
+    "position": 6,
+    "suggest": {
+      "role": "judged",
+      "coarse": 2,
+      "parent": "handler"
+    },
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "tags": {
+    "type": "checkbox",
+    "label": "Tags",
+    "position": 7,
+    "options": [
+      {
+        "value": "a"
+      },
+      {
+        "value": "b"
+      },
+      {
+        "value": "c"
+      }
+    ],
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "urgent": {
+    "type": "checkbox",
+    "label": "Urgent",
+    "position": 8,
+    "switch": true,
+    "htmlAttributes": {
+      "switch": true,
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "quantity": {
+    "type": "number",
+    "label": "Quantity",
+    "position": 9,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "price": {
+    "type": "number",
+    "label": "Price",
+    "position": 10,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "amount": {
+    "type": "number",
+    "label": "Amount",
+    "position": 11,
+    "compute": "quantity * price",
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "photo": {
+    "type": "file",
+    "label": "Photo",
+    "position": 12,
+    "htmlAttributes": {
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  },
+  "submit_1": {
+    "type": "button",
+    "label": "Send",
+    "position": 13,
+    "htmlAttributes": {
+      "type": "submit",
+      "form": "formdown-form-default"
+    },
+    "layout": "vertical"
+  }
+}

@@ -15,9 +15,9 @@ Status: early development — no package is published yet.
 
 | Part | What it does |
 |---|---|
-| [`crates/lowline`](crates/lowline) | The core, in Rust with no I/O: the form in one shape whatever it was written in, which of its fields are decided, per-field suggestion policy, and the account of what a person did with each suggestion while writing a record — taken, changed, turned down, or typed with nothing in view — turned into the settlements a decider learns from. Builds for WebAssembly, so a browser and a server count the same way. |
+| [`crates/lowline`](crates/lowline) | The core, in Rust with no I/O: the form in one shape whatever it was written in (formdown read from its schema), which of its fields are decided, per-field suggestion policy, and the account of what a person did with each suggestion while writing a record — taken, changed, turned down, or typed with nothing in view — turned into the settlements a decider learns from. Builds for WebAssembly, so a browser and a server count the same way. |
 
-Coming next: reading formdown forms, the decider wired in, a .NET host and a form element.
+Coming next: the decider wired in, a .NET host and a form element.
 
 ## Development
 

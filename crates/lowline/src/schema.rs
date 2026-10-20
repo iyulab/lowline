@@ -88,6 +88,20 @@ pub struct Field {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub parent: Option<String>,
+    /// How many leading characters of a value name its broader class — the chapter of a fault code. Where the value
+    /// cannot be suggested, its class may be.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub coarse: Option<u32>,
+    /// Values that must not be missed: where one of them is the answer, the host asks rather than stays quiet. On a
+    /// choice field, each is one of its choices.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub must_catch: Vec<String>,
 }
 
 #[cfg(feature = "serde")]
@@ -110,6 +124,8 @@ impl Field {
             policy: None,
             evidence: None,
             parent: None,
+            coarse: None,
+            must_catch: Vec::new(),
         }
     }
 
@@ -187,6 +203,10 @@ pub enum SchemaError {
     PolicyOnObserved(String),
     /// A worked-out field is declared decided.
     DecidedComputed(String),
+    /// A value not to miss is not one of the field's choices.
+    MustCatchUnlisted { field: String, value: String },
+    /// A class of no characters.
+    EmptyCoarse(String),
 }
 
 impl fmt::Display for SchemaError {
@@ -209,6 +229,18 @@ impl fmt::Display for SchemaError {
                 write!(
                     f,
                     "field `{name}` is worked out from other fields and cannot be decided"
+                )
+            }
+            SchemaError::MustCatchUnlisted { field, value } => {
+                write!(
+                    f,
+                    "field `{field}` must not miss `{value}`, which is not one of its choices"
+                )
+            }
+            SchemaError::EmptyCoarse(name) => {
+                write!(
+                    f,
+                    "field `{name}` names a class of no characters — coarse counts from 1"
                 )
             }
         }
@@ -256,6 +288,18 @@ impl Form {
                     }
                     None => (Role::Observed, false),
                 };
+                if field.coarse == Some(0) {
+                    return Err(SchemaError::EmptyCoarse(field.name.clone()));
+                }
+                if !field.choices.is_empty()
+                    && let Some(value) =
+                        field.must_catch.iter().find(|v| !field.choices.contains(v))
+                {
+                    return Err(SchemaError::MustCatchUnlisted {
+                        field: field.name.clone(),
+                        value: value.clone(),
+                    });
+                }
                 if role == Role::Decided && field.computed {
                     return Err(SchemaError::DecidedComputed(field.name.clone()));
                 }
@@ -438,6 +482,26 @@ mod tests {
         assert_eq!(
             form.resolve(Inference::default()),
             Err(SchemaError::PolicyOnObserved("note".into()))
+        );
+        let mut handler = Field::choice("handler", ["kim", "lee"]);
+        handler.must_catch = vec!["park".into()];
+        let form = Form {
+            fields: vec![handler],
+        };
+        assert_eq!(
+            form.resolve(Inference::default()),
+            Err(SchemaError::MustCatchUnlisted {
+                field: "handler".into(),
+                value: "park".into()
+            })
+        );
+
+        let mut code = Field::new("code", FieldKind::Text);
+        code.coarse = Some(0);
+        let form = Form { fields: vec![code] };
+        assert_eq!(
+            form.resolve(Inference::default()),
+            Err(SchemaError::EmptyCoarse("code".into()))
         );
     }
 
