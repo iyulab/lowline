@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        id: toolchain
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-cargo-
+
+      # A crate ships only what is in its own folder: each carries the license, kept word for word.
+      - name: License in every crate
+        run: for f in crates/*/LICENSE; do cmp LICENSE "$f"; done; [ "$(ls crates/*/LICENSE | wc -l)" = "$(ls -d crates/*/ | wc -l)" ]
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      # Twice: an optional feature adds code, and leaving it out must not leave any unused.
+      - name: Lint
+        run: |
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: |
+          cargo test --workspace
+          cargo test --workspace --all-features
+
+      # The core runs in the browser too (the form element counts provenance with the same code as the server).
+      - name: WebAssembly build
+        run: cargo check --workspace --target wasm32-unknown-unknown --all-features
+
+  # The crates declare the oldest compiler they build with (`rust-version`); that holds only while something
+  # builds with exactly that compiler.
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.90
+
+      - name: Check with the declared minimum
+        run: cargo check --workspace --all-targets --all-features
+
+  # Public text: no local paths, private hosts or names from a private workspace, in tracked files and commit
+  # messages. Pinned to an exact version so a release there cannot turn this red unannounced.
+  public-text:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Check public text
+        run: npx --yes @iyulab/tauri-kit-dev@0.11.0 public-text .
