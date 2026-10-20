@@ -393,7 +393,7 @@ mod tests {
         let mut draft = Draft::new();
         draft.show("f", Suggestion::class("A-"));
         assert_eq!(kind(&draft, "A-12"), Some(Accept));
-        assert_eq!(kind(&draft, "B-3"), Some(Correct));
+        assert_eq!(kind(&draft, "C-7"), Some(Correct));
     }
 
     #[test]
