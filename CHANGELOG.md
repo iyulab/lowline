@@ -29,3 +29,9 @@ All notable changes to this project are written here. The format follows
     fields in the form's order, buttons and file fields left out, select · radio · checkbox group as choices, a single
     checkbox as a flag, a relation as a reference, `suggest:*` attributes as the field's role, policy, evidence,
     parent, class and values not to miss (`judged` is decided). A password is never evidence.
+  - `gil` feature (crate `iyulab-gil` 0.7): `gil::schema(name, fields)` hands a resolved form to the Gil decider as
+    its `Schema` — role, evidence, policy (`offer` → `Suggest`, `confirm` → `ConfirmRequired`), a closed choice
+    field's choices as candidates, the class prefix and the values not to miss — checked as Gil checks one.
+    `Settlement::to_gil` gives each settlement in Gil's words; a set is settled and restored as a set. An observed
+    field that takes several values is one attribute (Gil takes several only for a decided one); a field's parent is
+    not handed over. With `serde`, Gil's types serialize too.

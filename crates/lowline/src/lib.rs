@@ -14,9 +14,14 @@
 //!   `formdown` feature, a form written in formdown is read from the JSON its `getSchema()` gives.
 //! - [`Policy`] — whether a field is suggested for, and whether the host may put the suggestion in by itself.
 //! - [`Draft`] — the account of one record being written; [`Draft::settle`] gives the settlements.
+//!
+//! With the `gil` feature, [`gil::schema`] hands a resolved form to the Gil decider and [`Settlement::to_gil`] each
+//! settlement.
 
 #[cfg(feature = "formdown")]
 mod formdown;
+#[cfg(feature = "gil")]
+pub mod gil;
 mod policy;
 mod provenance;
 mod schema;
