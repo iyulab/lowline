@@ -41,7 +41,9 @@ All notable changes to this project are written here. The format follows
   - `gil` feature (crate `iyulab-gil` 0.7): `gil::schema(name, fields)` hands a resolved form to the Gil decider as
     its `Schema` — role, evidence, policy (`offer` → `Suggest`, `confirm` → `ConfirmRequired`), a closed choice
     field's choices as candidates, the class prefix and the values not to miss — checked as Gil checks one.
-    `gil::proposal(field, answer, allowed)` turns Gil's answer for a field into a `Proposal`: the trusted value, else
+    `gil::record(id, fields, saved, settlements, settled_at)` is a saved record as Gil keeps it — a decided field of
+    several values as a set, an observed one as one value (sorted, joined with `", "`), each settlement's kind and a
+    check's probability. `gil::proposal(field, answer, allowed)` turns Gil's answer for a field into a `Proposal`: the trusted value, else
     the trusted class, else why not; `allowed` — the choices the host lets this person pick now — keeps a value
     outside them from being suggested or moved to a nearby choice. `gil::decision(proposal, settlement)` is one
     decision as Gil's `usage` counts it — answered or not, accepted, corrected, entered, checked — with no values sent

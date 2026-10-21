@@ -63,6 +63,56 @@ fn attribute(resolved: &ResolvedField) -> gil::schema::Attribute {
     attribute
 }
 
+/// A saved record as Gil keeps it: its values by field, a decided field that takes several as a set, an observed one
+/// that takes several as one value — its values sorted and joined with `", "`, the attribute [`schema`] made of it —
+/// and how each decided field was settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC. Empty
+/// values are left out.
+pub fn record(
+    id: &str,
+    fields: &[ResolvedField],
+    saved: &std::collections::BTreeMap<String, crate::FieldValue>,
+    settlements: &[Settlement],
+    settled_at: i64,
+) -> gil::schema::Record {
+    let mut record = gil::schema::Record {
+        id: id.to_owned(),
+        settled_at,
+        ..Default::default()
+    };
+    for resolved in fields {
+        let name = &resolved.field.name;
+        let Some(value) = saved.get(name).filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        match value {
+            crate::FieldValue::One(one) => {
+                record.values.insert(name.clone(), one.clone());
+            }
+            crate::FieldValue::Many(_) if resolved.role == Role::Decided => {
+                record
+                    .sets
+                    .insert(name.clone(), value.set().unwrap_or_default());
+            }
+            crate::FieldValue::Many(_) => {
+                record
+                    .values
+                    .insert(name.clone(), value.set().unwrap_or_default().join(", "));
+            }
+        }
+    }
+    for settlement in settlements {
+        record
+            .settlements
+            .insert(settlement.field.clone(), settlement.kind.into());
+        if let Some(probability) = settlement.probability {
+            record
+                .probabilities
+                .insert(settlement.field.clone(), probability);
+        }
+    }
+    record
+}
+
 /// What to show for a decided field, from Gil's answer for its attribute.
 ///
 /// The first candidate, when Gil trusts it; else the class Gil trusts, as a class suggestion; else nothing, and why —
