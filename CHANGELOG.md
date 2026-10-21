@@ -39,6 +39,7 @@ All notable changes to this project are written here. The format follows
     field's choices as candidates, the class prefix and the values not to miss — checked as Gil checks one.
     `gil::proposal(field, answer, allowed)` turns Gil's answer for a field into a `Proposal`: the trusted value, else
     the trusted class, else why not; `allowed` — the choices the host lets this person pick now — keeps a value
-    outside them from being suggested or moved to a nearby choice. `Settlement::to_gil` gives each settlement in Gil's words; a set is settled and restored as a set. An observed
+    outside them from being suggested or moved to a nearby choice. `gil::decision(proposal, settlement)` is one
+    decision as Gil's `usage` counts it — answered or not, accepted, corrected, entered — with no values sent on. `Settlement::to_gil` gives each settlement in Gil's words; a set is settled and restored as a set. An observed
     field that takes several values is one attribute (Gil takes several only for a decided one); a field's parent is
     not handed over. With `serde`, Gil's types serialize too.

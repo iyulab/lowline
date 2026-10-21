@@ -144,6 +144,28 @@ fn basis(candidate: &gil::decider::Candidate) -> Vec<Basis> {
         .collect()
 }
 
+/// One decision as Gil's [`gil::usage::usage`] counts it: the proposal shown for the field and how the field was
+/// settled, if it was. The answer is the decider's suggestion shown — a class counts as answered, and a value taken
+/// within it as accepted, as [`crate::Draft::settle`] settles it. A field settled with no proposal shown is a decision
+/// with no answer: pass [`Proposal::abstain`]. No promise is carried; the counts rest on the settlements alone.
+pub fn decision<'a>(
+    proposal: &'a Proposal,
+    settlement: Option<&'a Settlement>,
+) -> gil::usage::Decision<'a> {
+    gil::usage::Decision {
+        attribute: &proposal.field,
+        answer: proposal
+            .suggestion
+            .as_ref()
+            .filter(|s| s.origin == crate::provenance::Origin::Decider)
+            .map(|s| s.value.as_str()),
+        settled: settlement.and_then(|s| s.value.as_deref()),
+        settlement: settlement.map(|s| s.kind.into()),
+        probability: 1.0,
+        promise: None,
+    }
+}
+
 impl From<SettlementKind> for gil::schema::SettlementKind {
     fn from(kind: SettlementKind) -> Self {
         match kind {
@@ -427,5 +449,47 @@ mod tests {
             proposal(&owner(None), &classed, Some(&only_q)).abstain,
             Some(Abstain::NotAllowed)
         );
+    }
+
+    #[test]
+    fn counts_what_the_answers_came_to() {
+        let kim = proposal(&owner(None), &answer(vec![candidate("kim", true)]), None);
+        let none = Proposal::abstain("owner", Abstain::NoEvidence);
+        let mut draft = Draft::new();
+        draft.show("owner", kim.suggestion.clone().unwrap());
+        let taken = draft.settle(
+            ["owner"],
+            &[("owner".to_owned(), FieldValue::from("kim"))].into(),
+            SettledBy::Person,
+        );
+        let changed = draft.settle(
+            ["owner"],
+            &[("owner".to_owned(), FieldValue::from("lee"))].into(),
+            SettledBy::Person,
+        );
+        let typed = Draft::new().settle(
+            ["owner"],
+            &[("owner".to_owned(), FieldValue::from("park"))].into(),
+            SettledBy::Person,
+        );
+
+        let counts = gil::usage::usage([
+            decision(&kim, taken.first()),
+            decision(&kim, changed.first()),
+            decision(&none, typed.first()),
+            decision(&kim, None),
+        ]);
+        let owner = &counts["owner"];
+        assert_eq!(
+            (
+                owner.decisions,
+                owner.answered,
+                owner.accepted,
+                owner.corrected,
+                owner.entered
+            ),
+            (4, 3, 1, 1, 1)
+        );
+        assert_eq!(owner.entered_over_answer, 0);
     }
 }
