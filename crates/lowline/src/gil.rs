@@ -1,10 +1,12 @@
 //! The engine's form and settlements in the decider's vocabulary — [Gil](https://crates.io/crates/iyulab-gil).
 //!
 //! A host that answers with Gil hands it the [`gil::schema::Schema`] made from the resolved form ([`schema`]) and, when
-//! a record is saved, the settlement of each decided field ([`Settlement::to_gil`]).
+//! a record is saved, the settlement of each decided field ([`Settlement::to_gil`]). What Gil answers for a field becomes
+//! the [`Proposal`] the host shows ([`proposal`]).
 
 use crate::policy::Policy;
-use crate::provenance::{Settlement, SettlementKind};
+use crate::proposal::{Abstain, Basis, Layer, Proposal};
+use crate::provenance::{Settlement, SettlementKind, Suggestion};
 use crate::schema::{FieldKind, ResolvedField, Role};
 
 /// The Gil schema named `name` for a resolved form, checked as Gil checks one.
@@ -59,6 +61,89 @@ fn attribute(resolved: &ResolvedField) -> gil::schema::Attribute {
     attribute
 }
 
+/// What to show for a decided field, from Gil's answer for its attribute.
+///
+/// The first candidate, when Gil trusts it; else the class Gil trusts, as a class suggestion; else nothing, and why —
+/// with what a judgement from outside the records would read when Gil asks for one. `allowed`, when the host gives it,
+/// is the choices this person may pick now (the host's permissions and active filters): a value outside them is not
+/// suggested, nor moved to a nearby choice, and a class is suggested only when one of them lies in it.
+pub fn proposal(
+    field: &ResolvedField,
+    answer: &gil::decider::Answer,
+    allowed: Option<&[String]>,
+) -> Proposal {
+    let name = field.field.name.as_str();
+    if field.policy == Policy::Off || answer.policy == gil::schema::AttributePolicy::Off {
+        return Proposal::abstain(name, Abstain::Off);
+    }
+
+    let may_pick = |value: &str| allowed.is_none_or(|a| a.iter().any(|c| c == value));
+    if let Some(first) = answer.candidates.first().filter(|c| c.trusted) {
+        if !may_pick(&first.value) {
+            return Proposal::abstain(name, Abstain::NotAllowed);
+        }
+        let suggestion = Suggestion::new(first.value.clone());
+        return Proposal::suggest(
+            name,
+            suggestion,
+            layer(first.source),
+            basis(first),
+            field.policy,
+        );
+    }
+    if let Some(class) = answer.coarse.as_ref().filter(|c| c.trusted) {
+        if allowed.is_some_and(|a| !a.iter().any(|c| c.starts_with(&class.value))) {
+            return Proposal::abstain(name, Abstain::NotAllowed);
+        }
+        let suggestion = Suggestion::class(class.value.clone());
+        return Proposal::suggest(
+            name,
+            suggestion,
+            layer(class.source),
+            basis(class),
+            field.policy,
+        );
+    }
+    if let Some(asks) = &answer.needs_external {
+        return Proposal {
+            asks: asks.clone(),
+            ..Proposal::abstain(name, Abstain::NeedsJudgement)
+        };
+    }
+    let why = if answer.candidates.is_empty() {
+        Abstain::NoEvidence
+    } else {
+        Abstain::Unsure
+    };
+    Proposal::abstain(name, why)
+}
+
+fn layer(source: gil::decider::Source) -> Option<Layer> {
+    match source {
+        gil::decider::Source::SettledFieldMemory => Some(Layer::Key),
+        gil::decider::Source::SimilarDocument => Some(Layer::Similar),
+        gil::decider::Source::External => Some(Layer::Judgement),
+        gil::decider::Source::None => None,
+    }
+}
+
+fn basis(candidate: &gil::decider::Candidate) -> Vec<Basis> {
+    candidate
+        .evidence
+        .iter()
+        .map(|evidence| match evidence {
+            gil::decider::Evidence::Key(key) => Basis::Value {
+                field: key.attribute.clone(),
+                value: key.value.clone(),
+            },
+            gil::decider::Evidence::Record { id, similarity } => Basis::Record {
+                id: id.clone(),
+                similarity: *similarity,
+            },
+        })
+        .collect()
+}
+
 impl From<SettlementKind> for gil::schema::SettlementKind {
     fn from(kind: SettlementKind) -> Self {
         match kind {
@@ -104,7 +189,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use crate::provenance::{Draft, SettledBy, Suggestion};
+    use crate::provenance::{Draft, SettledBy};
     use crate::schema::{Field, Form, Inference};
     use crate::value::FieldValue;
     use gil::schema::{AttributePolicy, AttributeRole};
@@ -236,5 +321,111 @@ mod tests {
             let gil: gil::schema::SettlementKind = kind.into();
             assert_eq!(format!("{gil:?}"), format!("{kind:?}"));
         }
+    }
+
+    fn answer(candidates: Vec<gil::decider::Candidate>) -> gil::decider::Answer {
+        gil::decider::Answer {
+            attribute: "owner".into(),
+            source: candidates
+                .first()
+                .map_or(gil::decider::Source::None, |c| c.source),
+            candidates,
+            coarse: None,
+            policy: gil::schema::AttributePolicy::Suggest,
+            needs_external: None,
+        }
+    }
+
+    fn candidate(value: &str, trusted: bool) -> gil::decider::Candidate {
+        gil::decider::Candidate {
+            value: value.into(),
+            score: 0.9,
+            source: gil::decider::Source::SettledFieldMemory,
+            evidence: Some(gil::decider::Evidence::Key(gil::key_memory::Key {
+                attribute: "customer".into(),
+                value: "Acme".into(),
+            })),
+            trusted,
+        }
+    }
+
+    fn owner(policy: Option<Policy>) -> ResolvedField {
+        let mut owner = Field::choice("owner", ["kim", "lee", "park"]);
+        owner.policy = policy;
+        resolved(vec![Field::new("customer", FieldKind::Text), owner]).remove(1)
+    }
+
+    #[test]
+    fn shows_the_trusted_value_with_what_it_rests_on() {
+        let shown = proposal(&owner(None), &answer(vec![candidate("kim", true)]), None);
+        assert_eq!(shown.suggestion, Some(Suggestion::new("kim")));
+        assert!(shown.prefill);
+        assert_eq!(shown.layer, Some(Layer::Key));
+        assert_eq!(
+            shown.basis,
+            [Basis::Value {
+                field: "customer".into(),
+                value: "Acme".into()
+            }]
+        );
+        assert_eq!(shown.abstain, None);
+    }
+
+    #[test]
+    fn a_field_to_confirm_is_never_put_in_by_the_host() {
+        let shown = proposal(
+            &owner(Some(Policy::Confirm)),
+            &answer(vec![candidate("kim", true)]),
+            None,
+        );
+        assert!(shown.suggestion.is_some());
+        assert!(!shown.prefill);
+    }
+
+    #[test]
+    fn says_why_nothing_is_shown() {
+        let why = |a: gil::decider::Answer, allowed: Option<&[String]>| {
+            proposal(&owner(None), &a, allowed).abstain
+        };
+        assert_eq!(why(answer(vec![]), None), Some(Abstain::NoEvidence));
+        assert_eq!(
+            why(answer(vec![candidate("kim", false)]), None),
+            Some(Abstain::Unsure)
+        );
+        let lee = ["lee".to_owned()];
+        assert_eq!(
+            why(answer(vec![candidate("kim", true)]), Some(&lee)),
+            Some(Abstain::NotAllowed)
+        );
+        assert_eq!(
+            proposal(
+                &owner(Some(Policy::Off)),
+                &answer(vec![candidate("kim", true)]),
+                None
+            )
+            .abstain,
+            Some(Abstain::Off)
+        );
+
+        let mut asking = answer(vec![]);
+        asking.needs_external = Some(vec![("customer".into(), "Acme".into())]);
+        let shown = proposal(&owner(None), &asking, None);
+        assert_eq!(shown.abstain, Some(Abstain::NeedsJudgement));
+        assert_eq!(shown.asks, [("customer".to_owned(), "Acme".to_owned())]);
+    }
+
+    #[test]
+    fn offers_the_class_when_only_the_class_is_trusted() {
+        let mut classed = answer(vec![candidate("P10", false)]);
+        classed.coarse = Some(candidate("P", true));
+        let shown = proposal(&owner(None), &classed, None);
+        assert_eq!(shown.suggestion, Some(Suggestion::class("P")));
+        assert!(!shown.prefill, "a class is not a value to put in");
+
+        let only_q = ["Q20".to_owned()];
+        assert_eq!(
+            proposal(&owner(None), &classed, Some(&only_q)).abstain,
+            Some(Abstain::NotAllowed)
+        );
     }
 }

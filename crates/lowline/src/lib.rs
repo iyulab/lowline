@@ -13,16 +13,18 @@
 //!   [`Form::resolve`] works out which fields are decided ([`Inference`]) and how each is suggested for. With the
 //!   `formdown` feature, a form written in formdown is read from the JSON its `getSchema()` gives.
 //! - [`Policy`] — whether a field is suggested for, and whether the host may put the suggestion in by itself.
+//! - [`Proposal`] — what a host shows for a decided field: one suggestion and what it rests on, or why there is none.
 //! - [`Draft`] — the account of one record being written; [`Draft::settle`] gives the settlements.
 //!
-//! With the `gil` feature, [`gil::schema`] hands a resolved form to the Gil decider and [`Settlement::to_gil`] each
-//! settlement.
+//! With the `gil` feature, [`gil::schema`] hands a resolved form to the Gil decider, [`gil::proposal`] turns its answer
+//! for a field into a [`Proposal`], and [`Settlement::to_gil`] hands back each settlement.
 
 #[cfg(feature = "formdown")]
 mod formdown;
 #[cfg(feature = "gil")]
 pub mod gil;
 mod policy;
+mod proposal;
 mod provenance;
 mod schema;
 mod value;
@@ -30,6 +32,7 @@ mod value;
 #[cfg(feature = "formdown")]
 pub use formdown::{FormdownField, FormdownSchema};
 pub use policy::{ParsePolicyError, Policy};
+pub use proposal::{Abstain, Basis, Layer, Proposal};
 pub use provenance::{Draft, Fit, Origin, SettledBy, Settlement, SettlementKind, Suggestion};
 pub use schema::{Field, FieldKind, Form, Inference, ResolvedField, Role, SchemaError};
 pub use value::FieldValue;
