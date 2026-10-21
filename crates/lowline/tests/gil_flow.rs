@@ -85,3 +85,75 @@ fn an_observed_field_of_several_values_is_one_clue() {
     assert_eq!(record.values["tags"], "a, b");
     assert!(record.sets.is_empty());
 }
+
+#[test]
+fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut schema = engine::schema("intake", &fields).unwrap();
+    let records: Vec<_> = (0..40)
+        .map(|i| {
+            let (customer, owner) = if i % 2 == 0 {
+                ("Acme", "kim")
+            } else {
+                ("Beta", "lee")
+            };
+            let values = saved(&[("customer", customer), ("owner", owner)]);
+            let settled = Draft::new().settle(["owner"], &values, SettledBy::Person);
+            engine::record(&format!("r{i}"), &fields, &values, &settled, i)
+        })
+        .collect();
+
+    // With no tuning, nothing is trusted.
+    assert_eq!(schema.attributes[1].key_threshold, None);
+    let tuning = engine::tune(&mut schema, &records, &engine::Tune::default());
+    assert!(schema.attributes[1].key_threshold.is_some());
+    assert_eq!(tuning.settled, 40);
+    assert!(tuning.attributes[0].key_promise.is_some());
+    assert_eq!(tuning.stale(&schema, 40), None);
+    assert!(tuning.stale(&schema, 44).is_some());
+
+    let mut decider = Decider::new(KeyMemory::default(), None);
+    decider.rebuild(&schema, &records);
+    let typed = BTreeMap::from([("customer".to_owned(), "Beta".to_owned())]);
+    let answer = &decider.answer(&schema, "new", &typed, &BTreeMap::new())[0];
+    let shown = engine::proposal(&fields[1], answer, None);
+    assert_eq!(shown.suggestion.map(|s| s.value), Some("lee".to_owned()));
+
+    // A schema put back from storage takes the same thresholds.
+    let mut restored = engine::schema("intake", &fields).unwrap();
+    tuning.apply(&mut restored);
+    assert_eq!(
+        restored.attributes[1].key_threshold,
+        schema.attributes[1].key_threshold
+    );
+}
+
+#[test]
+fn values_taken_from_suggestions_do_not_grade_the_suggestions() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut schema = engine::schema("intake", &fields).unwrap();
+    // Every value taken from a suggestion: none counts, so no threshold can be chosen on them.
+    let records: Vec<_> = (0..40)
+        .map(|i| {
+            let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
+            let mut draft = Draft::new();
+            draft.show("owner", lowline::Suggestion::new("kim"));
+            let settled = draft.settle(["owner"], &values, SettledBy::Person);
+            engine::record(&format!("r{i}"), &fields, &values, &settled, i)
+        })
+        .collect();
+    engine::tune(&mut schema, &records, &engine::Tune::default());
+    assert_eq!(schema.attributes[1].key_threshold, None);
+}

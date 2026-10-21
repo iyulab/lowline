@@ -41,7 +41,10 @@ All notable changes to this project are written here. The format follows
   - `gil` feature (crate `iyulab-gil` 0.7): `gil::schema(name, fields)` hands a resolved form to the Gil decider as
     its `Schema` — role, evidence, policy (`offer` → `Suggest`, `confirm` → `ConfirmRequired`), a closed choice
     field's choices as candidates, the class prefix and the values not to miss — checked as Gil checks one.
-    `gil::record(id, fields, saved, settlements, settled_at)` is a saved record as Gil keeps it — a decided field of
+    `gil::tune(schema, records, &Tune::default())` chooses each decided field's thresholds on the settled records —
+    counting only `gil::COUNTED` — sets them on the schema and gives the `Tuning` a host keeps and chooses again once
+    it is stale. The default `Tune` holds every band of answers to 0.8 over at least ten answers and trusts the
+    similar records layer only on a promise resting on thirty. `gil::record(id, fields, saved, settlements, settled_at)` is a saved record as Gil keeps it — a decided field of
     several values as a set, an observed one as one value (sorted, joined with `", "`), each settlement's kind and a
     check's probability. `gil::proposal(field, answer, allowed)` turns Gil's answer for a field into a `Proposal`: the trusted value, else
     the trusted class, else why not; `allowed` — the choices the host lets this person pick now — keeps a value

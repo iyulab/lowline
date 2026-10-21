@@ -63,6 +63,116 @@ fn attribute(resolved: &ResolvedField) -> gil::schema::Attribute {
     attribute
 }
 
+/// How a decided field's thresholds are chosen ([`tune`]). The default is the desktop app's: a precision of 0.8 —
+/// answering pays when a wrong value costs about five entries — over at least ten answers, the similar records layer
+/// trusted only where its promise rests on at least thirty answers, every band of answers held to the target.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tune {
+    pub target_precision: f64,
+    pub minimum_answered: usize,
+    /// How many independent answers the similar records layer's promise must rest on before it is trusted at all.
+    pub similar_minimum_answered: f64,
+    pub rule: gil::replay::ThresholdRule,
+}
+
+impl Default for Tune {
+    fn default() -> Self {
+        Self {
+            target_precision: 0.8,
+            minimum_answered: 10,
+            similar_minimum_answered: 30.0,
+            rule: gil::replay::ThresholdRule::EveryBand,
+        }
+    }
+}
+
+/// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
+/// answers the [`gil::tuning::Tuning`] that keeps them — what a host stores and puts back with `Tuning::apply`, and
+/// chooses again once `Tuning::stale` says so (including when there is no tuning yet). Precision is counted on
+/// [`COUNTED`] settlements only. Records are replayed in settlement order, through default memories — a host that
+/// answers with differently configured memories chooses with those instead.
+///
+/// A field that takes one value has its key and similar records thresholds chosen together; one that takes several,
+/// its key threshold. Where a replay chooses nothing, the field is not answered until enough records are settled.
+/// Key fields, typed thresholds and coarse thresholds are left as the schema holds them.
+pub fn tune(
+    schema: &mut gil::schema::Schema,
+    records: &[gil::schema::Record],
+    tune: &Tune,
+) -> gil::tuning::Tuning {
+    let mut ordered: Vec<gil::schema::Record> = records.to_vec();
+    ordered.sort_by_key(|r| r.settled_at);
+    let choice = gil::replay::Choice {
+        target_precision: tune.target_precision,
+        minimum_answered: tune.minimum_answered,
+        counting: Some(COUNTED),
+    };
+    let decided: Vec<(String, bool)> = schema
+        .attributes
+        .iter()
+        .filter(|a| a.role == gil::schema::AttributeRole::Decided)
+        .map(|a| (a.name.clone(), a.multiple))
+        .collect();
+
+    let mut promises = Vec::new();
+    for (name, multiple) in decided {
+        if multiple {
+            let key = gil::replay::select_key_threshold(
+                &mut gil::key_memory::KeyMemory::default(),
+                schema,
+                &name,
+                &ordered,
+                choice,
+            );
+            let attribute = attribute_mut(schema, &name);
+            attribute.key_threshold = key.chosen.map(|c| c.threshold);
+            continue;
+        }
+        let layers = gil::replay::select_layers_by_rule(
+            &mut gil::key_memory::KeyMemory::default(),
+            &mut gil::lexical_memory::LexicalMemory::default(),
+            schema,
+            &name,
+            &ordered,
+            choice,
+            tune.rule,
+        );
+        let attribute = attribute_mut(schema, &name);
+        attribute.key_threshold = layers.key.chosen.as_ref().map(|c| c.threshold);
+        let similar = layers
+            .memory
+            .chosen
+            .as_ref()
+            .filter(|c| c.promise_answered >= tune.similar_minimum_answered);
+        attribute.memory_threshold = similar.map(|c| c.threshold);
+        attribute.memory_floor = similar.and_then(|c| c.similarity_floor);
+        promises.push((name, layers));
+    }
+
+    let mut tuning = gil::tuning::Tuning::capture(schema, ordered.len(), tune.target_precision);
+    for (name, layers) in &promises {
+        tuning.promise(name, layers);
+    }
+    // A similar records threshold left untrusted promises nothing.
+    for tuned in &mut tuning.attributes {
+        if tuned.memory_threshold.is_none() {
+            tuned.memory_promise = None;
+        }
+    }
+    tuning
+}
+
+fn attribute_mut<'a>(
+    schema: &'a mut gil::schema::Schema,
+    name: &str,
+) -> &'a mut gil::schema::Attribute {
+    schema
+        .attributes
+        .iter_mut()
+        .find(|a| a.name == name)
+        .expect("an attribute of the schema")
+}
+
 /// A saved record as Gil keeps it: its values by field, a decided field that takes several as a set, an observed one
 /// that takes several as one value — its values sorted and joined with `", "`, the attribute [`schema`] made of it —
 /// and how each decided field was settled. `settled_at` is in 100-nanosecond ticks since the Unix epoch, UTC. Empty
