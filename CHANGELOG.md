@@ -15,7 +15,11 @@ All notable changes to this project are written here. The format follows
     shown for each field and whether it was turned down. `Draft::settle` turns the saved values into one
     `Settlement` per decided field — `Accept`, `Correct`, `Reject`, `Revert`, `Restore`, `Set`, `Enter`, `Fill`,
     and `AcceptOther` / `CorrectOther` for a value suggested by something other than the decider — so a value a
-    person took from a suggestion is never counted as one they typed on their own.
+    person took from a suggestion is never counted as one they typed on their own. `Draft::hold` holds a field's
+    answer back for a check: the value the person then settles is a `Check`, with the probability the field was drawn
+    with.
+  - `Recheck` — how often an answer that would be shown is drawn instead to be checked (one in twenty by default);
+    `Recheck::draw(proposal, roll)` takes the host's uniform roll and draws only a value the decider suggests.
   - `Form` — the fields a host hands over, in one shape whatever the form was written in: name, kind (`text`,
     `number`, `date`, `choice`, `flag`, `reference`), choices, and what the form declares about suggesting (role,
     policy, evidence, parent). `Form::resolve` works out the rest. With `Inference::ClosedChoices` (the default) a
@@ -40,6 +44,8 @@ All notable changes to this project are written here. The format follows
     `gil::proposal(field, answer, allowed)` turns Gil's answer for a field into a `Proposal`: the trusted value, else
     the trusted class, else why not; `allowed` — the choices the host lets this person pick now — keeps a value
     outside them from being suggested or moved to a nearby choice. `gil::decision(proposal, settlement)` is one
-    decision as Gil's `usage` counts it — answered or not, accepted, corrected, entered — with no values sent on. `Settlement::to_gil` gives each settlement in Gil's words; a set is settled and restored as a set. An observed
+    decision as Gil's `usage` counts it — answered or not, accepted, corrected, entered, checked — with no values sent
+    on. `gil::COUNTED` (`Enter`, `Check`) is what to count a field's precision on when its thresholds are chosen, so
+    values taken from the suggestions do not grade the suggestions. `Settlement::to_gil` gives each settlement in Gil's words; a set is settled and restored as a set. An observed
     field that takes several values is one attribute (Gil takes several only for a decided one); a field's parent is
     not handed over. With `serde`, Gil's types serialize too.

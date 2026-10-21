@@ -174,3 +174,77 @@ mod tests {
         );
     }
 }
+
+/// How often a decided field whose answer would be shown is drawn instead to be checked: its answer is held back
+/// ([`crate::Draft::hold`]) and the value the person settles counts for the field's precision as a value settled with
+/// nothing in view, weighted by one ÷ the rate. Without such draws, a field suggested well is settled mostly by taking
+/// the suggestion, and the values its precision is counted on — those settled with nothing in view — run out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Recheck {
+    /// The probability of a draw, fixed before it: above 0 and at most 1.
+    pub rate: f64,
+}
+
+impl Default for Recheck {
+    /// One answer in twenty held back.
+    fn default() -> Self {
+        Self { rate: 0.05 }
+    }
+}
+
+impl Recheck {
+    /// Whether to hold back the answer `proposal` shows, given `roll` — a number drawn uniformly from [0, 1) by the
+    /// host, for this field of this record, before looking at the answer. Answers the probability to hand to
+    /// [`crate::Draft::hold`] when it is drawn. Only a value the decider suggests is drawn: a class, a suggestion from
+    /// elsewhere and a field shown nothing are left as they are.
+    pub fn draw(&self, proposal: &Proposal, roll: f64) -> Option<f64> {
+        let checkable = proposal.suggestion.as_ref().is_some_and(|s| {
+            s.origin == crate::provenance::Origin::Decider && s.fit == crate::provenance::Fit::Exact
+        });
+        (checkable && self.rate > 0.0 && self.rate <= 1.0 && roll < self.rate).then_some(self.rate)
+    }
+}
+
+#[cfg(test)]
+mod recheck_tests {
+    use super::*;
+
+    fn kim() -> Proposal {
+        Proposal::suggest(
+            "owner",
+            Suggestion::new("kim"),
+            Some(Layer::Key),
+            Vec::new(),
+            Policy::Offer,
+        )
+    }
+
+    #[test]
+    fn draws_only_a_value_the_decider_would_show() {
+        let recheck = Recheck { rate: 0.1 };
+        assert_eq!(recheck.draw(&kim(), 0.05), Some(0.1));
+        assert_eq!(recheck.draw(&kim(), 0.1), None);
+        let class = Proposal::suggest(
+            "owner",
+            Suggestion::class("k"),
+            None,
+            Vec::new(),
+            Policy::Offer,
+        );
+        assert_eq!(recheck.draw(&class, 0.0), None);
+        let other = Proposal::suggest(
+            "owner",
+            Suggestion::other("kim"),
+            None,
+            Vec::new(),
+            Policy::Offer,
+        );
+        assert_eq!(recheck.draw(&other, 0.0), None);
+        assert_eq!(
+            recheck.draw(&Proposal::abstain("owner", Abstain::Unsure), 0.0),
+            None
+        );
+        assert_eq!(Recheck::default().rate, 0.05);
+    }
+}

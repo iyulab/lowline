@@ -5,6 +5,8 @@
 //! the [`Proposal`] the host shows ([`proposal`]).
 
 use crate::policy::Policy;
+#[cfg(test)]
+use crate::proposal::Recheck;
 use crate::proposal::{Abstain, Basis, Layer, Proposal};
 use crate::provenance::{Settlement, SettlementKind, Suggestion};
 use crate::schema::{FieldKind, ResolvedField, Role};
@@ -144,6 +146,15 @@ fn basis(candidate: &gil::decider::Candidate) -> Vec<Basis> {
         .collect()
 }
 
+/// The settlements a field's precision is counted on when its thresholds are chosen — Gil's
+/// [`gil::replay::Choice::counting`]: values settled with no suggestion in view, and checks ([`crate::Recheck`]).
+/// Counting every settlement would count values people took from the suggestions themselves, so a field whose
+/// suggestions are easily taken would promise more than it keeps.
+pub const COUNTED: &[gil::schema::SettlementKind] = &[
+    gil::schema::SettlementKind::Enter,
+    gil::schema::SettlementKind::Check,
+];
+
 /// One decision as Gil's [`gil::usage::usage`] counts it: the proposal shown for the field and how the field was
 /// settled, if it was. The answer is the decider's suggestion shown — a class counts as answered, and a value taken
 /// within it as accepted, as [`crate::Draft::settle`] settles it. A field settled with no proposal shown is a decision
@@ -161,7 +172,7 @@ pub fn decision<'a>(
             .map(|s| s.value.as_str()),
         settled: settlement.and_then(|s| s.value.as_deref()),
         settlement: settlement.map(|s| s.kind.into()),
-        probability: 1.0,
+        probability: settlement.and_then(|s| s.probability).unwrap_or(1.0),
         promise: None,
     }
 }
@@ -179,6 +190,7 @@ impl From<SettlementKind> for gil::schema::SettlementKind {
             SettlementKind::Fill => Self::Fill,
             SettlementKind::AcceptOther => Self::AcceptOther,
             SettlementKind::CorrectOther => Self::CorrectOther,
+            SettlementKind::Check => Self::Check,
         }
     }
 }
@@ -202,6 +214,7 @@ impl Settlement {
             SettlementKind::Set => Gil::set(values()),
             SettlementKind::Restore if self.values.is_some() => Gil::restore_set(values()),
             SettlementKind::Restore => Gil::restore(value),
+            SettlementKind::Check => Gil::check(value, self.probability.unwrap_or(1.0)),
         }
     }
 }
@@ -339,6 +352,7 @@ mod tests {
             SettlementKind::Fill,
             SettlementKind::AcceptOther,
             SettlementKind::CorrectOther,
+            SettlementKind::Check,
         ] {
             let gil: gil::schema::SettlementKind = kind.into();
             assert_eq!(format!("{gil:?}"), format!("{kind:?}"));
@@ -491,5 +505,28 @@ mod tests {
             (4, 3, 1, 1, 1)
         );
         assert_eq!(owner.entered_over_answer, 0);
+    }
+
+    #[test]
+    fn a_held_answer_settles_as_a_check_and_counts_as_one() {
+        let kim = proposal(&owner(None), &answer(vec![candidate("kim", true)]), None);
+        let probability = Recheck { rate: 0.25 }.draw(&kim, 0.1).unwrap();
+        let mut draft = Draft::new();
+        draft.hold("owner", probability);
+        let checked = draft.settle(
+            ["owner"],
+            &[("owner".to_owned(), FieldValue::from("kim"))].into(),
+            SettledBy::Person,
+        );
+        assert_eq!(
+            checked[0].to_gil(),
+            gil::schema::Settlement::check("kim", 0.25)
+        );
+
+        let counts = gil::usage::usage([decision(&kim, checked.first())]);
+        let owner = &counts["owner"];
+        assert_eq!((owner.checked, owner.checked_right), (1, 1));
+        assert_eq!(owner.judged_weight, 4.0);
+        assert!(COUNTED.contains(&gil::schema::SettlementKind::Check));
     }
 }

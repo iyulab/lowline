@@ -109,10 +109,14 @@ pub enum SettlementKind {
     AcceptOther,
     /// A person settled another value than one suggested by something other than the decider.
     CorrectOther,
+    /// A person settled a value while the decider's answer was held back, the field having been drawn to be checked
+    /// with a known probability ([`Draft::hold`]). Counted as one ÷ that probability values settled with nothing in
+    /// view, it keeps a field that is suggested well from running out of values to count its precision on.
+    Check,
 }
 
 /// The settlement of one decided field.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Settlement {
     pub field: String,
@@ -123,21 +127,30 @@ pub struct Settlement {
     pub values: Option<Vec<String>>,
     /// The suggestion that was in view, when one was.
     pub suggested: Option<String>,
+    /// For a check, the probability the field was drawn with; `None` otherwise.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub probability: Option<f64>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Track {
     shown: Option<Suggestion>,
     declined: bool,
+    /// The probability the field was drawn to be checked with, while its answer is held back.
+    #[cfg_attr(feature = "serde", serde(default))]
+    held: Option<f64>,
 }
 
 /// The account of one record while it is being written: what it held when opened, and for each field the
 /// suggestion last shown and whether it was turned down.
 ///
-/// The host reports what the person sees and does — [`Draft::show`], [`Draft::decline`] — and hands the saved
-/// values to [`Draft::settle`]. Typing needs no report: the saved value says what was typed.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The host reports what the person sees and does — [`Draft::show`], [`Draft::decline`], [`Draft::hold`] — and hands
+/// the saved values to [`Draft::settle`]. Typing needs no report: the saved value says what was typed.
+#[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Draft {
     opened: BTreeMap<String, FieldValue>,
@@ -170,6 +183,29 @@ impl Draft {
             track.declined = false;
         }
         track.shown = Some(suggestion);
+        track.held = None;
+    }
+
+    /// The field was drawn to be checked, with `probability` fixed before the draw ([`crate::Recheck`]): its answer is
+    /// held back, and the value the person settles is a [`SettlementKind::Check`]. A suggestion shown afterwards ends
+    /// the check. A field drawn because its answer looked doubtful is not a check — the draw is the host's roll alone.
+    ///
+    /// # Panics
+    /// When `probability` is not above 0 and at most 1.
+    pub fn hold(&mut self, field: &str, probability: f64) {
+        assert!(
+            probability > 0.0 && probability <= 1.0,
+            "a check is drawn with a probability above 0 and at most 1"
+        );
+        let track = self.fields.entry(field.to_owned()).or_default();
+        track.shown = None;
+        track.declined = false;
+        track.held = Some(probability);
+    }
+
+    /// The probability the field was drawn to be checked with, while its answer is held back.
+    pub fn held(&self, field: &str) -> Option<f64> {
+        self.fields.get(field).and_then(|track| track.held)
     }
 
     /// The person turned down the suggestion in view for the field. Returns false, changing nothing, when no
@@ -207,6 +243,7 @@ impl Draft {
     /// | a suggestion | another value | [`Correct`](SettlementKind::Correct) ([`CorrectOther`](SettlementKind::CorrectOther)) |
     /// | nothing | the value it was opened with | [`Restore`](SettlementKind::Restore) |
     /// | nothing | any other value | [`Enter`](SettlementKind::Enter) |
+    /// | nothing, the answer held back for a check | any value but the one it was opened with | [`Check`](SettlementKind::Check), with the probability |
     /// | any | empty, having held a value | [`Revert`](SettlementKind::Revert) |
     /// | a suggestion turned down | empty | [`Reject`](SettlementKind::Reject) |
     ///
@@ -240,6 +277,10 @@ impl Draft {
             SettledBy::Application => None,
         };
         let declined = by == SettledBy::Person && track.is_some_and(|t| t.declined);
+        let held = match by {
+            SettledBy::Person => track.and_then(|t| t.held),
+            SettledBy::Application => None,
+        };
         let suggested = in_view.map(|s| s.value.clone());
         let settlement = |kind, value, values| Settlement {
             field: field.to_owned(),
@@ -247,6 +288,7 @@ impl Draft {
             value,
             values,
             suggested: suggested.clone(),
+            probability: None,
         };
 
         let Some(saved) = saved else {
@@ -271,6 +313,12 @@ impl Draft {
             }
             FieldValue::One(value) => value,
         };
+        if let Some(probability) = held.filter(|_| !restored) {
+            return Some(Settlement {
+                probability: Some(probability),
+                ..settlement(SettlementKind::Check, Some(value.clone()), None)
+            });
+        }
         let kind = match (by, in_view) {
             _ if restored => SettlementKind::Restore,
             (SettledBy::Application, _) => SettlementKind::Fill,
@@ -520,5 +568,30 @@ mod tests {
             serde_json::to_string(&SettledBy::Person).unwrap(),
             r#""person""#
         );
+    }
+
+    #[test]
+    fn a_value_settled_while_the_answer_was_held_back_is_a_check() {
+        let mut draft = Draft::new();
+        draft.hold("f", 0.2);
+        let settled = one(&draft, "x").unwrap();
+        assert_eq!((settled.kind, settled.probability), (Check, Some(0.2)));
+        assert_eq!(settled.suggested, None);
+
+        // Showing a suggestion afterwards ends the check; the application never checks.
+        draft.show("f", Suggestion::new("x"));
+        assert_eq!(kind(&draft, "x"), Some(Accept));
+        let mut held = Draft::new();
+        held.hold("f", 0.2);
+        let filled = held.settle(["f"], &saved([("f", "x".into())]), SettledBy::Application);
+        assert_eq!(filled[0].kind, Fill);
+    }
+
+    #[test]
+    fn a_held_field_saved_as_it_was_opened_is_restored() {
+        let mut draft = Draft::reopen([("f", FieldValue::from("x"))]);
+        draft.hold("f", 0.2);
+        assert_eq!(kind(&draft, "x"), Some(Restore));
+        assert_eq!(draft.held("f"), Some(0.2));
     }
 }
