@@ -8,6 +8,10 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- A conformance test against the Gil decider's own fixture (computed with `iyulab-gil` 0.7.0): its 24 settlement
+  cases — what a host reported for a field, the value saved, who saved it — give the settlement, the record line and
+  the usage counts it holds, and its 18 boundaries of a tuning going stale fall where it puts them.
+
 - `lowline` crate (Rust, no I/O):
   - `Policy` — `off`, `offer` or `confirm` per field: whether it is suggested for, and whether the host may put the
     suggestion in without a person taking it.
