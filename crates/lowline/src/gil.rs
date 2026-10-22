@@ -105,9 +105,51 @@ impl Default for Tune {
     }
 }
 
+/// What [`tune`] chose: the tuning the decider answers with — what a host stores and puts back — and how each decided
+/// field's replays went, for a host to show how far the records have come.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct Tuned {
+    pub tuning: gil::tuning::Tuning,
+    pub report: Vec<FieldReport>,
+}
+
+/// How one decided field's replays went when its thresholds were chosen. Each choice is the threshold with what the
+/// replay saw at it — its precision, the share of lookups answered, the answers and lookups — and the precision to
+/// expect of the next answers (`promise`).
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct FieldReport {
+    pub field: String,
+    /// How many lookups the replay of values settled alongside made: one per record settled with a value for the
+    /// field, after the first.
+    pub lookups: usize,
+    /// The threshold at which values settled alongside answer; `None` while none was right often enough.
+    pub key: Option<gil::replay::ThresholdChoice>,
+    /// When `key` is `None`, the closest the replay came: the most precise threshold that still gathered enough
+    /// answers; `None` when too few were answered at any threshold to say.
+    pub closest: Option<gil::replay::ThresholdChoice>,
+    /// The fields chosen to key it; `None` when every field it rests on does.
+    pub key_fields: Option<Vec<String>>,
+    /// For a free text field, the threshold for one, two, … characters typed — `None` where none was right often
+    /// enough; `None` for any other field.
+    pub typed: Option<Vec<Option<gil::replay::ThresholdChoice>>>,
+    /// For a field with a coarse level, the threshold at which its class is suggested where its value is not.
+    pub coarse: Option<gil::replay::ThresholdChoice>,
+    /// The threshold at which the similar records layer answers the lookups values settled alongside leave, whether
+    /// trusted or not; see `similar_offered`.
+    pub similar: Option<gil::replay::ThresholdChoice>,
+    /// Whether the similar records layer is offered: its promise rests on at least [`Tune::similar_minimum_answered`]
+    /// answers.
+    pub similar_offered: bool,
+}
+
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
-/// answers the [`gil::tuning::Tuning`] that keeps them — what a host stores and puts back with `Tuning::apply`, and
-/// chooses again once `Tuning::stale` says so (including when there is no tuning yet). `fields` is the resolved form
+/// answers the [`Tuned`] that keeps them — the [`gil::tuning::Tuning`] a host stores and puts back with
+/// `Tuning::apply` and chooses again once `Tuning::stale` says so (including when there is no tuning yet), with how
+/// each field's replays went. `fields` is the resolved form
 /// the schema was made from. Precision is counted on [`COUNTED`] settlements only. Records are replayed in settlement
 /// order, through default memories — a host that answers with differently configured memories chooses with those
 /// instead.
@@ -130,7 +172,7 @@ pub fn tune(
     fields: &[ResolvedField],
     records: &[gil::schema::Record],
     tune: &Tune,
-) -> gil::tuning::Tuning {
+) -> Tuned {
     let mut ordered: Vec<gil::schema::Record> = records.to_vec();
     ordered.sort_by_key(|r| r.settled_at);
     let choice = gil::replay::Choice {
@@ -146,6 +188,7 @@ pub fn tune(
         .collect();
 
     let mut promises = Vec::new();
+    let mut report = Vec::new();
     for (name, multiple) in decided {
         // Chosen afresh: what an earlier choice set is not evidence for this one.
         {
@@ -178,10 +221,23 @@ pub fn tune(
         let keyed = gil::replay::select_key_fields(schema, &name, &ordered, choice, typed_longest);
         {
             let attribute = attribute_mut(schema, &name);
-            attribute.key_fields = keyed.key_fields;
+            attribute.key_fields = keyed.key_fields.clone();
             attribute.key_threshold = keyed.chosen.chosen.as_ref().map(|c| c.threshold);
         }
+        let mut field = FieldReport {
+            field: name.clone(),
+            lookups: keyed.chosen.lookups,
+            key: keyed.chosen.chosen.clone(),
+            closest: None,
+            key_fields: keyed.key_fields.clone(),
+            typed: None,
+            coarse: None,
+            similar: None,
+            similar_offered: false,
+        };
         if multiple {
+            field.closest = closest(&keyed.chosen);
+            report.push(field);
             continue;
         }
 
@@ -201,6 +257,11 @@ pub fn tune(
             attribute.memory_threshold = similar.map(|c| c.threshold);
             attribute.memory_floor = similar.and_then(|c| c.similarity_floor);
         }
+        field.lookups = layers.key.lookups;
+        field.key = layers.key.chosen.clone();
+        field.closest = closest(&layers.key);
+        field.similar = layers.memory.chosen.clone();
+        field.similar_offered = similar.is_some();
 
         if typed_longest > 0 {
             let typed = gil::replay::select_typed_key_thresholds(
@@ -212,6 +273,7 @@ pub fn tune(
                 typed_longest,
             );
             attribute_mut(schema, &name).typed_key_thresholds = Some(typed.thresholds());
+            field.typed = Some(typed.by_length.iter().map(|r| r.chosen.clone()).collect());
         }
 
         if schema
@@ -235,7 +297,9 @@ pub fn tune(
             coarse.key_threshold = classed.key.chosen.as_ref().map(|c| c.threshold);
             coarse.memory_threshold = similar.map(|c| c.threshold);
             coarse.memory_floor = similar.and_then(|c| c.similarity_floor);
+            field.coarse = classed.key.chosen.clone();
         }
+        report.push(field);
         promises.push((name, layers));
     }
 
@@ -249,7 +313,16 @@ pub fn tune(
             tuned.memory_promise = None;
         }
     }
-    tuning
+    Tuned { tuning, report }
+}
+
+/// The closest a replay that chose nothing came; `None` when it chose one.
+fn closest(replay: &gil::replay::ThresholdReplay) -> Option<gil::replay::ThresholdChoice> {
+    replay
+        .chosen
+        .is_none()
+        .then(|| replay.most_precise.clone())
+        .flatten()
 }
 
 /// The similar records layer's choice, when its promise rests on enough answers to be trusted.

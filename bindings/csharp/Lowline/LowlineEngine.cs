@@ -101,6 +101,25 @@ public sealed unsafe class LowlineEngine : IDisposable
         }
     }
 
+    /// <summary>How each decided field's replays went when the thresholds were chosen, in the form's order — kept with
+    /// the tuning, so an engine restored from storage reports the same; <c>null</c> while none were chosen or restored.
+    /// </summary>
+    public IReadOnlyList<FieldReport>? Report
+    {
+        get
+        {
+            nuint length;
+            string json;
+            using (Read())
+            {
+                Native.Check(Native.EngineReport(_handle, &length));
+                json = Native.Result(length);
+            }
+
+            return JsonSerializer.Deserialize(json, LowlineJson.Default.ListFieldReport);
+        }
+    }
+
     /// <summary>Chooses the decided fields' thresholds again on the settled records — all of them, as the host stores
     /// them — and learns them; returns the tuning to store.</summary>
     public string Tune(IEnumerable<string> records)

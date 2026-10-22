@@ -14,11 +14,7 @@ fn engine() -> Engine {
     let mut owner = Field::choice("owner", ["kim", "lee"]);
     owner.role = Some(lowline::Role::Decided);
     let form = Form {
-        fields: vec![
-            Field::new("customer", FieldKind::Text),
-            owner,
-            tags,
-        ],
+        fields: vec![Field::new("customer", FieldKind::Text), owner, tags],
     };
     Engine::new(
         "intake",

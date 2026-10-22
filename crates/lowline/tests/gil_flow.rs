@@ -112,10 +112,16 @@ fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
         None
     );
 
-    let tuning = intake.tune(&records).clone();
+    let tuned = intake.tune(&records).clone();
+    let tuning = &tuned.tuning;
     assert!(intake.schema().attributes[1].key_threshold.is_some());
     assert_eq!(tuning.settled, 40);
     assert!(tuning.attributes[0].key_promise.is_some());
+    // How the replay went, for the host to show.
+    let report = &tuned.report[0];
+    assert_eq!(report.field, "owner");
+    assert!(report.key.as_ref().is_some_and(|k| k.precision >= 0.8));
+    assert_eq!(report.lookups, 39);
     assert_eq!(intake.stale(), None);
     let shown = intake.propose("new", &typed, &BTreeMap::new());
     assert_eq!(
@@ -141,7 +147,8 @@ fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
     // An engine started again from storage — its records, then its tuning — answers the same, the tuning standing.
     let mut restarted = Engine::new("intake", fields, engine::Tune::default()).unwrap();
     restarted.learn(&records);
-    restarted.restore(Some(tuning));
+    restarted.restore(Some(tuned.clone()));
+    assert_eq!(restarted.report(), intake.report());
     assert_eq!(restarted.stale(), None);
     assert_eq!(
         restarted.schema().attributes[1].key_threshold,

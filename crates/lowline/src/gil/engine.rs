@@ -8,7 +8,7 @@ use gil::lexical_memory::LexicalMemory;
 use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
-use super::{Tune, proposal, record, schema, tune};
+use super::{FieldReport, Tune, Tuned, proposal, record, schema, tune};
 use crate::proposal::Proposal;
 use crate::provenance::{Draft, SettledBy, Settlement, SettlementKind};
 use crate::schema::{ResolvedField, Role};
@@ -55,7 +55,7 @@ pub struct Engine {
     schema: Schema,
     decider: Decider,
     tune: Tune,
-    tuning: Option<Tuning>,
+    tuned: Option<Tuned>,
     learned: BTreeSet<String>,
 }
 
@@ -81,7 +81,7 @@ impl Engine {
             schema,
             decider: Decider::new(KeyMemory::default(), Some(LexicalMemory::default())),
             tune,
-            tuning: None,
+            tuned: None,
             learned: BTreeSet::new(),
         })
     }
@@ -98,7 +98,13 @@ impl Engine {
 
     /// The tuning the thresholds come from, if one was chosen or restored.
     pub fn tuning(&self) -> Option<&Tuning> {
-        self.tuning.as_ref()
+        self.tuned.as_ref().map(|t| &t.tuning)
+    }
+
+    /// How each decided field's replays went when the thresholds were chosen — kept with the tuning, so an engine
+    /// restored from storage says the same; `None` while none were chosen or restored.
+    pub fn report(&self) -> Option<&[FieldReport]> {
+        self.tuned.as_ref().map(|t| t.report.as_slice())
     }
 
     /// How many records the engine has learned: one per record id, a record learned again replacing the earlier one.
@@ -116,19 +122,20 @@ impl Engine {
     /// Puts back a tuning the host stored, setting its thresholds on the schema; `None` leaves the engine untuned.
     /// Whether it still stands is [`Engine::stale`]'s to say — restore it after learning the stored records, so that it
     /// is judged on them.
-    pub fn restore(&mut self, tuning: Option<Tuning>) {
-        if let Some(tuning) = &tuning {
-            tuning.apply(&mut self.schema);
+    pub fn restore(&mut self, tuned: Option<Tuned>) {
+        if let Some(tuned) = &tuned {
+            tuned.tuning.apply(&mut self.schema);
         }
-        self.tuning = tuning;
+        self.tuned = tuned;
     }
 
     /// Why the thresholds should be chosen again, or `None` while they stand: none chosen yet, or Gil's reason — another
     /// version of it, a changed form, or the learned records grown or shrunk by a tenth since the choice.
     pub fn stale(&self) -> Option<Stale> {
-        match &self.tuning {
+        match &self.tuned {
             None => Some(Stale::Untuned),
-            Some(tuning) => tuning
+            Some(tuned) => tuned
+                .tuning
                 .stale(&self.schema, self.settled())
                 .map(Stale::Tuning),
         }
@@ -137,18 +144,18 @@ impl Engine {
     /// Chooses the decided fields' thresholds again on the settled `records` — all of them, as the host stores them —
     /// sets them on the schema and answers the tuning for the host to store. The records are learned as well, so an
     /// engine handed them here needs no [`Engine::learn`] for them.
-    pub fn tune(&mut self, records: &[Record]) -> &Tuning {
+    pub fn tune(&mut self, records: &[Record]) -> &Tuned {
         self.learn(records);
-        let tuning = self.choose(records);
-        self.restore(Some(tuning));
-        self.tuning.as_ref().expect("restored just now")
+        let tuned = self.choose(records);
+        self.restore(Some(tuned));
+        self.tuned.as_ref().expect("restored just now")
     }
 
     /// The tuning [`Engine::tune`] would choose on `records`, leaving the engine as it is — for a host that chooses
     /// while the engine goes on answering (it reads the engine only), then puts the result in with [`Engine::restore`].
     /// The records should be the ones the engine has learned: the tuning stands for as many records as it was chosen
     /// on.
-    pub fn choose(&self, records: &[Record]) -> Tuning {
+    pub fn choose(&self, records: &[Record]) -> Tuned {
         let mut schema = self.schema.clone();
         tune(&mut schema, &self.fields, records, &self.tune)
     }

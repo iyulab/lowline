@@ -134,9 +134,23 @@ fn a_host_round_through_the_abi() {
     assert_eq!(result(len), json!("untuned"));
     ok(unsafe { lowline_engine_tune(engine, s(&records), &mut len) });
     let tuning = result(len);
-    assert_eq!(tuning["settled"], 40);
+    assert_eq!(tuning["tuning"]["settled"], 40);
+    assert_eq!(tuning["report"][0]["field"], "owner");
     ok(unsafe { lowline_engine_stale(engine, &mut len) });
     assert_eq!(result(len), Value::Null);
+
+    ok(unsafe { lowline_engine_report(engine, &mut len) });
+    let report = result(len);
+    assert_eq!(report[0]["field"], "owner");
+    assert!(report[0]["key"]["precision"].as_f64().unwrap() >= 0.8);
+
+    // A tuning stored before the replays were kept with it is chosen again, as one never chosen.
+    let older = crate::engine();
+    ok(unsafe { lowline_engine_learn(older, s(&records)) });
+    ok(unsafe { lowline_engine_restore(older, s(&tuning["tuning"].to_string())) });
+    ok(unsafe { lowline_engine_stale(older, &mut len) });
+    assert_eq!(result(len), json!("untuned"));
+    unsafe { lowline_engine_free(older) };
 
     // A record being written: the owner is suggested, and the host may put it in.
     let shown = propose(engine, &json!({ "customer": "Beta" }), "");
@@ -191,7 +205,7 @@ fn a_host_round_through_the_abi() {
     );
     ok(unsafe { lowline_engine_choose(engine, s(&all), &mut len) });
     let chosen = result(len);
-    assert_eq!(chosen["settled"], 41);
+    assert_eq!(chosen["tuning"]["settled"], 41);
     ok(unsafe { lowline_engine_stale(engine, &mut len) });
     assert_eq!(
         result(len),

@@ -91,7 +91,11 @@ public sealed class EngineTests
 
         var tuning = engine.Tune(stored.Select(r => r.Json));
         engine.Stale.Should().BeNull();
-        JsonNode.Parse(tuning)!["settled"]!.GetValue<int>().Should().Be(40);
+        JsonNode.Parse(tuning)!["tuning"]!["settled"]!.GetValue<int>().Should().Be(40);
+        var report = engine.Report!.Should().ContainSingle().Subject;
+        report.Field.Should().Be("owner");
+        report.Key!.Precision.Should().BeGreaterThanOrEqualTo(0.8);
+        report.Lookups.Should().Be(39);
 
         var shown = engine.Propose("new", new Dictionary<string, FieldValue> { ["customer"] = "Beta" });
         shown.Should().ContainSingle();

@@ -20,6 +20,12 @@ All notable changes to this project are written here. The format follows
   was settled by a person with nothing in view; a check is refused (it is drawn while a record is written). Also
   `lowline_engine_record`, `LowlineEngine.Record` and the `SettlementKind` enum.
 
+- How each decided field's replays went: `Engine::report` (and `lowline_engine_report`, `LowlineEngine.Report`) gives,
+  per field, the threshold chosen with the precision, answer rate, answers, lookups and promise the replay saw at it —
+  or, when none was right often enough, the closest it came — with the fields that key it, its thresholds for each
+  length typed, its coarse level's and the similar records layer's (and whether that layer is offered). It is kept
+  with the tuning, so an engine restored from storage reports the same.
+
 ### Changed
 
 - `tune` chooses every threshold the decider answers with, in the order a suggestion leans on them: how readily each
@@ -28,7 +34,10 @@ All notable changes to this project are written here. The format follows
   records held to the same gate as the value's). Before, only the key and similar records thresholds were chosen, so a
   field named after the very thing decided could be outweighed by a broad one, typing answered at the untyped
   threshold, and a declared coarse level was never offered. `gil::tune` takes the resolved form as well (breaking).
-- The C ABI is version 2 (`lowline_engine_propose_field`, `lowline_engine_record`).
+- What `tune` hands back to store is `Tuned` — the tuning and the report together (`{"tuning": …, "report": […]}`).
+  A tuning stored by 0.1 (Gil's tuning alone) is restored as none, so the thresholds are chosen again on the next tune
+  (breaking: `gil::tune` and `Engine::choose` return `Tuned`, `Engine::restore` takes it).
+- The C ABI is version 2 (`lowline_engine_propose_field`, `lowline_engine_record`, `lowline_engine_report`).
 
 ## [0.1.0] - 2026-10-23
 

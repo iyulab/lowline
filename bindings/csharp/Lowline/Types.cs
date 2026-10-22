@@ -242,6 +242,54 @@ public sealed record Proposal
     [JsonPropertyName("asks")] public IReadOnlyList<IReadOnlyList<string>> Asks { get => field ?? []; init; } = [];
 }
 
+/// <summary>A threshold chosen on a replay of the settled records, and what the replay saw at it: the share of answers
+/// that matched (<see cref="Precision"/>), the share of lookups answered (<see cref="AnswerRate"/>), the answers and
+/// lookups, and the precision to expect of the next answers (<see cref="Promise"/>, resting on
+/// <see cref="PromiseAnswered"/> independent answers).</summary>
+public sealed record ThresholdChoice(
+    [property: JsonPropertyName("threshold")] double Threshold,
+    [property: JsonPropertyName("precision")] double Precision,
+    [property: JsonPropertyName("answer_rate")] double AnswerRate,
+    [property: JsonPropertyName("answered")] int Answered,
+    [property: JsonPropertyName("lookups")] int Lookups,
+    [property: JsonPropertyName("promise")] double Promise,
+    [property: JsonPropertyName("promise_answered")] double PromiseAnswered);
+
+/// <summary>How one decided field's replays went when its thresholds were chosen
+/// (<see cref="LowlineEngine.Report"/>).</summary>
+public sealed record FieldReport
+{
+    /// <summary>The decided field.</summary>
+    [JsonPropertyName("field")] public required string Field { get; init; }
+
+    /// <summary>How many lookups the replay of values settled alongside made.</summary>
+    [JsonPropertyName("lookups")] public int Lookups { get; init; }
+
+    /// <summary>The threshold at which values settled alongside answer; <c>null</c> while none was right often enough.
+    /// </summary>
+    [JsonPropertyName("key")] public ThresholdChoice? Key { get; init; }
+
+    /// <summary>When <see cref="Key"/> is <c>null</c>, the closest the replay came; <c>null</c> when too few were
+    /// answered at any threshold to say.</summary>
+    [JsonPropertyName("closest")] public ThresholdChoice? Closest { get; init; }
+
+    /// <summary>The fields chosen to key it; <c>null</c> when every field it rests on does.</summary>
+    [JsonPropertyName("keyFields")] public IReadOnlyList<string>? KeyFields { get; init; }
+
+    /// <summary>For a free text field, the threshold for one, two, … characters typed (<c>null</c> where none was
+    /// right often enough); <c>null</c> for any other field.</summary>
+    [JsonPropertyName("typed")] public IReadOnlyList<ThresholdChoice?>? Typed { get; init; }
+
+    /// <summary>For a field with a coarse level, the threshold at which its class is suggested.</summary>
+    [JsonPropertyName("coarse")] public ThresholdChoice? Coarse { get; init; }
+
+    /// <summary>The threshold at which the similar records layer answers, trusted or not.</summary>
+    [JsonPropertyName("similar")] public ThresholdChoice? Similar { get; init; }
+
+    /// <summary>Whether the similar records layer is offered for the field.</summary>
+    [JsonPropertyName("similarOffered")] public bool SimilarOffered { get; init; }
+}
+
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the
 /// record itself as one line of JSON — what <see cref="LowlineEngine.Learn"/> reads back.</summary>
 public sealed record SettledRecord(string Id, DateTimeOffset SettledAt, string Json);
@@ -258,5 +306,6 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]
 [JsonSerializable(typeof(Dictionary<string, IReadOnlyList<string>>))]
 [JsonSerializable(typeof(Dictionary<string, SettlementKind>))]
+[JsonSerializable(typeof(List<FieldReport>))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class LowlineJson : JsonSerializerContext;

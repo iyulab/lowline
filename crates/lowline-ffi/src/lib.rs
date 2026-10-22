@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use gil::decider::ExternalCandidate;
 use gil::schema::Record;
 use gil::tuning::Tuning;
-use lowline::gil::{Engine, Tune};
+use lowline::gil::{Engine, Tune, Tuned};
 use lowline::{Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy, SettlementKind};
 use serde::Deserialize;
 
@@ -300,8 +300,9 @@ pub unsafe extern "C" fn lowline_engine_learn(
     }
 }
 
-/// Puts back a tuning the host stored — Gil's tuning as JSON — setting its thresholds on the engine's schema. Empty
-/// text leaves the engine untuned. Restore it after learning the stored records, so that whether it still stands is
+/// Puts back a tuning the host stored — what [`lowline_engine_tune`] handed back: Gil's tuning and how each field's
+/// replays went, as JSON — setting its thresholds on the engine's schema. Empty text leaves the engine untuned, and so
+/// does a tuning stored by an engine before 0.2 (Gil's tuning alone), which is then chosen again. Restore it after learning the stored records, so that whether it still stands is
 /// judged on them.
 ///
 /// # Safety
@@ -315,12 +316,15 @@ pub unsafe extern "C" fn lowline_engine_restore(
     unsafe {
         changing(engine, |engine| {
             let tuning = text(tuning, "tuning")?;
-            let tuning: Option<Tuning> = if tuning.trim().is_empty() {
+            let tuned: Option<Tuned> = if tuning.trim().is_empty() {
+                None
+            } else if serde_json::from_str::<Tuning>(tuning).is_ok() {
+                // A tuning stored before the replays were kept with it: chosen again, as one never chosen.
                 None
             } else {
                 Some(json(tuning, "tuning")?)
             };
-            engine.restore(tuning);
+            engine.restore(tuned);
             Ok(())
         })
     }
@@ -611,5 +615,22 @@ pub unsafe extern "C" fn lowline_engine_record(
             .record(id, &saved, &settled, settled_at)
             .map_err(input)?;
         unsafe { set_result(written(&record), result_len) }
+    })
+}
+
+/// How each decided field's replays went when the thresholds were chosen, as JSON — an array of reports in the form's
+/// order, each the field's thresholds with what the replay saw at them — or `null` while none were chosen or restored.
+///
+/// # Safety
+/// `engine` is a live handle; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_report(
+    engine: *const LowlineEngine,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        unsafe { set_result(written(&engine.report()), result_len) }
     })
 }
