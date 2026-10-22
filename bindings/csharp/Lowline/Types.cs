@@ -82,6 +82,43 @@ public enum SettledBy
     Application,
 }
 
+/// <summary>How a decided field was settled when its record was saved — what a record settled elsewhere says of each
+/// field (<see cref="LowlineEngine.Record"/>). The decider counts its precision on the values a person settled with
+/// nothing in view.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SettlementKind>))]
+public enum SettlementKind
+{
+    /// <summary>The suggested value was taken as it was.</summary>
+    Accept,
+
+    /// <summary>A value other than the suggested one was settled while the suggestion was in view.</summary>
+    Correct,
+
+    /// <summary>The suggestion was turned down and the field left empty.</summary>
+    Reject,
+
+    /// <summary>The field held a value when the record was opened and was emptied.</summary>
+    Revert,
+
+    /// <summary>The value the record held when it was opened, saved again unchanged with no suggestion in view.</summary>
+    Restore,
+
+    /// <summary>The values of a field that takes several were settled.</summary>
+    Set,
+
+    /// <summary>A person settled a value with no suggestion in view.</summary>
+    Enter,
+
+    /// <summary>The application settled a value on its own — an import, another program's value.</summary>
+    Fill,
+
+    /// <summary>A person kept a value suggested by something other than the decider.</summary>
+    AcceptOther,
+
+    /// <summary>A person settled another value than one suggested by something other than the decider.</summary>
+    CorrectOther,
+}
+
 /// <summary>Which part of the records a suggestion came from.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<Layer>))]
 public enum Layer
@@ -220,5 +257,6 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(IReadOnlyList<Proposal>))]
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]
 [JsonSerializable(typeof(Dictionary<string, IReadOnlyList<string>>))]
+[JsonSerializable(typeof(Dictionary<string, SettlementKind>))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class LowlineJson : JsonSerializerContext;

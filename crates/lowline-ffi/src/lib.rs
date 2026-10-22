@@ -30,7 +30,7 @@ use gil::decider::ExternalCandidate;
 use gil::schema::Record;
 use gil::tuning::Tuning;
 use lowline::gil::{Engine, Tune};
-use lowline::{Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy};
+use lowline::{Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy, SettlementKind};
 use serde::Deserialize;
 
 pub use support::LowlineStr;
@@ -576,4 +576,40 @@ pub unsafe extern "C" fn lowline_engine_settle(
             set_result(written(&record), result_len)
         })
     }
+}
+
+/// The record to store for `id`, settled elsewhere — for a host that builds the engine's store from records kept
+/// somewhere of its own: its `saved` values (as [`lowline_engine_propose`] reads them), `settled`, a JSON object of
+/// how each decided field was settled (`"Accept"`, `"Correct"`, `"Enter"`, `"Fill"`, … — empty text for none; a decided
+/// field left out was settled by a person with nothing in view) and `settled_at`. One Gil record as JSON, the line
+/// [`lowline_engine_learn`] reads; nothing is learned. Refused for a value or settlement the form does not hold, and for
+/// a check (settle that through a draft).
+///
+/// # Safety
+/// `engine` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_record(
+    engine: *const LowlineEngine,
+    id: LowlineStr,
+    saved: LowlineStr,
+    settled: LowlineStr,
+    settled_at: i64,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let id = unsafe { text(id, "id") }?;
+        let saved: BTreeMap<String, FieldValue> = json(unsafe { text(saved, "saved") }?, "saved")?;
+        let settled = unsafe { text(settled, "settled") }?;
+        let settled: BTreeMap<String, SettlementKind> = if settled.trim().is_empty() {
+            BTreeMap::new()
+        } else {
+            json(settled, "settled")?
+        };
+        let record = engine
+            .record(id, &saved, &settled, settled_at)
+            .map_err(input)?;
+        unsafe { set_result(written(&record), result_len) }
+    })
 }

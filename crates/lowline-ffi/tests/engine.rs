@@ -417,3 +417,42 @@ fn a_judgement_the_records_asked_for_is_offered_back() {
     );
     unsafe { lowline_engine_free(engine) };
 }
+
+#[test]
+fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
+    let engine = engine();
+    let saved = json!({ "customer": "Acme", "owner": "kim" }).to_string();
+    let mut len = 0;
+    ok(unsafe {
+        lowline_engine_record(
+            engine,
+            s("r1"),
+            s(&saved),
+            s(r#"{"owner":"Accept"}"#),
+            7,
+            &mut len,
+        )
+    });
+    let line = copied(lowline_last_result);
+    let read: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(read["settlements"]["owner"], "Accept");
+    assert_eq!(read["settled_at"], 7);
+    // Nothing was learned; the line is what learning reads.
+    assert_eq!(unsafe { lowline_engine_settled(engine) }, 0);
+    ok(unsafe { lowline_engine_learn(engine, s(&line)) });
+    assert_eq!(unsafe { lowline_engine_settled(engine) }, 1);
+
+    let status = unsafe {
+        lowline_engine_record(
+            engine,
+            s("r2"),
+            s(&saved),
+            s(r#"{"customer":"Enter"}"#),
+            8,
+            &mut len,
+        )
+    };
+    assert_ne!(status, LOWLINE_OK);
+    assert!(last_error().contains("does not decide"), "{}", last_error());
+    unsafe { lowline_engine_free(engine) };
+}

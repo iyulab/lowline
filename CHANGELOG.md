@@ -14,6 +14,12 @@ All notable changes to this project are written here. The format follows
   `lowline_engine_propose_field`, `LowlineEngine.ProposeField` and `LowlineForms.ProposeFieldAsync`. `Tune.typedLongest`
   (3 by default; 0 chooses none) bounds the lengths.
 
+- Records settled elsewhere: `Engine::record` makes the line to store for a record kept somewhere of the host's own
+  (files, an existing database) — its values, how each decided field was settled, and when — without learning it, so a
+  host builds the engine's store from its own records and hands the lines to `learn` together. A decided field left out
+  was settled by a person with nothing in view; a check is refused (it is drawn while a record is written). Also
+  `lowline_engine_record`, `LowlineEngine.Record` and the `SettlementKind` enum.
+
 ### Changed
 
 - `tune` chooses every threshold the decider answers with, in the order a suggestion leans on them: how readily each
@@ -22,7 +28,7 @@ All notable changes to this project are written here. The format follows
   records held to the same gate as the value's). Before, only the key and similar records thresholds were chosen, so a
   field named after the very thing decided could be outweighed by a broad one, typing answered at the untyped
   threshold, and a declared coarse level was never offered. `gil::tune` takes the resolved form as well (breaking).
-- The C ABI is version 2 (`lowline_engine_propose_field`).
+- The C ABI is version 2 (`lowline_engine_propose_field`, `lowline_engine_record`).
 
 ## [0.1.0] - 2026-10-23
 

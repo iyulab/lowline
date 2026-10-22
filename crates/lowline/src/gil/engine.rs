@@ -10,7 +10,7 @@ use gil::tuning::Tuning;
 
 use super::{Tune, proposal, record, schema, tune};
 use crate::proposal::Proposal;
-use crate::provenance::{Draft, SettledBy};
+use crate::provenance::{Draft, SettledBy, Settlement, SettlementKind};
 use crate::schema::{ResolvedField, Role};
 use crate::value::FieldValue;
 
@@ -281,6 +281,76 @@ impl Engine {
             &answer,
             allowed.get(field).map(Vec::as_slice),
         ))
+    }
+
+    /// The record to store for `id`, settled elsewhere — for a host whose records are kept somewhere of its own (files,
+    /// an existing database) and that builds the engine's store from them: its `saved` values, how each decided field
+    /// was settled (`settled`, by field — a decided field left out was settled by a person with nothing in view:
+    /// [`SettlementKind::Enter`], or [`SettlementKind::Set`] for one that takes several) and when, in 100-nanosecond ticks since the Unix epoch, UTC. Nothing is learned: hand
+    /// the records to [`Engine::learn`] together, in settlement order. A field with no value saved is not settled.
+    ///
+    /// The error names the first thing the form does not hold: a value for a field it does not have, several values
+    /// for a field that takes one, a settlement for a field it does not decide, or a check — a check is drawn while a
+    /// record is written ([`Draft::hold`]) and carries the probability it was drawn with, so it is settled through a
+    /// draft.
+    pub fn record(
+        &self,
+        id: &str,
+        saved: &BTreeMap<String, FieldValue>,
+        settled: &BTreeMap<String, SettlementKind>,
+        settled_at: i64,
+    ) -> Result<Record, String> {
+        for (name, value) in saved {
+            let Some(field) = self.fields.iter().find(|f| &f.field.name == name) else {
+                return Err(format!(
+                    "record '{id}' has a value for '{name}', which the form does not have"
+                ));
+            };
+            if matches!(value, FieldValue::Many(_)) && !field.field.multiple {
+                return Err(format!(
+                    "record '{id}' has several values for '{name}', which takes one"
+                ));
+            }
+        }
+        for (name, kind) in settled {
+            if !self
+                .fields
+                .iter()
+                .any(|f| &f.field.name == name && f.role == Role::Decided)
+            {
+                return Err(format!(
+                    "record '{id}' says how '{name}' was settled, which the form does not decide"
+                ));
+            }
+            if *kind == SettlementKind::Check {
+                return Err(format!(
+                    "record '{id}' settles '{name}' as a check, which is drawn while a record is written — settle it \
+                     through a draft"
+                ));
+            }
+        }
+        let settlements: Vec<Settlement> = self
+            .fields
+            .iter()
+            .filter(|f| f.role == Role::Decided)
+            .filter(|f| saved.get(&f.field.name).is_some_and(|v| !v.is_empty()))
+            .map(|f| {
+                let name = &f.field.name;
+                Settlement {
+                    field: name.clone(),
+                    kind: settled.get(name).copied().unwrap_or(if f.field.multiple {
+                        SettlementKind::Set
+                    } else {
+                        SettlementKind::Enter
+                    }),
+                    value: None,
+                    values: None,
+                    suggested: None,
+                    probability: None,
+                }
+            })
+            .collect();
+        Ok(record(id, &self.fields, saved, &settlements, settled_at))
     }
 
     /// Settles the record `id` as saved — its `saved` values, and the `draft` that kept what was shown for it and what

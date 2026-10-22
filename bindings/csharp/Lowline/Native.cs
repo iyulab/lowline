@@ -79,6 +79,10 @@ internal static unsafe partial class Native
     internal static partial int EngineOffer(
         nint engine, Str id, Str values, Str allowed, Str field, Str ranked, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "lowline_engine_record")]
+    internal static partial int EngineRecord(
+        nint engine, Str id, Str saved, Str settled, long settledAt, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "lowline_engine_settle")]
     internal static partial int EngineSettle(
         nint engine, Str id, Str saved, Str draft, byte by, long settledAt, nuint* resultLen);

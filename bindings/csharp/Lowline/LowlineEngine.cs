@@ -329,6 +329,40 @@ public sealed unsafe class LowlineEngine : IDisposable
         return new SettledRecord(id, settledAt, json);
     }
 
+    /// <summary>The record to store for <paramref name="id"/>, settled elsewhere — for a host whose records are kept
+    /// somewhere of its own (files, an existing database) and that builds the engine's store from them: its
+    /// <paramref name="saved"/> values, how each decided field was settled (<paramref name="settled"/>; a decided field
+    /// left out was settled by a person with nothing in view) and when. Nothing is learned: hand the records to
+    /// <see cref="Learn"/> together, in settlement order. A field with no value saved is not settled.</summary>
+    /// <exception cref="ArgumentException">A value or settlement the form does not hold.</exception>
+    public SettledRecord Record(
+        string id,
+        IReadOnlyDictionary<string, FieldValue> saved,
+        IReadOnlyDictionary<string, SettlementKind>? settled,
+        DateTimeOffset settledAt)
+    {
+        var idText = new Utf8(id);
+        var savedText = new Utf8(Values(saved));
+        var settledText = new Utf8(settled is null
+            ? null
+            : JsonSerializer.Serialize(new Dictionary<string, SettlementKind>(settled),
+                LowlineJson.Default.DictionaryStringSettlementKind));
+        nuint length;
+        string json;
+        using (Read())
+        {
+            fixed (byte* i = idText.Bytes, s = savedText.Bytes, k = settledText.Bytes)
+            {
+                Native.Check(Native.EngineRecord(
+                    _handle, idText.At(i), savedText.At(s), settledText.At(k), Ticks(settledAt), &length));
+            }
+
+            json = Native.Result(length);
+        }
+
+        return new SettledRecord(id, settledAt, json);
+    }
+
     /// <summary>A time in the engine's unit: 100-nanosecond ticks since the Unix epoch, UTC.</summary>
     internal static long Ticks(DateTimeOffset at) => at.UtcTicks - DateTimeOffset.UnixEpoch.UtcTicks;
 

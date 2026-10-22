@@ -49,6 +49,23 @@ public sealed class EngineTests
         }.ToJsonString();
 
     [Fact]
+    public void A_record_settled_elsewhere_becomes_the_line_to_store()
+    {
+        using var engine = LowlineEngine.Create(Intake);
+        var saved = new Dictionary<string, FieldValue> { ["customer"] = "Acme", ["owner"] = "kim" };
+        var made = engine.Record("r1", saved, new Dictionary<string, SettlementKind> { ["owner"] = SettlementKind.Accept },
+            Start);
+        engine.Settled.Should().Be(0);
+        JsonNode.Parse(made.Json)!["settlements"]!["owner"]!.GetValue<string>().Should().Be("Accept");
+        engine.Learn([made.Json]);
+        engine.Settled.Should().Be(1);
+
+        var refused = () => engine.Record("r2", saved,
+            new Dictionary<string, SettlementKind> { ["customer"] = SettlementKind.Enter }, Start);
+        refused.Should().Throw<ArgumentException>().WithMessage("*does not decide*");
+    }
+
+    [Fact]
     public void One_field_is_asked_for_alone_and_while_typed_into()
     {
         var stored = Alternating(40);
