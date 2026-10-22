@@ -9,7 +9,7 @@ screen; the engine suggests values for its fields from the records already confi
 such a suggestion has been right, and learns from what the person accepts, corrects or turns down.
 Nothing is saved until a person confirms it.
 
-Status: early development — no package is published yet.
+Status: early development (0.x) — the packages are published, and may change between minor versions.
 
 ## What is here
 
