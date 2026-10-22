@@ -26,6 +26,7 @@ mod support;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use gil::decider::ExternalCandidate;
 use gil::schema::Record;
 use gil::tuning::Tuning;
 use lowline::gil::{Engine, Tune};
@@ -464,6 +465,38 @@ pub unsafe extern "C" fn lowline_engine_fill(
                 result_len,
             )
         }
+    })
+}
+
+/// What to show for the decided field `field` of record `id` once the host's model has judged what a proposal asked
+/// for (`needs-judgement`, with the fields and values to read in its `asks`). `values` and `allowed` are as
+/// [`lowline_engine_propose`] reads them; `ranked` is a JSON array of the model's values, best first, each
+/// `{ value, probability, trusted }`. The result is the proposal as JSON — the judgement shown as the decider's answer
+/// when it is trusted and among the choices — or `null` when `field` is not a decided field still open.
+///
+/// # Safety
+/// `engine` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_offer(
+    engine: *const LowlineEngine,
+    id: LowlineStr,
+    values: LowlineStr,
+    allowed: LowlineStr,
+    field: LowlineStr,
+    ranked: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let id = unsafe { text(id, "id") }?;
+        let values: BTreeMap<String, FieldValue> =
+            json(unsafe { text(values, "values") }?, "values")?;
+        let allowed = choices(unsafe { text(allowed, "allowed") }?)?;
+        let field = unsafe { text(field, "field") }?;
+        let ranked: Vec<ExternalCandidate> = json(unsafe { text(ranked, "ranked") }?, "ranked")?;
+        let offered = engine.offer(id, &values, &allowed, field, &ranked);
+        unsafe { set_result(written(&offered), result_len) }
     })
 }
 

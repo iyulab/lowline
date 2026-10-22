@@ -116,6 +116,8 @@ public sealed class WebTests : IAsyncDisposable
         // No model given: no filling.
         using var unfilled = await client.SendAsync(Post("/lowline/intake/fill", new { values = new { }, text = "x" }), Ct);
         unfilled.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        using var unjudged = await client.SendAsync(Post("/lowline/intake/judge", new { id = "r", values = new { } }), Ct);
+        unjudged.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         using var garbled = await client.PostAsync(
             new Uri("/lowline/intake/propose", UriKind.Relative), new StringContent("{", null, "application/json"), Ct);

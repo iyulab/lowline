@@ -11,6 +11,14 @@ All notable changes to this project are written here. The format follows
 - Packages: `lowline` on crates.io; `Lowline` (with the native library for Windows, Linux and macOS, x64 and arm64),
   `Lowline.Sqlite` and `Lowline.AspNetCore` on NuGet; `@iyulab/lowline-form` on npm, with a one-file build for a page
   with no build step (`dist/bundle/lowline-form.bundle.js`). One version for all of them.
+- Judging what the records could not answer, through the host's model. A proposal that asks for a judgement
+  (`needs-judgement`, with the fields and values to read in `asks`) is answered by `Engine::offer` — the model's ranked
+  values join the decider's candidates after values a memory trusts and before its guesses; a trusted one among the
+  field's choices is shown as the decider's answer from the `judgement` layer and settles as `Accept` when a person
+  takes it. Where a memory has evidence a judgement changes nothing. Also `lowline_engine_offer`, `LowlineEngine.Offer`;
+  in .NET the model judges through `ILowlineModel.JudgeAsync` (a model that only fills answers nothing),
+  `LowlineForms.JudgeAsync` puts each asking field to it, and `MapLowline` adds `POST {form}/judge` (`{ id, values }`)
+  when a model is given — kept apart from `propose`, which answers at once.
 - Filling a form from what a person wrote or showed, through the host's model — the engine calls none. `fill::describe`
   tells the host what to ask for: the fields still empty that take one value, each with its kind and, for a closed
   choice, the choices this person may pick. `fill::fill` checks the model's values against their fields and shows each

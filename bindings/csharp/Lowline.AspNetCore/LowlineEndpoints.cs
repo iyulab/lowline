@@ -43,7 +43,8 @@ public static class LowlineEndpoints
     /// takes <c>{ "id", "saved", "draft" }</c> — the draft the form element kept while the record was written — and
     /// answers <c>{ "id", "settledAt" }</c> once the save is stored and learned; <c>POST {prefix}/{form}/fill</c>, when
     /// the host gave a model (<c>UseModel</c>), takes <c>{ "values", "text" }</c> and answers the model's values as
-    /// suggestions from elsewhere. A form not defined is 404; input the
+    /// suggestions from elsewhere; <c>POST {prefix}/{form}/judge</c>, with a model too, takes <c>{ "id", "values" }</c>
+    /// and answers, for the decided fields the records could not, what the model judged. A form not defined is 404; input the
     /// engine refuses is 400 with its message. Authorize the returned group as the host requires.</summary>
     public static RouteGroupBuilder MapLowline(this IEndpointRouteBuilder endpoints, string prefix = "/lowline")
     {
@@ -52,6 +53,7 @@ public static class LowlineEndpoints
         group.MapPost("{form}/propose", context => ProposeAsync(context, Form(context)));
         group.MapPost("{form}/settle", context => SettleAsync(context, Form(context)));
         group.MapPost("{form}/fill", context => FillAsync(context, Form(context)));
+        group.MapPost("{form}/judge", context => JudgeAsync(context, Form(context)));
         return group;
     }
 
@@ -137,6 +139,34 @@ public static class LowlineEndpoints
                 .ConfigureAwait(false);
             await context.Response.WriteAsJsonAsync(
                     shown, LowlineJson.Default.IReadOnlyListProposal, cancellationToken: context.RequestAborted)
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
+    private static async Task JudgeAsync(HttpContext context, string form)
+    {
+        var (forms, options) = Resolve(context);
+        if (!options.Forms.ContainsKey(form) || !forms.CanFill)
+        {
+            // Judging is on only when the host gave a model.
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var request = await ReadAsync(context, WebJson.Default.ProposeRequest).ConfigureAwait(false);
+        if (request is null)
+        {
+            return;
+        }
+
+        await RespondAsync(context, async () =>
+        {
+            var scope = new LowlineScope(form, options.Space(context));
+            var judged = await forms.JudgeAsync(
+                    scope, request.Id, request.Values, options.Allowed(context, form), context.RequestAborted)
+                .ConfigureAwait(false);
+            await context.Response.WriteAsJsonAsync(
+                    judged, LowlineJson.Default.IReadOnlyListProposal, cancellationToken: context.RequestAborted)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
     }

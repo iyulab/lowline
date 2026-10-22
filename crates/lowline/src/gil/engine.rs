@@ -2,10 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use gil::decider::Decider;
-use gil::key_memory::KeyMemory;
+use gil::decider::{Decider, ExternalCandidate};
+use gil::key_memory::{KeyMemory, Lookup};
 use gil::lexical_memory::LexicalMemory;
-use gil::schema::{Record, Schema};
+use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
 use super::{Tune, proposal, record, schema, tune};
@@ -198,6 +198,43 @@ impl Engine {
         answered: &BTreeMap<String, FieldValue>,
     ) -> Vec<Proposal> {
         crate::fill::fill(&self.fields, values, allowed, answered)
+    }
+
+    /// What to show for the decided field `field` of the record `id` once the host's model has judged it — the answer to
+    /// a proposal that asked for a judgement ([`crate::Abstain::NeedsJudgement`], with the fields and values the model
+    /// should read in [`Proposal::asks`]). `ranked` holds the model's values, best first, each with its probability on
+    /// the model's own scale and whether the model trusts it. They join the decider's candidates where a judgement
+    /// always does — after values a memory trusts, before the guesses — and values outside the field's choices are
+    /// left out; a trusted one is shown as the decider's answer from the [`crate::Layer::Judgement`] layer, so a person
+    /// taking it settles it as they would any other answer. Where a memory has evidence the judgement changes nothing.
+    /// `values` and `allowed` are as [`Engine::propose`] reads them. `None` when `field` is not a decided field still
+    /// open: not on the form, not decided, off, or holding its one value already.
+    pub fn offer(
+        &self,
+        id: &str,
+        values: &BTreeMap<String, FieldValue>,
+        allowed: &BTreeMap<String, Vec<String>>,
+        field: &str,
+        ranked: &[ExternalCandidate],
+    ) -> Option<Proposal> {
+        let resolved = self.fields.iter().find(|f| f.field.name == field)?;
+        let attribute = self.schema.attributes.iter().find(|a| a.name == field)?;
+        let known = record(id, &self.fields, values, &[], 0);
+        let open = attribute.role == AttributeRole::Decided
+            && attribute.policy != AttributePolicy::Off
+            && (attribute.multiple || !known.values.contains_key(field));
+        if !open {
+            return None;
+        }
+        let lookup = Lookup::new(&self.schema, field, &known.values)
+            .sets(&known.sets)
+            .excluding(Some(id));
+        let answer = self.decider.offer_external(&lookup, ranked);
+        Some(proposal(
+            resolved,
+            &answer,
+            allowed.get(field).map(Vec::as_slice),
+        ))
     }
 
     /// Settles the record `id` as saved — its `saved` values, and the `draft` that kept what was shown for it and what

@@ -54,6 +54,42 @@ public sealed class LowlineForms : IDisposable
         return running.Engine.Fill(values, answered, allowed);
     }
 
+    /// <summary>Answers, through the host's model, the decided fields of record <paramref name="id"/> the records
+    /// could not: each field a proposal left as <see cref="Abstain.NeedsJudgement"/> is put to the model with what it
+    /// asked to read, and the model's values are offered back — see <see cref="LowlineEngine.Offer"/>. Gives the
+    /// proposals of those fields only, in the form's order; none when every field was answered from the records. Kept
+    /// apart from <see cref="ProposeAsync"/>, which answers at once: a model takes longer.</summary>
+    /// <exception cref="InvalidOperationException">The host gave no model.</exception>
+    public async Task<IReadOnlyList<Proposal>> JudgeAsync(
+        LowlineScope scope,
+        string id,
+        IReadOnlyDictionary<string, FieldValue> values,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null,
+        CancellationToken cancellationToken = default)
+    {
+        var model = _model
+            ?? throw new InvalidOperationException("Lowline has no model to judge with: give one with UseModel.");
+        var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
+        var asking = running.Engine.Propose(id, values, allowed)
+            .Where(p => p.Abstain == Abstain.NeedsJudgement)
+            .ToList();
+        if (asking.Count == 0)
+        {
+            return [];
+        }
+
+        var choices = running.Engine.Describe(values, allowed).ToDictionary(f => f.Name, f => f.Choices);
+        var judged = await Task.WhenAll(asking.Select(async asked =>
+        {
+            var evidence = asked.Asks.Select(pair => KeyValuePair.Create(pair[0], pair[1])).ToList();
+            var request = new LowlineJudgeRequest(
+                scope.Form, asked.Field, choices.GetValueOrDefault(asked.Field), evidence, values);
+            var ranked = await model.JudgeAsync(request, cancellationToken).ConfigureAwait(false);
+            return running.Engine.Offer(id, values, asked.Field, ranked, allowed) ?? asked;
+        })).ConfigureAwait(false);
+        return judged;
+    }
+
     /// <summary>Defines form <paramref name="form"/> by its definition (see <see cref="LowlineEngine.Create"/>; its
     /// <c>name</c> is set to the form's). Redefining a form starts its engines again on their next use.</summary>
     /// <exception cref="ArgumentException">The definition is not a JSON object.</exception>

@@ -214,6 +214,43 @@ public sealed unsafe class LowlineEngine : IDisposable
         return JsonSerializer.Deserialize(json, LowlineJson.Default.ListProposal)!;
     }
 
+    /// <summary>What to show for the decided field <paramref name="field"/> of record <paramref name="id"/> once the
+    /// host's model has judged what a proposal asked for (<see cref="Abstain.NeedsJudgement"/>, the fields and values
+    /// to read in <see cref="Proposal.Asks"/>). <paramref name="ranked"/> holds the model's values, best first. They
+    /// join the decider's candidates after values a memory trusts and before its guesses; a trusted one among the
+    /// field's choices is shown as the decider's answer from the <see cref="Layer.Judgement"/> layer, so a person
+    /// taking it settles it as any other answer. Where a memory has evidence the judgement changes nothing.
+    /// <c>null</c> when the field is not a decided field still open.</summary>
+    public Proposal? Offer(
+        string id,
+        IReadOnlyDictionary<string, FieldValue> values,
+        string field,
+        IReadOnlyList<JudgedValue> ranked,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null)
+    {
+        var idText = new Utf8(id);
+        var valuesText = new Utf8(Values(values));
+        var allowedText = new Utf8(Allowed(allowed));
+        var fieldText = new Utf8(field);
+        var rankedText = new Utf8(JsonSerializer.Serialize(ranked.ToList(), LowlineJson.Default.ListJudgedValue));
+        nuint length;
+        string json;
+        using (Read())
+        {
+            fixed (byte* i = idText.Bytes, v = valuesText.Bytes, a = allowedText.Bytes, f = fieldText.Bytes,
+                   r = rankedText.Bytes)
+            {
+                Native.Check(Native.EngineOffer(
+                    _handle, idText.At(i), valuesText.At(v), allowedText.At(a), fieldText.At(f), rankedText.At(r),
+                    &length));
+            }
+
+            json = Native.Result(length);
+        }
+
+        return JsonSerializer.Deserialize(json, LowlineJson.Default.Proposal);
+    }
+
     private static string Values(IReadOnlyDictionary<string, FieldValue> values) =>
         JsonSerializer.Serialize(new Dictionary<string, FieldValue>(values), LowlineJson.Default.DictionaryStringFieldValue);
 

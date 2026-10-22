@@ -334,3 +334,60 @@ fn a_form_is_filled_from_what_the_host_model_said() {
     assert_eq!(result(len)[0]["abstain"], "not-a-choice");
     unsafe { lowline_engine_free(engine) };
 }
+
+#[test]
+fn a_judgement_the_records_asked_for_is_offered_back() {
+    let engine = engine();
+    let mut len = 0;
+    let values = json!({ "customer": "Gamma" }).to_string();
+    ok(unsafe { lowline_engine_propose(engine, s("new"), s(&values), NONE, &mut len) });
+    let asked = result(len);
+    assert_eq!(asked[0]["abstain"], "needs-judgement");
+    assert_eq!(asked[0]["asks"], json!([["customer", "Gamma"]]));
+
+    let ranked = json!([{ "value": "lee", "probability": 0.8, "trusted": true }]).to_string();
+    ok(unsafe {
+        lowline_engine_offer(
+            engine,
+            s("new"),
+            s(&values),
+            NONE,
+            s("owner"),
+            s(&ranked),
+            &mut len,
+        )
+    });
+    let shown = result(len);
+    assert_eq!(shown["suggestion"]["value"], "lee");
+    assert_eq!(shown["suggestion"]["origin"], "decider");
+    assert_eq!(shown["layer"], "judgement");
+
+    ok(unsafe {
+        lowline_engine_offer(
+            engine,
+            s("new"),
+            s(&values),
+            NONE,
+            s("customer"),
+            s("[]"),
+            &mut len,
+        )
+    });
+    assert_eq!(result(len), Value::Null);
+
+    assert_eq!(
+        unsafe {
+            lowline_engine_offer(
+                engine,
+                s("new"),
+                s(&values),
+                NONE,
+                s("owner"),
+                s("{"),
+                &mut len,
+            )
+        },
+        LOWLINE_INVALID_INPUT
+    );
+    unsafe { lowline_engine_free(engine) };
+}

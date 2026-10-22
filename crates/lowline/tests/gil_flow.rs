@@ -193,3 +193,119 @@ fn values_taken_from_suggestions_do_not_grade_the_suggestions() {
     engine::tune(&mut schema, &records, &engine::Tune::default());
     assert_eq!(schema.attributes[1].key_threshold, None);
 }
+
+#[test]
+fn a_judgement_the_records_asked_for_is_offered_back_and_settled_as_an_answer() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut intake = Engine::new("intake", fields, engine::Tune::default()).unwrap();
+
+    // Nothing learned yet: the owner is not answered, and the records say what a judgement would read.
+    let typed = saved(&[("customer", "Gamma")]);
+    let shown = intake.propose("new", &typed, &BTreeMap::new());
+    assert_eq!(shown[0].abstain, Some(lowline::Abstain::NeedsJudgement));
+    assert_eq!(shown[0].asks, [("customer".to_owned(), "Gamma".to_owned())]);
+
+    // The host's model judged it: lee, trusted. Shown as the decider's answer, from the judgement layer.
+    let judged = |value: &str, trusted| gil::decider::ExternalCandidate {
+        value: value.to_owned(),
+        probability: 0.8,
+        trusted,
+    };
+    let offered = intake
+        .offer(
+            "new",
+            &typed,
+            &BTreeMap::new(),
+            "owner",
+            &[judged("lee", true)],
+        )
+        .expect("the owner is decided and open");
+    let suggestion = offered
+        .suggestion
+        .clone()
+        .expect("a trusted judgement is shown");
+    assert_eq!(suggestion.value, "lee");
+    assert_eq!(offered.layer, Some(lowline::Layer::Judgement));
+
+    // Taken and saved, it settles as an answer the decider gave.
+    let mut draft = Draft::new();
+    draft.show("owner", suggestion);
+    let values = saved(&[("customer", "Gamma"), ("owner", "lee")]);
+    let stored = intake.settle("new", &values, &draft, SettledBy::Person, 0);
+    assert_eq!(
+        stored.settlements["owner"],
+        gil::schema::SettlementKind::Accept
+    );
+
+    // A value outside the choices is left out; an untrusted one is not shown as an answer.
+    let other = saved(&[("customer", "Delta")]);
+    let outside = intake
+        .offer(
+            "next",
+            &other,
+            &BTreeMap::new(),
+            "owner",
+            &[judged("park", true)],
+        )
+        .unwrap();
+    assert!(outside.suggestion.is_none());
+    let unsure = intake
+        .offer(
+            "next",
+            &other,
+            &BTreeMap::new(),
+            "owner",
+            &[judged("kim", false)],
+        )
+        .unwrap();
+    assert!(unsure.suggestion.is_none());
+
+    // Only a decided field still open takes a judgement.
+    assert!(
+        intake
+            .offer("next", &other, &BTreeMap::new(), "customer", &[])
+            .is_none()
+    );
+    assert!(
+        intake
+            .offer("next", &values, &BTreeMap::new(), "owner", &[])
+            .is_none()
+    );
+    assert!(
+        intake
+            .offer("next", &other, &BTreeMap::new(), "nowhere", &[])
+            .is_none()
+    );
+}
+
+#[test]
+fn a_judgement_changes_nothing_where_the_records_have_evidence() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut intake = Engine::new("intake", fields, engine::Tune::default()).unwrap();
+    let history = alternating(&intake, 40);
+    intake.tune(&history);
+
+    let typed = saved(&[("customer", "Acme")]);
+    let judged = [gil::decider::ExternalCandidate {
+        value: "lee".to_owned(),
+        probability: 0.99,
+        trusted: true,
+    }];
+    let offered = intake
+        .offer("new", &typed, &BTreeMap::new(), "owner", &judged)
+        .unwrap();
+    assert_eq!(offered.suggestion.unwrap().value, "kim");
+    assert_eq!(offered.layer, Some(lowline::Layer::Key));
+}

@@ -162,6 +162,13 @@ public sealed record Suggestion(
     [property: JsonPropertyName("origin")] string Origin = "decider",
     [property: JsonPropertyName("fit")] string Fit = "exact");
 
+/// <summary>A value the host's model ranked for a decided field the records could not answer: its probability on the
+/// model's own scale, and whether the model trusts it. Only a trusted value among the field's choices is shown.</summary>
+public sealed record JudgedValue(
+    [property: JsonPropertyName("value")] string Value,
+    [property: JsonPropertyName("probability")] double Probability,
+    [property: JsonPropertyName("trusted")] bool Trusted);
+
 /// <summary>What a suggestion rests on: another field's value it was settled under (<see cref="Kind"/> <c>value</c>),
 /// or a settled record like this one and how alike, from 0 to 1 (<c>record</c>).</summary>
 public sealed record Basis(
@@ -208,6 +215,8 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(List<Proposal>))]
 [JsonSerializable(typeof(List<FillField>))]
+[JsonSerializable(typeof(List<JudgedValue>))]
+[JsonSerializable(typeof(Proposal))]
 [JsonSerializable(typeof(IReadOnlyList<Proposal>))]
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]
 [JsonSerializable(typeof(Dictionary<string, IReadOnlyList<string>>))]
