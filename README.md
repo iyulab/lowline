@@ -53,6 +53,11 @@ as its own answer when the model trusts it and it is one of the field's choices.
 its own; taken by a person, it counts as the engine's answer, so the engine learns how often its judgements hold. Where
 the records have evidence, a judgement changes nothing.
 
+A host whose records live somewhere of its own — files, an existing database — can keep that as the original and
+build the engine's store from it: `LowlineEngine.Record` makes the line to store for each record (its values, how each
+decided field was settled, when), and `Learn` takes them together. `Report` says, per decided field, how far the
+records have come: the thresholds chosen, with the precision and answers the replay saw at them, or how close it came.
+
 [`samples/aspnet`](samples/aspnet) is all of it on one page, with a stand-in model, seeding forty records so the
 owner of a known customer is suggested at once:
 
