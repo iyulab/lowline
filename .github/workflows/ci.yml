@@ -65,6 +65,7 @@ jobs:
         run: |
           cargo build -p lowline-ffi
           cd bindings/csharp && dotnet test --solution Lowline.slnx
+          cd ../.. && dotnet build samples/aspnet
 
       # The form element keeps the account of a record in the browser; the host's engine counts it.
       - uses: actions/setup-node@v7

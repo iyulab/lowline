@@ -99,3 +99,7 @@ All notable changes to this project are written here. The format follows
   counts it, so nothing is counted in the browser. `Draft`, `Session` and `LowlineClient` are exported for a host that
   draws its own form.
 - `serde` feature: every part of a `Draft` may be left out when it is read — what a browser keeps.
+- `<lowline-form>`: turning down a suggestion the form put in empties the field again, and the turned-down suggestion
+  is neither shown nor put back when the form asks again for that record; another suggestion is.
+- `samples/aspnet`: a web host with a learning form — the two server pieces and the element — over SQLite. `npm run
+  bundle` in `bindings/web` builds the element as one file with Lit and formdown inside.

@@ -56,6 +56,12 @@ export class Draft {
     return true
   }
 
+  /** Whether `suggestion` is the one in view for the field and the person turned it down. */
+  declined(field: string, suggestion: Suggestion): boolean {
+    const track = this.fields[field]
+    return track?.declined === true && sameSuggestion(track.shown, suggestion)
+  }
+
   shown(field: string): Suggestion | undefined {
     return this.fields[field]?.shown
   }

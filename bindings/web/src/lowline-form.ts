@@ -135,10 +135,11 @@ export class LowlineForm extends LitElement {
 
   private declined = (event: Event) => {
     const { field } = (event as CustomEvent<{ field: string }>).detail
-    this.session?.decline(field)
+    const formdown = this.formdown
+    if (this.session?.decline(field, this.values()) && formdown) formdown.updateData({ ...formdown.data, [field]: '' })
     const { [field]: _, ...rest } = this.fieldStates
     this.fieldStates = rest
-    if (this.formdown) this.formdown.fieldStates = rest
+    if (formdown) formdown.fieldStates = rest
   }
 
   override disconnectedCallback(): void {

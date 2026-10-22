@@ -20,7 +20,16 @@ Status: early development — no package is published yet.
 | [`bindings/csharp`](bindings/csharp) | The .NET host: an engine per form and memory space over the store the host keeps its records in (`ILowlineStore`, or SQLite with `Lowline.Sqlite`), proposing and settling through the C ABI; `Lowline.AspNetCore` puts it behind two routes with `AddLowline` and `MapLowline`. Not packed yet. |
 | [`bindings/web`](bindings/web) | `<lowline-form>`: a formdown form whose decided fields are suggested through those routes; it keeps the account of what was shown and done and sends it with the save. Not published yet. |
 
-Coming next: a sample host wiring the three together, and filling fields from free text or a picture.
+[`samples/aspnet`](samples/aspnet) puts the three together — `AddLowline(o => o.UseSqlite(…))`, `MapLowline("/lowline")` and
+`<lowline-form>` on a page — and seeds forty records so the owner of a known customer is suggested at once:
+
+```sh
+cargo build -p lowline-ffi
+(cd bindings/web && npm ci && npm run bundle)
+dotnet run --project samples/aspnet
+```
+
+Coming next: filling fields from free text or a picture.
 
 ## Development
 

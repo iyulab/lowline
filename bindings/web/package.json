@@ -24,7 +24,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bundle": "vite build --config vite.bundle.config.ts"
   },
   "dependencies": {
     "@formdown/ui": "^0.24.0",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^5.0.2"
+    "vitest": "^5.0.2",
+    "vite": "^8.3.1"
   }
 }

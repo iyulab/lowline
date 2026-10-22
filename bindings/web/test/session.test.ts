@@ -104,9 +104,28 @@ describe('Session', () => {
   it('starts the next record from the saved values', () => {
     const session = new Session('r', {}, 0.05, never)
     session.apply([lee], {})
-    session.decline('owner')
+    session.decline('owner', { owner: 'lee' })
     session.saved({ customer: 'Beta', owner: 'kim' })
     expect(JSON.parse(JSON.stringify(session.draft))).toEqual({ opened: { customer: 'Beta', owner: 'kim' }, fields: {} })
+  })
+
+  it('empties a field it filled when its suggestion is turned down, and not one the person filled', () => {
+    const session = new Session('r', {}, 0.05, never)
+    session.apply([lee], {})
+    expect(session.decline('owner', { owner: 'lee' })).toBe(true)
+    expect(session.draft.fields.owner.declined).toBe(true)
+    // Asked again, the turned-down suggestion is neither shown nor put back; another one is.
+    expect(session.apply([lee], { customer: 'Beta' })).toEqual({ fieldStates: {}, prefill: {} })
+    expect(session.draft.fields.owner.declined).toBe(true)
+    const kim = { ...lee, suggestion: { value: 'kim' } }
+    expect(session.apply([kim], {}).prefill).toEqual({ owner: 'kim' })
+    expect(session.draft.fields.owner.declined).toBe(false)
+    const typed = new Session('r', {}, 0.05, never)
+    typed.apply([{ ...lee, prefill: false }], {})
+    expect(typed.decline('owner', { owner: 'lee' })).toBe(false)
+    const changed = new Session('r', {}, 0.05, never)
+    changed.apply([lee], {})
+    expect(changed.decline('owner', { owner: 'kim' })).toBe(false)
   })
 
   it('shows nothing for a field it abstains on', () => {

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lowline sample</title>
+  <script type="module" src="/element/lowline-form.bundle.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+    output { display: block; margin-top: 1rem; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Intake</h1>
+  <p>Type a customer — <code>Acme</code> or <code>Beta</code> — and the owner is suggested from the records saved before.</p>
+  <lowline-form src="/lowline" form="intake"></lowline-form>
+  <button id="save" type="button">Save</button>
+  <output id="said"></output>
+  <script type="module">
+    const form = document.querySelector('lowline-form')
+    form.content = '@customer: [text]\n@owner: [select options="kim,lee"]'
+    // Each record takes an id of its own; opening a saved record again would take its id back.
+    form.record = crypto.randomUUID()
+    document.querySelector('#save').addEventListener('click', async () => {
+      await form.save()
+      document.querySelector('#said').textContent = 'Saved — the next record starts empty.'
+      form.record = crypto.randomUUID()
+      form.data = {}
+    })
+  </script>
+</body>
+</html>

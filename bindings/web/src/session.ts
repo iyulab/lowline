@@ -59,6 +59,8 @@ export interface Round {
 export class Session {
   draft: Draft
   private drawn = new Set<string>()
+  /** Fields whose value the form put in unasked, from the suggestion still shown. */
+  private filled = new Set<string>()
 
   constructor(
     readonly id: string,
@@ -78,8 +80,13 @@ export class Session {
       if (!suggestion) continue
       if (this.draw(field, suggestion)) continue
       if (this.draft.held(field) !== undefined) continue
+      // Turned down, it stays down for this record: neither shown again nor put back in.
+      if (this.draft.declined(field, suggestion)) continue
       this.draft.show(field, suggestion)
-      if (proposal.prefill && isEmpty(values[field])) round.prefill[field] = suggestion.value
+      if (proposal.prefill && isEmpty(values[field])) {
+        round.prefill[field] = suggestion.value
+        this.filled.add(field)
+      }
       round.fieldStates[field] = {
         suggestions: [suggestion.value],
         decline: this.strings.decline,
@@ -89,15 +96,23 @@ export class Session {
     return round
   }
 
-  /** The person turned down the field's suggestion. */
-  decline(field: string): boolean {
-    return this.draft.decline(field)
+  /**
+   * The person turned down the field's suggestion. Answers whether the form must empty the field: it holds the value
+   * the form put in unasked — saved as it is, the turned-down value would count as taken.
+   */
+  decline(field: string, values: Values): boolean {
+    const shown = this.draft.shown(field)
+    if (!this.draft.decline(field)) return false
+    const empty = this.filled.has(field) && values[field] === shown?.value
+    this.filled.delete(field)
+    return empty
   }
 
   /** The record was saved holding `values`: what is written next starts from them. */
   saved(values: Values): void {
     this.draft = new Draft(values)
     this.drawn.clear()
+    this.filled.clear()
   }
 
   /** Whether the field's answer is held back now — drawn the first time a checkable value is proposed for it. */
