@@ -39,6 +39,11 @@ All notable changes to this project are written here. The format follows
   (breaking: `gil::tune` and `Engine::choose` return `Tuned`, `Engine::restore` takes it).
 - The C ABI is version 2 (`lowline_engine_propose_field`, `lowline_engine_record`, `lowline_engine_report`).
 
+### Fixed
+
+- The NuGet packages carry the license text (`LICENSE`), not only its name: a host shipping them has the text to ship
+  along.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

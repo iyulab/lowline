@@ -30,6 +30,8 @@
 
   <ItemGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests'))">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+    <!-- The license text itself: the expression names it, and whoever ships the package must carry the text. -->
+    <None Include="$(MSBuildThisFileDirectory)../../LICENSE" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
   <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
