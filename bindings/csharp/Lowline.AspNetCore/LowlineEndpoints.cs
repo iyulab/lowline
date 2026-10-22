@@ -41,7 +41,9 @@ public static class LowlineEndpoints
     /// <summary>Maps the forms under <paramref name="prefix"/>: <c>POST {prefix}/{form}/propose</c> takes
     /// <c>{ "id", "values" }</c> and answers what to show for each open decided field; <c>POST {prefix}/{form}/settle</c>
     /// takes <c>{ "id", "saved", "draft" }</c> — the draft the form element kept while the record was written — and
-    /// answers <c>{ "id", "settledAt" }</c> once the save is stored and learned. A form not defined is 404; input the
+    /// answers <c>{ "id", "settledAt" }</c> once the save is stored and learned; <c>POST {prefix}/{form}/fill</c>, when
+    /// the host gave a model (<c>UseModel</c>), takes <c>{ "values", "text" }</c> and answers the model's values as
+    /// suggestions from elsewhere. A form not defined is 404; input the
     /// engine refuses is 400 with its message. Authorize the returned group as the host requires.</summary>
     public static RouteGroupBuilder MapLowline(this IEndpointRouteBuilder endpoints, string prefix = "/lowline")
     {
@@ -49,6 +51,7 @@ public static class LowlineEndpoints
         var group = endpoints.MapGroup(prefix);
         group.MapPost("{form}/propose", context => ProposeAsync(context, Form(context)));
         group.MapPost("{form}/settle", context => SettleAsync(context, Form(context)));
+        group.MapPost("{form}/fill", context => FillAsync(context, Form(context)));
         return group;
     }
 
@@ -110,6 +113,34 @@ public static class LowlineEndpoints
         }).ConfigureAwait(false);
     }
 
+    private static async Task FillAsync(HttpContext context, string form)
+    {
+        var (forms, options) = Resolve(context);
+        if (!options.Forms.ContainsKey(form) || !forms.CanFill)
+        {
+            // Filling is on only when the host gave a model.
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var request = await ReadAsync(context, WebJson.Default.FillRequest).ConfigureAwait(false);
+        if (request is null)
+        {
+            return;
+        }
+
+        await RespondAsync(context, async () =>
+        {
+            var scope = new LowlineScope(form, options.Space(context));
+            var shown = await forms.FillAsync(
+                    scope, request.Values, request.Text, options.Allowed(context, form), context.RequestAborted)
+                .ConfigureAwait(false);
+            await context.Response.WriteAsJsonAsync(
+                    shown, LowlineJson.Default.IReadOnlyListProposal, cancellationToken: context.RequestAborted)
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
+    }
+
     private static string Form(HttpContext context) => (string)context.Request.RouteValues["form"]!;
 
     private static (LowlineForms Forms, LowlineWebOptions Options) Resolve(HttpContext context) =>
@@ -160,6 +191,10 @@ internal sealed record SettleRequest(
     [property: JsonPropertyName("saved")] Dictionary<string, FieldValue> Saved,
     [property: JsonPropertyName("draft")] JsonElement? Draft);
 
+internal sealed record FillRequest(
+    [property: JsonPropertyName("values")] Dictionary<string, FieldValue> Values,
+    [property: JsonPropertyName("text")] string Text);
+
 internal sealed record SettleResponse(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("settledAt")] DateTimeOffset SettledAt);
@@ -167,4 +202,5 @@ internal sealed record SettleResponse(
 [JsonSerializable(typeof(ProposeRequest))]
 [JsonSerializable(typeof(SettleRequest))]
 [JsonSerializable(typeof(SettleResponse))]
+[JsonSerializable(typeof(FillRequest))]
 internal sealed partial class WebJson : JsonSerializerContext;

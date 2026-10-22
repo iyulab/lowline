@@ -12,16 +12,46 @@ public sealed class LowlineForms : IDisposable
 {
     private readonly ILowlineStore _store;
     private readonly TimeProvider _time;
+    private readonly ILowlineModel? _model;
     private readonly ConcurrentDictionary<string, string> _definitions = new();
     private readonly ConcurrentDictionary<LowlineScope, Lazy<Task<Running>>> _running = new();
 
     /// <summary>Forms over <paramref name="store"/>; <paramref name="time"/> stamps each save (the system clock when
-    /// left out).</summary>
-    public LowlineForms(ILowlineStore store, TimeProvider? time = null)
+    /// left out); <paramref name="model"/>, when given, fills forms from what a person wrote.</summary>
+    public LowlineForms(ILowlineStore store, TimeProvider? time = null, ILowlineModel? model = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         _store = store;
         _time = time ?? TimeProvider.System;
+        _model = model;
+    }
+
+    /// <summary>Whether forms can be filled from what a person wrote: the host gave a model.</summary>
+    public bool CanFill => _model is not null;
+
+    /// <summary>Fills a record from <paramref name="text"/> through the host's model: the model is told the fields still
+    /// empty, and what it answers is shown as suggestions from elsewhere — see <see cref="LowlineEngine.Fill"/>. Nothing
+    /// is asked when no field is left to fill or nothing is written.</summary>
+    /// <exception cref="InvalidOperationException">The host gave no model.</exception>
+    public async Task<IReadOnlyList<Proposal>> FillAsync(
+        LowlineScope scope,
+        IReadOnlyDictionary<string, FieldValue> values,
+        string text,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null,
+        CancellationToken cancellationToken = default)
+    {
+        var model = _model
+            ?? throw new InvalidOperationException("Lowline has no model to fill forms with: give one with UseModel.");
+        var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
+        var fields = running.Engine.Describe(values, allowed);
+        if (fields.Count == 0 || string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        var answered = await model.FillAsync(new LowlineFillRequest(scope.Form, fields, text, values), cancellationToken)
+            .ConfigureAwait(false);
+        return running.Engine.Fill(values, answered, allowed);
     }
 
     /// <summary>Defines form <paramref name="form"/> by its definition (see <see cref="LowlineEngine.Create"/>; its

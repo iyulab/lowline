@@ -8,6 +8,15 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- Filling a form from what a person wrote or showed, through the host's model — the engine calls none. `fill::describe`
+  tells the host what to ask for: the fields still empty that take one value, each with its kind and, for a closed
+  choice, the choices this person may pick. `fill::fill` checks the model's values against their fields and shows each
+  as a suggestion from elsewhere (`Origin::Other` — never put in on its own, not counted for the decider), or why not:
+  `Abstain::NotAChoice` (never moved to a nearby choice), `NotAllowed`, `Malformed` (not a number, a date or a time as
+  the field takes it). Also `Engine::describe` / `fill`, `lowline_engine_describe` / `_fill`, `LowlineEngine.Describe` /
+  `Fill`; in .NET the host gives its model as `ILowlineModel` (`UseModel`), `LowlineForms.FillAsync` asks it, and
+  `MapLowline` adds `POST {form}/fill` (`{ values, text }`) when a model is given — 404 otherwise.
+
 - A conformance test against the Gil decider's own fixture (computed with `iyulab-gil` 0.7.0): its 24 settlement
   cases — what a host reported for a field, the value saved, who saved it — give the settlement, the record line and
   the usage counts it holds, and its 18 boundaries of a tuning going stale fall where it puts them.

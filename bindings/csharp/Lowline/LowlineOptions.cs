@@ -8,6 +8,9 @@ public class LowlineOptions
     /// <summary>The store the settled records and the tuning are kept in.</summary>
     public ILowlineStore? Store { get; set; }
 
+    /// <summary>The host's model, which fills a form from what a person wrote; filling is off without one.</summary>
+    public ILowlineModel? Model { get; set; }
+
     /// <summary>The forms defined so far, by name.</summary>
     public IReadOnlyDictionary<string, string> Forms => _forms;
 
@@ -16,6 +19,14 @@ public class LowlineOptions
     {
         ArgumentNullException.ThrowIfNull(store);
         Store = store;
+        return this;
+    }
+
+    /// <summary>Fills forms from what a person wrote through <paramref name="model"/>.</summary>
+    public LowlineOptions UseModel(ILowlineModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        Model = model;
         return this;
     }
 
@@ -35,7 +46,8 @@ public class LowlineOptions
         var forms = new LowlineForms(
             Store ?? throw new InvalidOperationException(
                 "Lowline has no store to keep its records in: give one with UseStore, or UseSqlite from Lowline.Sqlite."),
-            time);
+            time,
+            Model);
         foreach (var (name, definition) in _forms)
         {
             forms.Define(name, definition);

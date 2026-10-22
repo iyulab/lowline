@@ -53,6 +53,12 @@ pub enum Abstain {
     /// Nothing in the records bears on the field, and a judgement from outside them — the host's model — could; the
     /// host may ask it ([`Proposal::asks`]).
     NeedsJudgement,
+    /// A value from elsewhere — the host's model filling the form ([`crate::fill`]) — that is not one of the field's
+    /// choices. Never moved to a nearby choice, and no new choice is made.
+    NotAChoice,
+    /// A value from elsewhere that the field cannot hold: not a number, a date or a time as the field takes it, or
+    /// several values for a field that takes one.
+    Malformed,
 }
 
 /// What a host shows for one decided field.

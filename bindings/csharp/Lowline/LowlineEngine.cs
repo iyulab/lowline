@@ -163,6 +163,66 @@ public sealed unsafe class LowlineEngine : IDisposable
         return JsonSerializer.Deserialize(json, LowlineJson.Default.ListProposal)!;
     }
 
+    /// <summary>The fields a host's model may fill for a record holding <paramref name="values"/>: those still empty
+    /// that take one value, a closed choice field's choices narrowed to those this person may pick
+    /// (<paramref name="allowed"/>). What to tell the model to answer.</summary>
+    public IReadOnlyList<FillField> Describe(
+        IReadOnlyDictionary<string, FieldValue> values,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null)
+    {
+        var valuesText = new Utf8(Values(values));
+        var allowedText = new Utf8(Allowed(allowed));
+        nuint length;
+        string json;
+        using (Read())
+        {
+            fixed (byte* v = valuesText.Bytes, a = allowedText.Bytes)
+            {
+                Native.Check(Native.EngineDescribe(_handle, valuesText.At(v), allowedText.At(a), &length));
+            }
+
+            json = Native.Result(length);
+        }
+
+        return JsonSerializer.Deserialize(json, LowlineJson.Default.ListFillField)!;
+    }
+
+    /// <summary>What to show for each field the host's model answered (<paramref name="answered"/>) for a record
+    /// holding <paramref name="values"/>: its value as a suggestion from elsewhere — shown for the person to take, never
+    /// put in on its own, and not counted for the decider — or why there is none.</summary>
+    public IReadOnlyList<Proposal> Fill(
+        IReadOnlyDictionary<string, FieldValue> values,
+        IReadOnlyDictionary<string, FieldValue> answered,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null)
+    {
+        var valuesText = new Utf8(Values(values));
+        var allowedText = new Utf8(Allowed(allowed));
+        var answeredText = new Utf8(Values(answered));
+        nuint length;
+        string json;
+        using (Read())
+        {
+            fixed (byte* v = valuesText.Bytes, a = allowedText.Bytes, m = answeredText.Bytes)
+            {
+                Native.Check(Native.EngineFill(
+                    _handle, valuesText.At(v), allowedText.At(a), answeredText.At(m), &length));
+            }
+
+            json = Native.Result(length);
+        }
+
+        return JsonSerializer.Deserialize(json, LowlineJson.Default.ListProposal)!;
+    }
+
+    private static string Values(IReadOnlyDictionary<string, FieldValue> values) =>
+        JsonSerializer.Serialize(new Dictionary<string, FieldValue>(values), LowlineJson.Default.DictionaryStringFieldValue);
+
+    private static string? Allowed(IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed) =>
+        allowed is null
+            ? null
+            : JsonSerializer.Serialize(new Dictionary<string, IReadOnlyList<string>>(allowed),
+                LowlineJson.Default.DictionaryStringIReadOnlyListString);
+
     /// <summary>Settles record <paramref name="id"/> as saved — its values, and <paramref name="draft"/>, the account
     /// kept while it was written (what was shown, taken, turned down; <c>null</c> for a record written with nothing
     /// shown) — learns it, and gives back the record to store.</summary>

@@ -303,3 +303,34 @@ fn a_malformed_call_never_reaches_the_engine() {
     assert_eq!(unsafe { lowline_engine_settled(engine) }, 0);
     unsafe { lowline_engine_free(engine) };
 }
+
+#[test]
+fn a_form_is_filled_from_what_the_host_model_said() {
+    let engine = engine();
+    let mut len = 0;
+    let values = json!({ "customer": "Acme" }).to_string();
+    ok(unsafe { lowline_engine_describe(engine, s(&values), s(r#"{"owner":["lee"]}"#), &mut len) });
+    assert_eq!(
+        result(len),
+        json!([{ "name": "owner", "kind": "choice", "choices": ["lee"] }])
+    );
+
+    let answered = json!({ "owner": "lee", "customer": "Beta" }).to_string();
+    ok(unsafe { lowline_engine_fill(engine, s(&values), NONE, s(&answered), &mut len) });
+    let shown = result(len);
+    assert_eq!(
+        shown.as_array().unwrap().len(),
+        1,
+        "the customer already holds a value"
+    );
+    assert_eq!(
+        shown[0]["suggestion"],
+        json!({ "value": "lee", "origin": "other", "fit": "exact" })
+    );
+    assert_eq!(shown[0]["prefill"], false);
+
+    let wrong = json!({ "owner": "park" }).to_string();
+    ok(unsafe { lowline_engine_fill(engine, s(&values), NONE, s(&wrong), &mut len) });
+    assert_eq!(result(len)[0]["abstain"], "not-a-choice");
+    unsafe { lowline_engine_free(engine) };
+}

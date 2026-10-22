@@ -115,7 +115,45 @@ public enum Abstain
     /// <summary>Nothing in the records bears on the field, and a judgement from outside them could; see
     /// <see cref="Proposal.Asks"/>.</summary>
     [JsonStringEnumMemberName("needs-judgement")] NeedsJudgement,
+
+    /// <summary>A value from the host's model that is not one of the field's choices — never moved to a nearby one.
+    /// </summary>
+    [JsonStringEnumMemberName("not-a-choice")] NotAChoice,
+
+    /// <summary>A value from the host's model that the field cannot hold: not a number, a date or a time as it takes
+    /// them.</summary>
+    [JsonStringEnumMemberName("malformed")] Malformed,
 }
+
+/// <summary>What kind of value a field takes.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<FieldKind>))]
+public enum FieldKind
+{
+    /// <summary>Free text.</summary>
+    [JsonStringEnumMemberName("text")] Text,
+
+    /// <summary>A number.</summary>
+    [JsonStringEnumMemberName("number")] Number,
+
+    /// <summary>A date or a time, as a form writes them (<c>2026-10-23</c>, <c>14:05</c>).</summary>
+    [JsonStringEnumMemberName("date")] Date,
+
+    /// <summary>One of a list of choices.</summary>
+    [JsonStringEnumMemberName("choice")] Choice,
+
+    /// <summary>On or off: <c>true</c> or <c>false</c>.</summary>
+    [JsonStringEnumMemberName("flag")] Flag,
+
+    /// <summary>A record the field names, such as a customer.</summary>
+    [JsonStringEnumMemberName("reference")] Reference,
+}
+
+/// <summary>One field a host's model may fill: its name, the kind of value it takes, and — for a choice field that
+/// takes nothing else — the values this person may pick.</summary>
+public sealed record FillField(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("kind")] FieldKind Kind,
+    [property: JsonPropertyName("choices")] IReadOnlyList<string>? Choices = null);
 
 /// <summary>A suggestion shown for a field: a value, or — when <see cref="Fit"/> is <c>prefix</c> — a class the value
 /// begins with.</summary>
@@ -169,6 +207,7 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(List<Proposal>))]
+[JsonSerializable(typeof(List<FillField>))]
 [JsonSerializable(typeof(IReadOnlyList<Proposal>))]
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]
 [JsonSerializable(typeof(Dictionary<string, IReadOnlyList<string>>))]

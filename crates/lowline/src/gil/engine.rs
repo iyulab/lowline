@@ -181,6 +181,25 @@ impl Engine {
             .collect()
     }
 
+    /// The fields a host's model may fill for a record holding `values` — see [`crate::fill::describe`].
+    pub fn describe(
+        &self,
+        values: &BTreeMap<String, FieldValue>,
+        allowed: &BTreeMap<String, Vec<String>>,
+    ) -> Vec<crate::fill::FillField> {
+        crate::fill::describe(&self.fields, values, allowed)
+    }
+
+    /// What to show for each field the host's model answered — see [`crate::fill::fill`].
+    pub fn fill(
+        &self,
+        values: &BTreeMap<String, FieldValue>,
+        allowed: &BTreeMap<String, Vec<String>>,
+        answered: &BTreeMap<String, FieldValue>,
+    ) -> Vec<Proposal> {
+        crate::fill::fill(&self.fields, values, allowed, answered)
+    }
+
     /// Settles the record `id` as saved — its `saved` values, and the `draft` that kept what was shown for it and what
     /// happened to that — learns it, and gives back the record for the host to store. `settled_at` is in 100-nanosecond
     /// ticks since the Unix epoch, UTC. The thresholds are not chosen again here: [`Engine::stale`] says when they should

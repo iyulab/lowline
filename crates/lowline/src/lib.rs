@@ -15,11 +15,14 @@
 //! - [`Policy`] — whether a field is suggested for, and whether the host may put the suggestion in by itself.
 //! - [`Proposal`] — what a host shows for a decided field: one suggestion and what it rests on, or why there is none.
 //! - [`Draft`] — the account of one record being written; [`Draft::settle`] gives the settlements.
+//! - [`fill`] — filling a form from what a person wrote or showed, through the host's model: what to ask it for, and
+//!   its values checked against their fields and shown as suggestions from elsewhere.
 //!
 //! With the `gil` feature, [`gil::schema`] hands a resolved form to the Gil decider, [`gil::proposal`] turns its answer
 //! for a field into a [`Proposal`], and [`Settlement::to_gil`] hands back each settlement. [`gil::Engine`] keeps that
 //! round for one form between calls.
 
+pub mod fill;
 #[cfg(feature = "formdown")]
 mod formdown;
 #[cfg(feature = "gil")]

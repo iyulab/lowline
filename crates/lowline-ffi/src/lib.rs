@@ -165,6 +165,15 @@ fn records(engine: &Engine, lines: &str) -> Result<Vec<Record>, Failure> {
     Ok(read)
 }
 
+/// The choices this person may pick, by field: a JSON object, or empty text for none.
+fn choices(allowed: &str) -> Result<BTreeMap<String, Vec<String>>, Failure> {
+    if allowed.trim().is_empty() {
+        Ok(BTreeMap::new())
+    } else {
+        json(allowed, "allowed")
+    }
+}
+
 fn json<T: for<'de> Deserialize<'de>>(text: &str, what: &str) -> Result<T, Failure> {
     serde_json::from_str(text).map_err(|e| input(format!("{what} does not read: {e}")))
 }
@@ -398,14 +407,63 @@ pub unsafe extern "C" fn lowline_engine_propose(
         let id = unsafe { text(id, "id") }?;
         let values: BTreeMap<String, FieldValue> =
             json(unsafe { text(values, "values") }?, "values")?;
-        let allowed = unsafe { text(allowed, "allowed") }?;
-        let allowed: BTreeMap<String, Vec<String>> = if allowed.trim().is_empty() {
-            BTreeMap::new()
-        } else {
-            json(allowed, "allowed")?
-        };
+        let allowed = choices(unsafe { text(allowed, "allowed") }?)?;
         let proposals = engine.propose(id, &values, &allowed);
         unsafe { set_result(written(&proposals), result_len) }
+    })
+}
+
+/// The fields a host's model may fill for a record holding `values` (as [`lowline_engine_propose`] reads them), with
+/// `allowed` as it reads it: a JSON array of `{ name, kind, choices }` — the fields still empty that take one value,
+/// with a closed choice field's choices narrowed to those this person may pick.
+///
+/// # Safety
+/// `engine` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_describe(
+    engine: *const LowlineEngine,
+    values: LowlineStr,
+    allowed: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let values: BTreeMap<String, FieldValue> =
+            json(unsafe { text(values, "values") }?, "values")?;
+        let allowed = choices(unsafe { text(allowed, "allowed") }?)?;
+        unsafe { set_result(written(&engine.describe(&values, &allowed)), result_len) }
+    })
+}
+
+/// What to show for each field the host's model answered — `answered`, a JSON object of its values by field — for a
+/// record holding `values`: a JSON array of proposals, each a suggestion from elsewhere that is never put in on its
+/// own, or why there is none (`not-a-choice`, `not-allowed`, `malformed`).
+///
+/// # Safety
+/// `engine` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_fill(
+    engine: *const LowlineEngine,
+    values: LowlineStr,
+    allowed: LowlineStr,
+    answered: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let values: BTreeMap<String, FieldValue> =
+            json(unsafe { text(values, "values") }?, "values")?;
+        let allowed = choices(unsafe { text(allowed, "allowed") }?)?;
+        let answered: BTreeMap<String, FieldValue> =
+            json(unsafe { text(answered, "answered") }?, "answered")?;
+        unsafe {
+            set_result(
+                written(&engine.fill(&values, &allowed, &answered)),
+                result_len,
+            )
+        }
     })
 }
 
