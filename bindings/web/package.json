@@ -1,0 +1,37 @@
+{
+  "name": "@iyulab/lowline-form",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Lowline form element: a formdown form whose decided fields are suggested from the records people confirmed, talking to a Lowline host's routes.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iyulab/lowline.git",
+    "directory": "bindings/web"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@formdown/ui": "^0.24.0",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
+  }
+}

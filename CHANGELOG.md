@@ -91,3 +91,11 @@ All notable changes to this project are written here. The format follows
   (`{ id, saved, draft }` → `{ id, settledAt }`), 404 for a form not defined, 400 with the engine's message for input
   it refuses. The host decides each request's memory space (`Space`, from its own authentication) and the choices its
   person may pick (`Allowed`); authorization is the host's, on the returned route group.
+- `<lowline-form>` (`bindings/web`, package `@iyulab/lowline-form`, not yet published): a formdown form whose decided
+  fields are suggested through a host's routes — `src`, `form`, `record`, `content`, `data`. It draws each suggestion
+  in its field with what it rests on (a field's value as the record holds it now), puts in what the host may fill,
+  holds a field's answer back now and then to check it (`rate`, one in twenty by default, drawn once per field of a
+  record), keeps the account of what was shown, taken and turned down, and sends it with `save()`; the host's engine
+  counts it, so nothing is counted in the browser. `Draft`, `Session` and `LowlineClient` are exported for a host that
+  draws its own form.
+- `serde` feature: every part of a `Draft` may be left out when it is read — what a browser keeps.

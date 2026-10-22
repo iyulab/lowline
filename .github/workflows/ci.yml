@@ -52,7 +52,7 @@ jobs:
           cargo test --workspace
           cargo test --workspace --all-features
 
-      # The core runs in the browser too (the form element counts provenance with the same code as the server).
+      # The core builds for the browser too, for a host with no server of its own.
       - name: WebAssembly build
         run: cargo check --workspace --target wasm32-unknown-unknown --all-features
 
@@ -65,6 +65,18 @@ jobs:
         run: |
           cargo build -p lowline-ffi
           cd bindings/csharp && dotnet test --solution Lowline.slnx
+
+      # The form element keeps the account of a record in the browser; the host's engine counts it.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Form element
+        working-directory: bindings/web
+        run: |
+          npm ci
+          npm run check
+          npm test
 
   # The crates declare the oldest compiler they build with (`rust-version`); that holds only while something
   # builds with exactly that compiler.

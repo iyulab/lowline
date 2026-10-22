@@ -138,7 +138,9 @@ pub struct Settlement {
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Track {
+    #[cfg_attr(feature = "serde", serde(default))]
     shown: Option<Suggestion>,
+    #[cfg_attr(feature = "serde", serde(default))]
     declined: bool,
     /// The probability the field was drawn to be checked with, while its answer is held back.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -150,10 +152,16 @@ struct Track {
 ///
 /// The host reports what the person sees and does — [`Draft::show`], [`Draft::decline`], [`Draft::hold`] — and hands
 /// the saved values to [`Draft::settle`]. Typing needs no report: the saved value says what was typed.
+///
+/// With `serde` it reads and writes as `{ "opened": { field: value }, "fields": { field: { "shown": suggestion,
+/// "declined": bool, "held": probability } } }`, each part optional — what a form drawn in a browser keeps and sends
+/// with the save.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Draft {
+    #[cfg_attr(feature = "serde", serde(default))]
     opened: BTreeMap<String, FieldValue>,
+    #[cfg_attr(feature = "serde", serde(default))]
     fields: BTreeMap<String, Track>,
 }
 
@@ -567,6 +575,14 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&SettledBy::Person).unwrap(),
             r#""person""#
+        );
+        // What a browser keeps may leave any part out.
+        assert_eq!(serde_json::from_str::<Draft>("{}").unwrap(), Draft::new());
+        let mut shown = Draft::new();
+        shown.show("f", Suggestion::new("x"));
+        assert_eq!(
+            serde_json::from_str::<Draft>(r#"{"fields":{"f":{"shown":{"value":"x"}}}}"#).unwrap(),
+            shown
         );
     }
 
