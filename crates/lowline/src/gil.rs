@@ -2,7 +2,12 @@
 //!
 //! A host that answers with Gil hands it the [`gil::schema::Schema`] made from the resolved form ([`schema`]) and, when
 //! a record is saved, the settlement of each decided field ([`Settlement::to_gil`]). What Gil answers for a field becomes
-//! the [`Proposal`] the host shows ([`proposal`]).
+//! the [`Proposal`] the host shows ([`proposal`]). [`Engine`] does all of it for one form, keeping the schema and the
+//! memories between calls, so that a host only stores what it is handed back.
+
+mod engine;
+
+pub use engine::{Engine, Stale};
 
 use crate::policy::Policy;
 #[cfg(test)]

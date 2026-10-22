@@ -54,3 +54,8 @@ All notable changes to this project are written here. The format follows
     values taken from the suggestions do not grade the suggestions. `Settlement::to_gil` gives each settlement in Gil's words; a set is settled and restored as a set. An observed
     field that takes several values is one attribute (Gil takes several only for a decided one); a field's parent is
     not handed over. With `serde`, Gil's types serialize too.
+    `gil::Engine` is that whole round for one form, kept between calls: `learn` the stored records, `restore` the
+    stored tuning, `stale` says when to `tune` again (none chosen yet, or Gil's reason), `propose` answers each open
+    decided field of a record from its values so far — with the choices this person may pick, by field — and `settle`
+    turns a save and its `Draft` into the record to store and learns it. The engine keeps the schema and the memories;
+    the records and the tuning are the host's to store, one engine per form and store.

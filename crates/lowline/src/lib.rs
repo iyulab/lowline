@@ -17,7 +17,8 @@
 //! - [`Draft`] — the account of one record being written; [`Draft::settle`] gives the settlements.
 //!
 //! With the `gil` feature, [`gil::schema`] hands a resolved form to the Gil decider, [`gil::proposal`] turns its answer
-//! for a field into a [`Proposal`], and [`Settlement::to_gil`] hands back each settlement.
+//! for a field into a [`Proposal`], and [`Settlement::to_gil`] hands back each settlement. [`gil::Engine`] keeps that
+//! round for one form between calls.
 
 #[cfg(feature = "formdown")]
 mod formdown;

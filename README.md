@@ -15,9 +15,9 @@ Status: early development — no package is published yet.
 
 | Part | What it does |
 |---|---|
-| [`crates/lowline`](crates/lowline) | The core, in Rust with no I/O: the form in one shape whatever it was written in (formdown read from its schema), which of its fields are decided, per-field suggestion policy, and the account of what a person did with each suggestion while writing a record — taken, changed, turned down, or typed with nothing in view — turned into the settlements a decider learns from. With the `gil` feature, the form and its settlements in the vocabulary of the [Gil](https://crates.io/crates/iyulab-gil) decider. Builds for WebAssembly, so a browser and a server count the same way. |
+| [`crates/lowline`](crates/lowline) | The core, in Rust with no I/O: the form in one shape whatever it was written in (formdown read from its schema), which of its fields are decided, per-field suggestion policy, and the account of what a person did with each suggestion while writing a record — taken, changed, turned down, or typed with nothing in view — turned into the settlements a decider learns from. With the `gil` feature, the form and its settlements in the vocabulary of the [Gil](https://crates.io/crates/iyulab-gil) decider, and an engine that keeps one form's decider between calls — records learned, fields answered, saves settled, thresholds chosen again when they no longer stand — leaving the host only to store what it hands back. Builds for WebAssembly, so a browser and a server count the same way. |
 
-Coming next: the suggestion protocol and the decider's answers through the engine, a .NET host and a form element.
+Coming next: a C ABI and a .NET host over the engine, and a form element.
 
 ## Development
 
