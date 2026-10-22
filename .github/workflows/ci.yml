@@ -13,7 +13,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -55,6 +55,16 @@ jobs:
       # The core runs in the browser too (the form element counts provenance with the same code as the server).
       - name: WebAssembly build
         run: cargo check --workspace --target wasm32-unknown-unknown --all-features
+
+      # The .NET host binds the native library cargo builds here (target/debug), as a local build does.
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: .NET host
+        run: |
+          cargo build -p lowline-ffi
+          cd bindings/csharp && dotnet test --solution Lowline.slnx
 
   # The crates declare the oldest compiler they build with (`rust-version`); that holds only while something
   # builds with exactly that compiler.

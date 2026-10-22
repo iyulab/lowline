@@ -70,3 +70,12 @@ All notable changes to this project are written here. The format follows
   engine left broken by a panic while it changed. A panic inside a call is reported, not printed; one elsewhere in
   the process still reaches the panic hook that was there. `lowline_abi_version` is 1.
 - `serde` feature: `gil::Tune` (camelCase, each field defaulted) and `gil::Stale` read and write as JSON.
+- `Lowline` .NET host (`bindings/csharp`, not yet packed): `LowlineEngine` over the C ABI — `Create` from a
+  definition, `Learn`, `Restore`, `Stale`, `Tune`, `Propose` (typed `Proposal`, `Suggestion`, `Basis`, `Layer`,
+  `Abstain`) and `Settle` (giving back a `SettledRecord` to store); safe to share across threads, proposals running
+  alongside each other. `ILowlineStore` is where a host keeps the settled records and the tuning, by `LowlineScope` —
+  a form within a memory space (a workplace, a team) whose records never answer for another — with forgetting
+  records before a date or by id; `InMemoryLowlineStore` keeps them in memory. `LowlineForms` runs the engines of a
+  host's forms over its store: each started from the stored records and tuning when first asked, each save stored
+  and learned, the thresholds chosen again and stored when they no longer stand, an engine started again after
+  records are forgotten.
