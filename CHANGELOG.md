@@ -26,6 +26,12 @@ All notable changes to this project are written here. The format follows
   length typed, its coarse level's and the similar records layer's (and whether that layer is offered). It is kept
   with the tuning, so an engine restored from storage reports the same.
 
+- Which settlements a field's precision is counted on: `Tune.counting` — `unprompted` (the default, as before: values
+  settled with nothing in view, and checks) or `settled` (every value a person settled, a suggestion taken or changed
+  included). Without checks the default never meets the engine's own misses — where people take or correct what it
+  offers it can promise more than it keeps, and run out of values to count on the fields it answers best; a host that
+  does not draw checks (`Recheck`) counts `settled`.
+
 ### Changed
 
 - `tune` chooses every threshold the decider answers with, in the order a suggestion leans on them: how readily each

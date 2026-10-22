@@ -202,6 +202,43 @@ fn values_taken_from_suggestions_do_not_grade_the_suggestions() {
 }
 
 #[test]
+fn counting_every_settled_value_grades_the_suggestions_on_what_people_took() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut schema = engine::schema("intake", &fields).unwrap();
+    // The same records as above, every value taken from a suggestion: counted, a threshold is chosen on them.
+    let records: Vec<_> = (0..40)
+        .map(|i| {
+            let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
+            let mut draft = Draft::new();
+            draft.show("owner", lowline::Suggestion::new("kim"));
+            let settled = draft.settle(["owner"], &values, SettledBy::Person);
+            engine::record(&format!("r{i}"), &fields, &values, &settled, i)
+        })
+        .collect();
+    let tune = engine::Tune {
+        counting: engine::Counting::Settled,
+        ..engine::Tune::default()
+    };
+    engine::tune(&mut schema, &fields, &records, &tune);
+    assert!(schema.attributes[1].key_threshold.is_some());
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn a_tune_left_unsaid_counts_what_people_settled_with_nothing_in_view() {
+    let unsaid: engine::Tune = serde_json::from_str(r#"{"targetPrecision": 0.8}"#).unwrap();
+    assert_eq!(unsaid.counting, engine::Counting::Unprompted);
+    let settled: engine::Tune = serde_json::from_str(r#"{"counting": "settled"}"#).unwrap();
+    assert_eq!(settled.counting, engine::Counting::Settled);
+}
+
+#[test]
 fn a_judgement_the_records_asked_for_is_offered_back_and_settled_as_an_answer() {
     let form = Form {
         fields: vec![

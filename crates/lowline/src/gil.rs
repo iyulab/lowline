@@ -68,9 +68,10 @@ fn attribute(resolved: &ResolvedField) -> gil::schema::Attribute {
     attribute
 }
 
-/// How a decided field's thresholds are chosen ([`tune`]). The default is the desktop app's: a precision of 0.8 —
-/// answering pays when a wrong value costs about five entries — over at least ten answers, the similar records layer
-/// trusted only where its promise rests on at least thirty answers, every band of answers held to the target.
+/// How a decided field's thresholds are chosen ([`tune`]). By default: a precision of 0.8 — answering pays when a wrong
+/// value costs about five entries — over at least ten answers, the similar records layer trusted only where its promise
+/// rests on at least thirty answers, every band of answers held to the target, counted on the values people settled
+/// with nothing in view and on checks ([`Counting::Unprompted`]).
 ///
 /// With `serde`, a field left out takes its default.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -91,6 +92,37 @@ pub struct Tune {
     /// time — a suggestion asked for while a person types ([`crate::gil::Engine::propose_field`]) is held to the
     /// threshold for that many characters. Three by default; zero chooses none, and typing then answers nothing.
     pub typed_longest: usize,
+    /// Which settlements a field's precision is counted on.
+    pub counting: Counting,
+}
+
+/// Which settlements a decided field's precision is counted on when its thresholds are chosen.
+///
+/// Neither choice is right for every host. Counting only what people settled with nothing in view keeps the
+/// suggestions from vouching for themselves — but the records it counts are then those the engine did not answer, so
+/// without checks ([`crate::Recheck`]) it never meets its own misses: where people take or correct what it offers, it
+/// can promise more than it keeps, and the values left to count run out on the fields it answers best. Counting every
+/// value a person settled sees those misses, at the cost that a wrong suggestion a person takes counts as right.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+pub enum Counting {
+    /// Values settled with nothing in view, and checks ([`COUNTED`]) — for a host that draws checks.
+    #[default]
+    Unprompted,
+    /// Every value a person settled ([`SETTLED`]): taken from a suggestion, changed, entered, kept — not one the
+    /// application put in on its own.
+    Settled,
+}
+
+impl Counting {
+    /// The settlements counted.
+    pub fn kinds(self) -> &'static [gil::schema::SettlementKind] {
+        match self {
+            Counting::Unprompted => COUNTED,
+            Counting::Settled => SETTLED,
+        }
+    }
 }
 
 impl Default for Tune {
@@ -101,6 +133,7 @@ impl Default for Tune {
             similar_minimum_answered: 30.0,
             rule: gil::replay::ThresholdRule::EveryBand,
             typed_longest: 3,
+            counting: Counting::Unprompted,
         }
     }
 }
@@ -152,7 +185,7 @@ pub struct FieldReport {
 /// answers the [`Tuned`] that keeps them — the [`gil::tuning::Tuning`] a host stores and puts back with
 /// `Tuning::apply` and chooses again once `Tuning::stale` says so (including when there is no tuning yet), with how
 /// each field's replays went. `fields` is the resolved form
-/// the schema was made from. Precision is counted on [`COUNTED`] settlements only. Records are replayed in settlement
+/// the schema was made from. Precision is counted on the settlements [`Tune::counting`] names. Records are replayed in settlement
 /// order, through default memories — a host that answers with differently configured memories chooses with those
 /// instead.
 ///
@@ -180,7 +213,7 @@ pub fn tune(
     let choice = gil::replay::Choice {
         target_precision: tune.target_precision,
         minimum_answered: tune.minimum_answered,
-        counting: Some(COUNTED),
+        counting: Some(tune.counting.kinds()),
     };
     let decided: Vec<(String, bool)> = schema
         .attributes
@@ -502,6 +535,19 @@ fn basis(candidate: &gil::decider::Candidate) -> Vec<Basis> {
 pub const COUNTED: &[gil::schema::SettlementKind] = &[
     gil::schema::SettlementKind::Enter,
     gil::schema::SettlementKind::Check,
+];
+
+/// The settlements [`Counting::Settled`] counts: every value a person settled — all but [`gil::schema::SettlementKind::Fill`]
+/// (and the kinds that leave no value).
+pub const SETTLED: &[gil::schema::SettlementKind] = &[
+    gil::schema::SettlementKind::Accept,
+    gil::schema::SettlementKind::Correct,
+    gil::schema::SettlementKind::Restore,
+    gil::schema::SettlementKind::Set,
+    gil::schema::SettlementKind::Enter,
+    gil::schema::SettlementKind::Check,
+    gil::schema::SettlementKind::AcceptOther,
+    gil::schema::SettlementKind::CorrectOther,
 ];
 
 /// One decision as Gil's [`gil::usage::usage`] counts it: the proposal shown for the field and how the field was
