@@ -20,16 +20,40 @@ Status: early development — no package is published yet.
 | [`bindings/csharp`](bindings/csharp) | The .NET host: an engine per form and memory space over the store the host keeps its records in (`ILowlineStore`, or SQLite with `Lowline.Sqlite`), proposing and settling through the C ABI; `Lowline.AspNetCore` puts it behind two routes with `AddLowline` and `MapLowline`. Not packed yet. |
 | [`bindings/web`](bindings/web) | `<lowline-form>`: a formdown form whose decided fields are suggested through those routes; it keeps the account of what was shown and done and sends it with the save. Not published yet. |
 
-[`samples/aspnet`](samples/aspnet) puts the three together — `AddLowline(o => o.UseSqlite(…))`, `MapLowline("/lowline")` and
-`<lowline-form>` on a page — and seeds forty records so the owner of a known customer is suggested at once:
+## Using it
+
+A web host writes two pieces on the server and one on the page.
+
+```csharp
+builder.Services.AddLowline(o => o
+    .UseSqlite("Data Source=lowline.db")       // where the confirmed records are kept
+    .Form("intake", intakeDefinition));        // the form: its fields, as JSON or as formdown's getSchema()
+app.MapLowline("/lowline");                    // POST /lowline/{form}/propose · settle · fill
+```
+
+```html
+<lowline-form src="/lowline" form="intake" record="r-17"></lowline-form>
+```
+
+Set the element's `content` to the form's formdown text. While a record is written, the element asks what to show
+for the fields the engine decides, draws each suggestion in its field with what it rests on, and keeps the account of
+what the person took, changed or turned down; `save()` sends it with the values, and the engine learns from it. The
+host decides, per request, the memory space a record belongs to (`Space` — a workplace, a team; records of one space
+never answer for another) and the choices its person may pick (`Allowed`) — a value outside them is never suggested.
+Authentication and authorization stay the host's.
+
+Filling from what a person wrote is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
+tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
+in its field for the person to take — never put in on its own, and never counted as the records' own answer.
+
+[`samples/aspnet`](samples/aspnet) is all of it on one page, with a stand-in model, seeding forty records so the
+owner of a known customer is suggested at once:
 
 ```sh
 cargo build -p lowline-ffi
 (cd bindings/web && npm ci && npm run bundle)
 dotnet run --project samples/aspnet
 ```
-
-Coming next: filling fields from free text or a picture.
 
 ## Development
 
