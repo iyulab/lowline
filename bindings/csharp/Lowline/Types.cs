@@ -288,6 +288,10 @@ public sealed record FieldReport
 
     /// <summary>Whether the similar records layer is offered for the field.</summary>
     [JsonPropertyName("similarOffered")] public bool SimilarOffered { get; init; }
+
+    /// <summary>How many of the latest records each choice's <see cref="ThresholdChoice.Promise"/> is the precision
+    /// over.</summary>
+    [JsonPropertyName("promiseOver")] public int PromiseOver { get; init; }
 }
 
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the

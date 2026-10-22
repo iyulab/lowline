@@ -144,6 +144,8 @@ pub struct FieldReport {
     /// Whether the similar records layer is offered: its promise rests on at least [`Tune::similar_minimum_answered`]
     /// answers.
     pub similar_offered: bool,
+    /// How many of the latest records each choice's `promise` is the precision over.
+    pub promise_over: usize,
 }
 
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
@@ -234,6 +236,7 @@ pub fn tune(
             coarse: None,
             similar: None,
             similar_offered: false,
+            promise_over: gil::replay::RECENT_DOCUMENTS,
         };
         if multiple {
             field.closest = closest(&keyed.chosen);
