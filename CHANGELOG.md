@@ -8,6 +8,9 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- Packages: `lowline` on crates.io; `Lowline` (with the native library for Windows, Linux and macOS, x64 and arm64),
+  `Lowline.Sqlite` and `Lowline.AspNetCore` on NuGet; `@iyulab/lowline-form` on npm, with a one-file build for a page
+  with no build step (`dist/bundle/lowline-form.bundle.js`). One version for all of them.
 - Filling a form from what a person wrote or showed, through the host's model — the engine calls none. `fill::describe`
   tells the host what to ask for: the fields still empty that take one value, each with its kind and, for a closed
   choice, the choices this person may pick. `fill::fill` checks the model's values against their fields and shows each

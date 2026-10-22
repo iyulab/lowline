@@ -1,6 +1,6 @@
 [package]
 name = "lowline"
-version = "0.0.0"
+version.workspace = true
 description = "Form engine that learns from confirmed records: tracks what a person did with each suggestion and turns it into the settlement a decider learns from."
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,6 @@ rust-version.workspace = true
 readme = "../../README.md"
 keywords = ["forms", "suggestion", "provenance"]
 categories = ["algorithms"]
-publish = false
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }

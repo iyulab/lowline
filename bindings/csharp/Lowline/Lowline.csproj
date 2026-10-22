@@ -1,14 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Lowline</RootNamespace>
-    <!-- 0.0.0 is the unreleased placeholder; the binding shares its version line with the engine crates. -->
-    <Version>0.0.0</Version>
     <Description>A form engine that learns from the records people confirm: suggestions for a form's decided fields from the records already confirmed, what each rests on, and the account of what a person did with them. The .NET host over the Rust engine.</Description>
     <PackageTags>forms;suggestion;provenance;learning</PackageTags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>true</IsAotCompatible>
-    <!-- Not packed until the per-runtime native libraries are assembled by a release build. -->
-    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <!-- Local builds take the native library cargo built in this repository (`cargo build -p lowline-ffi`). -->
@@ -20,6 +16,16 @@
     <None Include="$(LowlineNativeDirectory)liblowline_native.so" Condition="Exists('$(LowlineNativeDirectory)liblowline_native.so')" Link="liblowline_native.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <None Include="$(LowlineNativeDirectory)lowline_native.dll" Condition="Exists('$(LowlineNativeDirectory)lowline_native.dll')" Link="lowline_native.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
+
+  <!-- The package carries one native library per runtime, which the release build puts under runtimes/<rid>/native/
+       (.github/workflows/release.yml). A package without them would restore and then fail on its first call, so
+       packing without any stops here. -->
+  <ItemGroup>
+    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/" Visible="false" />
+  </ItemGroup>
+  <Target Name="RequireNativeRuntimes" BeforeTargets="GenerateNuspec">
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)runtimes')" Text="No native libraries under runtimes/&lt;rid&gt;/native/: the package is assembled by the release build." />
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Lowline.Tests" />

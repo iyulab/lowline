@@ -64,6 +64,19 @@ cargo build -p lowline-ffi && (cd bindings/csharp && dotnet test --solution Lowl
 (cd bindings/web && npm ci && npm test)
 ```
 
+## Releasing
+
+Everything here shares one version: the crates, the three .NET packages and the form element.
+
+1. `npx @iyulab/tauri-kit-dev versions --config versions.config.js --bump <version>`, and move the changelog's
+   `[Unreleased]` under that version.
+2. Commit, tag `v<version>`, push the tag. The `Release` workflow builds the native library for six runtimes (Windows,
+   Linux and macOS, x64 and arm64), packs `Lowline` with them, restores the packages on three systems and calls into
+   the library, then publishes to NuGet and npm.
+3. From the tag: `cargo publish -p lowline`.
+
+Running `Release` by hand without `publish` does all but the publishing — a trial of the packages.
+
 ## License
 
 [MIT](LICENSE)

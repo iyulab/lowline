@@ -28,6 +28,9 @@ and the form is filled in by hand. Nothing is counted in the browser: the host's
 
 `Draft`, `Session` and `LowlineClient` are exported for a host that draws its own form.
 
+The package is `@iyulab/lowline-form`, with Lit and formdown as dependencies. A page with no build step takes the one
+file in it that carries both: `dist/bundle/lowline-form.bundle.js`.
+
 ```sh
 npm ci
 npm test

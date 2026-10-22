@@ -1,0 +1,261 @@
+name: Release
+
+# Publishes the .NET packages (Lowline, Lowline.Sqlite, Lowline.AspNetCore) to NuGet and the form element
+# (@iyulab/lowline-form) to npm. The `lowline` crate goes to crates.io from the same tag by hand:
+# `cargo publish -p lowline` (README, «Releasing»).
+#
+# To release: `npx @iyulab/tauri-kit-dev versions --config versions.config.js --bump <version>`, move the
+# changelog's [Unreleased] under that version, commit, tag `v<version>`, push the tag.
+# - Pushing a `v*` tag publishes that tag.
+# - Manual dispatch builds, packs and tries the packages on three systems; with `publish` it also publishes, but only
+#   when a `v<version>` tag exists and the source is the same as it, so what reaches a registry is always the tagged
+#   source.
+# Re-running is safe: versions already on a registry are skipped.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to NuGet and npm (needs the v<version> tag on this source)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: One version in every file
+        run: npx --yes @iyulab/tauri-kit-dev@0.11.1 versions --config versions.config.js
+
+      - name: Source matches the release tag
+        id: version
+        env:
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          VERSION=$(node -p "require('./bindings/web/package.json').version")
+          TAG="v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "$TAG" ]; then
+              echo "::error::Pushed tag $GITHUB_REF_NAME does not match the version $VERSION."
+              exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [ "$PUBLISH_INPUT" = "true" ]; then
+            if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+              echo "::error::Tag $TAG does not exist — tag the release commit first."
+              exit 1
+            fi
+            if ! git diff --quiet "$TAG" HEAD -- crates bindings Cargo.toml Cargo.lock; then
+              echo "::error::The source differs from $TAG — publish from the tag."
+              exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Said on every run, so a trial run shows whether a publish would find its keys; only a publish needs them.
+      - name: Registry keys reach this repository
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PUBLISH: ${{ steps.version.outputs.publish }}
+        run: |
+          missing=0
+          for name in NUGET_API_KEY NPM_TOKEN; do
+            if [ -n "${!name}" ]; then echo "$name: available"; else echo "::warning::$name is not available"; missing=1; fi
+          done
+          [ "$PUBLISH" != "true" ] || [ "$missing" -eq 0 ]
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # What crates.io would take: the crate's own folder, its readme and license, building on its own.
+      - name: The crate packs
+        run: cargo publish -p lowline --dry-run
+
+  # One native library per runtime; the matrix is the only list of them, so adding a runtime here ships it.
+  native:
+    needs: check
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { rid: win-x64, os: windows-latest, target: x86_64-pc-windows-msvc, file: lowline_native.dll }
+          - { rid: win-arm64, os: windows-latest, target: aarch64-pc-windows-msvc, file: lowline_native.dll }
+          # The library links against the build image's glibc, so the image decides the oldest Linux it loads on.
+          - { rid: linux-x64, os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, file: liblowline_native.so }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, file: liblowline_native.so }
+          - { rid: osx-x64, os: macos-latest, target: x86_64-apple-darwin, file: liblowline_native.dylib }
+          - { rid: osx-arm64, os: macos-latest, target: aarch64-apple-darwin, file: liblowline_native.dylib }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked -p lowline-ffi --target ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.rid }}
+          path: target/${{ matrix.target }}/release/${{ matrix.file }}
+          if-no-files-found: error
+          retention-days: 1
+
+  pack:
+    needs: [check, native]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: native
+
+      # Each runtime holds exactly one library; a missing one would otherwise reach the package unnoticed.
+      - name: Place the libraries by runtime
+        run: |
+          for dir in native/native-*; do
+            rid="${dir#native/native-}"
+            dest="bindings/csharp/Lowline/runtimes/$rid/native"
+            mkdir -p "$dest"
+            mv "$dir"/* "$dest/"
+            [ "$(find "$dest" -type f | wc -l)" -eq 1 ] || { echo "::error::$dest holds other than one library"; exit 1; }
+          done
+          [ "$(ls bindings/csharp/Lowline/runtimes | wc -l)" -eq 6 ] || { echo "::error::expected six runtimes"; exit 1; }
+
+      - name: Pack
+        run: |
+          for project in Lowline Lowline.Sqlite Lowline.AspNetCore; do
+            dotnet pack "bindings/csharp/$project/$project.csproj" -c Release -o packages
+          done
+          unzip -l "packages/Lowline.${{ needs.check.outputs.version }}.nupkg" | grep runtimes/
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Pack the form element
+        working-directory: bindings/web
+        run: |
+          npm ci
+          npm run build
+          npm run bundle
+          npm test
+          npm pack --pack-destination ../../packages
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: packages/
+          if-no-files-found: error
+          retention-days: 1
+
+  # Restores the packages just packed on each system and calls into the native library.
+  smoke:
+    needs: [check, pack]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      DOTNET_NOLOGO: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: packages
+
+      - name: Load the native library from the package
+        shell: bash
+        run: >
+          dotnet run --project bindings/package-smoke
+          -p:LowlineVersion=${{ needs.check.outputs.version }}
+          -p:RestoreAdditionalProjectSources="$GITHUB_WORKSPACE/packages"
+
+  publish:
+    needs: [check, smoke]
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: packages
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: NuGet
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          [ -n "$NUGET_API_KEY" ] || { echo "::error::NUGET_API_KEY is not available to this repository"; exit 1; }
+          dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          [ -n "$NODE_AUTH_TOKEN" ] || { echo "::error::NPM_TOKEN is not available to this repository"; exit 1; }
+          if npm view "@iyulab/lowline-form@$VERSION" version >/dev/null 2>&1; then
+            echo "@iyulab/lowline-form@$VERSION is already on npm — skipped."
+          else
+            npm publish "packages/iyulab-lowline-form-$VERSION.tgz" --provenance --access public
+          fi

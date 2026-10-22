@@ -1,11 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Lowline.Sqlite</RootNamespace>
-    <Version>0.0.0</Version>
     <Description>A SQLite store for the Lowline engine: the settled records and the tuning of each form and memory space, in tables of their own.</Description>
     <PackageTags>forms;suggestion;sqlite</PackageTags>
     <IsAotCompatible>true</IsAotCompatible>
-    <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Lowline\Lowline.csproj" />

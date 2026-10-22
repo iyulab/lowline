@@ -1,6 +1,6 @@
 [package]
 name = "lowline-ffi"
-version = "0.0.0"
+version.workspace = true
 description = "C ABI over the Lowline engine, for the .NET host."
 edition.workspace = true
 license.workspace = true
