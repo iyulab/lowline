@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
 ### Added
 
 - Asking for one field while a person types into it: `Engine::propose_field` takes the text typed so far and suggests
