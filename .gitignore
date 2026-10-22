@@ -6,4 +6,5 @@ obj/
 *.db
 # Put there by the release build, one native library per runtime.
 bindings/csharp/Lowline/runtimes/
+bindings/csharp/Lowline/THIRD-PARTY-NOTICES.txt
 packages/

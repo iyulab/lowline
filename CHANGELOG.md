@@ -43,6 +43,8 @@ All notable changes to this project are written here. The format follows
 
 - The NuGet packages carry the license text (`LICENSE`), not only its name: a host shipping them has the text to ship
   along.
+- `Lowline` carries the notices of the crates linked into its native library (`THIRD-PARTY-NOTICES.txt`, their
+  license texts), which 0.1.0 left out.
 
 ## [0.1.0] - 2026-10-23
 

@@ -159,16 +159,20 @@ jobs:
           done
           [ "$(ls bindings/csharp/Lowline/runtimes | wc -l)" -eq 6 ] || { echo "::error::expected six runtimes"; exit 1; }
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The crates linked into the native libraries, with their license texts; a crate without one fails the release.
+      - name: Write the native libraries' notices
+        run: npx --yes @iyulab/tauri-kit-dev@0.11.1 notices --config notices/config.mjs --strict
+
       - name: Pack
         run: |
           for project in Lowline Lowline.Sqlite Lowline.AspNetCore; do
             dotnet pack "bindings/csharp/$project/$project.csproj" -c Release -o packages
           done
-          unzip -l "packages/Lowline.${{ needs.check.outputs.version }}.nupkg" | grep runtimes/
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
+          unzip -l "packages/Lowline.${{ needs.check.outputs.version }}.nupkg" | grep -E "runtimes/|THIRD-PARTY-NOTICES"
 
       - name: Pack the form element
         working-directory: bindings/web

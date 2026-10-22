@@ -20,11 +20,15 @@
   <!-- The package carries one native library per runtime, which the release build puts under runtimes/<rid>/native/
        (.github/workflows/release.yml). A package without them would restore and then fail on its first call, so
        packing without any stops here. -->
+  <!-- The notices of the crates linked into those libraries come with them (notices/config.mjs, written by the release
+       build): whoever ships the package must carry them, so packing without them stops here too. -->
   <ItemGroup>
     <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/" Visible="false" />
+    <None Include="THIRD-PARTY-NOTICES.txt" Condition="Exists('THIRD-PARTY-NOTICES.txt')" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
   <Target Name="RequireNativeRuntimes" BeforeTargets="GenerateNuspec">
     <Error Condition="!Exists('$(MSBuildThisFileDirectory)runtimes')" Text="No native libraries under runtimes/&lt;rid&gt;/native/: the package is assembled by the release build." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)THIRD-PARTY-NOTICES.txt')" Text="No THIRD-PARTY-NOTICES.txt for the native libraries' crates: the release build writes it (notices/config.mjs)." />
   </Target>
 
   <ItemGroup>
