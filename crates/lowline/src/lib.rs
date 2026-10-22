@@ -20,7 +20,8 @@
 //!
 //! With the `gil` feature, [`gil::schema`] hands a resolved form to the Gil decider, [`gil::proposal`] turns its answer
 //! for a field into a [`Proposal`], and [`Settlement::to_gil`] hands back each settlement. [`gil::Engine`] keeps that
-//! round for one form between calls.
+//! round for one form between calls; where the records cannot answer a field it says what a judgement would read, and
+//! [`gil::Engine::offer`] takes the host model's judgement back.
 
 pub mod fill;
 #[cfg(feature = "formdown")]

@@ -1,7 +1,7 @@
 # `<lowline-form>`
 
 A formdown form whose decided fields are suggested from the records people confirmed, talking to a Lowline host's
-routes (`MapLowline` in .NET). Not published yet.
+routes (`MapLowline` in .NET).
 
 ```html
 <lowline-form src="/lowline" form="intake" record="r-17"></lowline-form>
@@ -23,8 +23,10 @@ routes (`MapLowline` in .NET). Not published yet.
 | `strings` | The words the form shows, in the host's language. |
 
 `save()` sends the values with the account of what was shown, taken and turned down, and fires `lowline-saved`;
-`fill(text)` offers the host model's values in their fields. When the routes do not answer, `lowline-unavailable` fires
-and the form is filled in by hand. Nothing is counted in the browser: the host's engine counts what it is sent.
+`fill(text)` offers the host model's values in their fields. A field the records cannot answer yet is judged by the
+host's model when it has one (`judge`): asked once for the values it reads, shown in the field while the person writes
+on, never put in on its own. When the routes do not answer, `lowline-unavailable` fires and the form is filled in by
+hand. Nothing is counted in the browser: the host's engine counts what it is sent.
 
 `Draft`, `Session` and `LowlineClient` are exported for a host that draws its own form.
 

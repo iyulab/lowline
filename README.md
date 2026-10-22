@@ -17,8 +17,8 @@ Status: early development — no package is published yet.
 |---|---|
 | [`crates/lowline`](crates/lowline) | The core, in Rust with no I/O: the form in one shape whatever it was written in (formdown read from its schema), which of its fields are decided, per-field suggestion policy, and the account of what a person did with each suggestion while writing a record — taken, changed, turned down, or typed with nothing in view — turned into the settlements a decider learns from. With the `gil` feature, the form and its settlements in the vocabulary of the [Gil](https://crates.io/crates/iyulab-gil) decider, and an engine that keeps one form's decider between calls — records learned, fields answered, saves settled, thresholds chosen again when they no longer stand — leaving the host only to store what it hands back. Builds for WebAssembly too. |
 | [`crates/lowline-ffi`](crates/lowline-ffi) | A C ABI over the engine, one handle per form, everything as JSON — the native side of a .NET host. Not published on its own. |
-| [`bindings/csharp`](bindings/csharp) | The .NET host: an engine per form and memory space over the store the host keeps its records in (`ILowlineStore`, or SQLite with `Lowline.Sqlite`), proposing and settling through the C ABI; `Lowline.AspNetCore` puts it behind two routes with `AddLowline` and `MapLowline`. Not packed yet. |
-| [`bindings/web`](bindings/web) | `<lowline-form>`: a formdown form whose decided fields are suggested through those routes; it keeps the account of what was shown and done and sends it with the save. Not published yet. |
+| [`bindings/csharp`](bindings/csharp) | The .NET host: an engine per form and memory space over the store the host keeps its records in (`ILowlineStore`, or SQLite with `Lowline.Sqlite`), proposing and settling through the C ABI; `Lowline.AspNetCore` puts it behind its routes with `AddLowline` and `MapLowline`. NuGet: `Lowline` (with the native library for Windows, Linux and macOS, x64 and arm64), `Lowline.Sqlite`, `Lowline.AspNetCore`. |
+| [`bindings/web`](bindings/web) | `<lowline-form>`: a formdown form whose decided fields are suggested through those routes; it keeps the account of what was shown and done and sends it with the save. npm: `@iyulab/lowline-form`. |
 
 ## Using it
 
@@ -28,7 +28,7 @@ A web host writes two pieces on the server and one on the page.
 builder.Services.AddLowline(o => o
     .UseSqlite("Data Source=lowline.db")       // where the confirmed records are kept
     .Form("intake", intakeDefinition));        // the form: its fields, as JSON or as formdown's getSchema()
-app.MapLowline("/lowline");                    // POST /lowline/{form}/propose · settle · fill
+app.MapLowline("/lowline");                    // POST /lowline/{form}/propose · settle · fill · judge
 ```
 
 ```html
@@ -45,6 +45,13 @@ Authentication and authorization stay the host's.
 Filling from what a person wrote is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
 tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
 in its field for the person to take — never put in on its own, and never counted as the records' own answer.
+
+The same model judges what the records cannot answer yet — a decided field of a record unlike any confirmed before.
+Such a field asks for a judgement and says which of the record's values to read; the element asks the host, the host
+puts it to the model (`ILowlineModel.JudgeAsync`), and the model's value is offered back to the engine, which shows it
+as its own answer when the model trusts it and it is one of the field's choices. A judgement is shown, never put in on
+its own; taken by a person, it counts as the engine's answer, so the engine learns how often its judgements hold. Where
+the records have evidence, a judgement changes nothing.
 
 [`samples/aspnet`](samples/aspnet) is all of it on one page, with a stand-in model, seeding forty records so the
 owner of a known customer is suggested at once:
