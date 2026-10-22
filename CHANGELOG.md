@@ -59,3 +59,14 @@ All notable changes to this project are written here. The format follows
     decided field of a record from its values so far — with the choices this person may pick, by field — and `settle`
     turns a save and its `Draft` into the record to store and learns it. The engine keeps the schema and the memories;
     the records and the tuning are the host's to store, one engine per form and store.
+- `lowline-ffi` crate (library `lowline_native`, not published to crates.io — the native side of the .NET host): a
+  C ABI over `gil::Engine`. One handle per form — `lowline_engine_new` from a definition (`name`, the form as `form`
+  or as formdown's `getSchema()` JSON under `formdown`, optional `inference` and `tune`), then `learn` (records as
+  JSON lines), `restore` (a stored tuning), `stale`, `tune`, `propose` (values and the choices this person may pick,
+  by field) and `settle` (saved values and the draft, giving back the record to store); `lowline_engine_settled`
+  counts what was learned. Everything crosses as JSON; nothing calls back into the host. Statuses, text and buffer
+  rules and handle threading are those of the Gil decider's C ABI: `OK`, `INVALID_INPUT`, `INVALID_ARGUMENT`,
+  `PANIC`, `BUFFER_TOO_SMALL`, `BROKEN`, the last error and last result copied out on the calling thread, and an
+  engine left broken by a panic while it changed. A panic inside a call is reported, not printed; one elsewhere in
+  the process still reaches the panic hook that was there. `lowline_abi_version` is 1.
+- `serde` feature: `gil::Tune` (camelCase, each field defaulted) and `gil::Stale` read and write as JSON.

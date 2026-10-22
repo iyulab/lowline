@@ -71,7 +71,11 @@ fn attribute(resolved: &ResolvedField) -> gil::schema::Attribute {
 /// How a decided field's thresholds are chosen ([`tune`]). The default is the desktop app's: a precision of 0.8 —
 /// answering pays when a wrong value costs about five entries — over at least ten answers, the similar records layer
 /// trusted only where its promise rests on at least thirty answers, every band of answers held to the target.
+///
+/// With `serde`, a field left out takes its default.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
 pub struct Tune {
     pub target_precision: f64,
     pub minimum_answered: usize,

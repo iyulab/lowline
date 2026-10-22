@@ -61,6 +61,8 @@ pub struct Engine {
 
 /// Why an engine's thresholds should be chosen again ([`Engine::stale`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub enum Stale {
     /// None were chosen, or none were restored.
     Untuned,
