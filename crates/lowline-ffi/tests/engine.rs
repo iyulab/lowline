@@ -103,6 +103,22 @@ fn propose(engine: *const LowlineEngine, values: &Value, allowed: &str) -> Value
     result(len)
 }
 
+fn propose_field(engine: *const LowlineEngine, values: &Value, field: &str, typed: &str) -> Value {
+    let mut len = 0;
+    ok(unsafe {
+        lowline_engine_propose_field(
+            engine,
+            s("new"),
+            s(&values.to_string()),
+            NONE,
+            s(field),
+            s(typed),
+            &mut len,
+        )
+    });
+    result(len)
+}
+
 #[test]
 fn a_host_round_through_the_abi() {
     assert_eq!(lowline_abi_version(), LOWLINE_ABI_VERSION);
@@ -135,6 +151,16 @@ fn a_host_round_through_the_abi() {
     );
     assert_eq!(kim_only[0]["suggestion"], Value::Null);
     assert_eq!(kim_only[0]["abstain"], "not-allowed");
+
+    // One field asked for alone, and while a person types into it: a choice field answers nothing while typed into.
+    let one = propose_field(engine, &json!({ "customer": "Beta" }), "owner", "");
+    assert_eq!(one["suggestion"]["value"], "lee");
+    let typed = propose_field(engine, &json!({ "customer": "Beta" }), "owner", "l");
+    assert_eq!(typed["abstain"], "unsure");
+    assert_eq!(
+        propose_field(engine, &json!({ "customer": "Beta" }), "customer", ""),
+        Value::Null
+    );
 
     // The person takes it and saves: the record to store says the value was accepted.
     let mut draft = Draft::new();

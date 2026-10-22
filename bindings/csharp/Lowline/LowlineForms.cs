@@ -123,6 +123,21 @@ public sealed class LowlineForms : IDisposable
         return running.Engine.Propose(id, values, allowed);
     }
 
+    /// <summary>What to show for the one decided field <paramref name="field"/> of record <paramref name="id"/> while
+    /// a person types <paramref name="typed"/> into it — see <see cref="LowlineEngine.ProposeField"/>.</summary>
+    public async Task<Proposal?> ProposeFieldAsync(
+        LowlineScope scope,
+        string id,
+        IReadOnlyDictionary<string, FieldValue> values,
+        string field,
+        string? typed = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null,
+        CancellationToken cancellationToken = default)
+    {
+        var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
+        return running.Engine.ProposeField(id, values, field, typed, allowed);
+    }
+
     /// <summary>Settles and stores record <paramref name="id"/> as saved — see <see cref="LowlineEngine.Settle"/>.
     /// When the thresholds no longer stand, they are chosen again on every stored record in the background — the
     /// engine answers with the ones it has meanwhile — then put in and stored; <see cref="WhenTunedAsync"/> waits for

@@ -87,6 +87,10 @@ pub struct Tune {
     /// on few answers. A lower gate lets the layer answer sooner at that cost; a host with its own replays may move it.
     pub similar_minimum_answered: f64,
     pub rule: gil::replay::ThresholdRule,
+    /// The most characters typed into a field written out as free text that thresholds are chosen for, one length at a
+    /// time — a suggestion asked for while a person types ([`crate::gil::Engine::propose_field`]) is held to the
+    /// threshold for that many characters. Three by default; zero chooses none, and typing then answers nothing.
+    pub typed_longest: usize,
 }
 
 impl Default for Tune {
@@ -96,21 +100,34 @@ impl Default for Tune {
             minimum_answered: 10,
             similar_minimum_answered: 30.0,
             rule: gil::replay::ThresholdRule::EveryBand,
+            typed_longest: 3,
         }
     }
 }
 
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
 /// answers the [`gil::tuning::Tuning`] that keeps them — what a host stores and puts back with `Tuning::apply`, and
-/// chooses again once `Tuning::stale` says so (including when there is no tuning yet). Precision is counted on
-/// [`COUNTED`] settlements only. Records are replayed in settlement order, through default memories — a host that
-/// answers with differently configured memories chooses with those instead.
+/// chooses again once `Tuning::stale` says so (including when there is no tuning yet). `fields` is the resolved form
+/// the schema was made from. Precision is counted on [`COUNTED`] settlements only. Records are replayed in settlement
+/// order, through default memories — a host that answers with differently configured memories chooses with those
+/// instead.
 ///
-/// A field that takes one value has its key and similar records thresholds chosen together; one that takes several,
-/// its key threshold. Where a replay chooses nothing, the field is not answered until enough records are settled.
-/// Key fields, typed thresholds and coarse thresholds are left as the schema holds them.
+/// Each decided field is chosen for in the order a suggestion leans on what is chosen before it:
+///
+/// 1. how readily each field's keys are believed after a few settlements — a field naming the very thing decided keeps
+///    the value its keys were first seen with, a broad one mixes values, and every score below is on that scale;
+/// 2. the fields that key it — where a few decide a field of many values the rest only add to every value's score —
+///    with its key threshold; for a field written out as free text, counted by its answers before and while typing;
+/// 3. for a field that takes one value, its key and similar records thresholds together, keyed as just chosen, the
+///    similar records layer trusted only where its promise rests on [`Tune::similar_minimum_answered`] answers;
+/// 4. for a free text field, the threshold for each length typed, on the key threshold the field ended with;
+/// 5. for a field with a coarse level, the class's thresholds on the lookups its value leaves — the similar records
+///    layer held to the same gate.
+///
+/// Where a replay chooses nothing, the field is not answered until enough records are settled.
 pub fn tune(
     schema: &mut gil::schema::Schema,
+    fields: &[ResolvedField],
     records: &[gil::schema::Record],
     tune: &Tune,
 ) -> gil::tuning::Tuning {
@@ -130,18 +147,44 @@ pub fn tune(
 
     let mut promises = Vec::new();
     for (name, multiple) in decided {
-        if multiple {
-            let key = gil::replay::select_key_threshold(
-                &mut gil::key_memory::KeyMemory::default(),
-                schema,
-                &name,
-                &ordered,
-                choice,
-            );
+        // Chosen afresh: what an earlier choice set is not evidence for this one.
+        {
             let attribute = attribute_mut(schema, &name);
-            attribute.key_threshold = key.chosen.map(|c| c.threshold);
+            attribute.key_fields = None;
+            attribute.key_concentrations.clear();
+            attribute.key_threshold = None;
+            attribute.typed_key_thresholds = None;
+            attribute.memory_threshold = None;
+            attribute.memory_floor = None;
+            if let Some(coarse) = attribute.coarse.as_mut() {
+                coarse.key_threshold = None;
+                coarse.memory_threshold = None;
+                coarse.memory_floor = None;
+            }
+        }
+        let concentrations = gil::replay::select_key_concentrations(
+            &mut gil::key_memory::KeyMemory::default(),
+            schema,
+            &name,
+            &ordered,
+        );
+        attribute_mut(schema, &name).key_concentrations = concentrations;
+
+        let typed_longest = if typeable(fields, &name) {
+            tune.typed_longest
+        } else {
+            0
+        };
+        let keyed = gil::replay::select_key_fields(schema, &name, &ordered, choice, typed_longest);
+        {
+            let attribute = attribute_mut(schema, &name);
+            attribute.key_fields = keyed.key_fields;
+            attribute.key_threshold = keyed.chosen.chosen.as_ref().map(|c| c.threshold);
+        }
+        if multiple {
             continue;
         }
+
         let layers = gil::replay::select_layers_by_rule(
             &mut gil::key_memory::KeyMemory::default(),
             &mut gil::lexical_memory::LexicalMemory::default(),
@@ -151,15 +194,48 @@ pub fn tune(
             choice,
             tune.rule,
         );
-        let attribute = attribute_mut(schema, &name);
-        attribute.key_threshold = layers.key.chosen.as_ref().map(|c| c.threshold);
-        let similar = layers
-            .memory
-            .chosen
-            .as_ref()
-            .filter(|c| c.promise_answered >= tune.similar_minimum_answered);
-        attribute.memory_threshold = similar.map(|c| c.threshold);
-        attribute.memory_floor = similar.and_then(|c| c.similarity_floor);
+        let similar = trusted(&layers, tune);
+        {
+            let attribute = attribute_mut(schema, &name);
+            attribute.key_threshold = layers.key.chosen.as_ref().map(|c| c.threshold);
+            attribute.memory_threshold = similar.map(|c| c.threshold);
+            attribute.memory_floor = similar.and_then(|c| c.similarity_floor);
+        }
+
+        if typed_longest > 0 {
+            let typed = gil::replay::select_typed_key_thresholds(
+                &mut gil::key_memory::KeyMemory::default(),
+                schema,
+                &name,
+                &ordered,
+                choice,
+                typed_longest,
+            );
+            attribute_mut(schema, &name).typed_key_thresholds = Some(typed.thresholds());
+        }
+
+        if schema
+            .attributes
+            .iter()
+            .any(|a| a.name == name && a.coarse.is_some())
+        {
+            let classed = gil::replay::select_coarse(
+                &mut gil::key_memory::KeyMemory::default(),
+                &mut gil::lexical_memory::LexicalMemory::default(),
+                schema,
+                &name,
+                &ordered,
+                choice,
+            );
+            let similar = trusted(&classed, tune);
+            let coarse = attribute_mut(schema, &name)
+                .coarse
+                .as_mut()
+                .expect("a coarse level");
+            coarse.key_threshold = classed.key.chosen.as_ref().map(|c| c.threshold);
+            coarse.memory_threshold = similar.map(|c| c.threshold);
+            coarse.memory_floor = similar.and_then(|c| c.similarity_floor);
+        }
         promises.push((name, layers));
     }
 
@@ -174,6 +250,29 @@ pub fn tune(
         }
     }
     tuning
+}
+
+/// The similar records layer's choice, when its promise rests on enough answers to be trusted.
+fn trusted<'a>(
+    layers: &'a gil::replay::LayerThresholds,
+    tune: &Tune,
+) -> Option<&'a gil::replay::ThresholdChoice> {
+    layers
+        .memory
+        .chosen
+        .as_ref()
+        .filter(|c| c.promise_answered >= tune.similar_minimum_answered)
+}
+
+/// Whether a person writes the field's one value out as free text — the field a suggestion is asked for again with
+/// each character typed.
+fn typeable(fields: &[ResolvedField], name: &str) -> bool {
+    fields.iter().any(|f| {
+        f.field.name == name
+            && f.field.kind == FieldKind::Text
+            && !f.field.multiple
+            && f.field.choices.is_empty()
+    })
 }
 
 fn attribute_mut<'a>(

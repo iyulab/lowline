@@ -150,7 +150,7 @@ impl Engine {
     /// on.
     pub fn choose(&self, records: &[Record]) -> Tuning {
         let mut schema = self.schema.clone();
-        tune(&mut schema, records, &self.tune)
+        tune(&mut schema, &self.fields, records, &self.tune)
     }
 
     /// What to show for each decided field of the record `id` that is still open, given its `values` so far — in the
@@ -179,6 +179,52 @@ impl Engine {
                 ))
             })
             .collect()
+    }
+
+    /// What to show for the one decided field `field` of the record `id`, given its `values` so far and `typed`, the
+    /// text a person has typed into it so far — asked again with each character while the field stays open. With text
+    /// typed, only a value that begins with it is suggested (ignoring case), from the values settled alongside alone,
+    /// held to the threshold chosen for that many characters; a field that is not written out as free text, or typed
+    /// past the lengths thresholds were chosen for ([`Tune::typed_longest`]), is answered nothing while typed into
+    /// ([`crate::Abstain::Unsure`]). Without text typed it is the field's proposal among [`Engine::propose`]'s. `values`
+    /// and `allowed` are as [`Engine::propose`] reads them. `None` when `field` is not a decided field still open.
+    pub fn propose_field(
+        &self,
+        id: &str,
+        values: &BTreeMap<String, FieldValue>,
+        allowed: &BTreeMap<String, Vec<String>>,
+        field: &str,
+        typed: Option<&str>,
+    ) -> Option<Proposal> {
+        let resolved = self.fields.iter().find(|f| f.field.name == field)?;
+        let attribute = self.schema.attributes.iter().find(|a| a.name == field)?;
+        let known = record(id, &self.fields, values, &[], 0);
+        let open = attribute.role == AttributeRole::Decided
+            && attribute.policy != AttributePolicy::Off
+            && (attribute.multiple || !known.values.contains_key(field));
+        if !open {
+            return None;
+        }
+        let typed = typed.filter(|t| !t.is_empty());
+        if let Some(text) = typed {
+            let length = text.chars().count();
+            let held = attribute
+                .typed_key_thresholds
+                .as_ref()
+                .and_then(|t| t.get(length - 1))
+                .is_some();
+            if !held {
+                return Some(Proposal::abstain(field, crate::Abstain::Unsure));
+            }
+        }
+        let answer =
+            self.decider
+                .answer_one(&self.schema, id, field, &known.values, &known.sets, typed);
+        Some(proposal(
+            resolved,
+            &answer,
+            allowed.get(field).map(Vec::as_slice),
+        ))
     }
 
     /// The fields a host's model may fill for a record holding `values` — see [`crate::fill::describe`].

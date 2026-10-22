@@ -49,6 +49,20 @@ public sealed class EngineTests
         }.ToJsonString();
 
     [Fact]
+    public void One_field_is_asked_for_alone_and_while_typed_into()
+    {
+        var stored = Alternating(40);
+        using var engine = LowlineEngine.Create(Intake);
+        engine.Tune(stored.Select(r => r.Json));
+        var values = new Dictionary<string, FieldValue> { ["customer"] = "Beta" };
+
+        engine.ProposeField("new", values, "owner")!.Suggestion!.Value.Should().Be("lee");
+        // A choice is picked, not written out: typing into it answers nothing.
+        engine.ProposeField("new", values, "owner", typed: "l")!.Abstain.Should().Be(Abstain.Unsure);
+        engine.ProposeField("new", values, "customer").Should().BeNull();
+    }
+
+    [Fact]
     public void A_host_round()
     {
         var stored = Alternating(40);

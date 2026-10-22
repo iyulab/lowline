@@ -163,6 +163,43 @@ public sealed unsafe class LowlineEngine : IDisposable
         return JsonSerializer.Deserialize(json, LowlineJson.Default.ListProposal)!;
     }
 
+    /// <summary>What to show for the one decided field <paramref name="field"/> of record <paramref name="id"/>, given
+    /// its values so far and <paramref name="typed"/>, the text a person has typed into it so far — asked again with
+    /// each character while the field stays open. With text typed, only a value that begins with it is suggested (ignoring
+    /// case), from values settled together with this record's other values, held to the threshold chosen for that many
+    /// characters; a field not written out as free text, or typed past the lengths thresholds were chosen for, is answered
+    /// nothing while typed into (<see cref="Abstain.Unsure"/>). Without text typed it is the field's proposal among
+    /// <see cref="Propose"/>'s. <c>null</c> when the field is not a decided field still open.</summary>
+    public Proposal? ProposeField(
+        string id,
+        IReadOnlyDictionary<string, FieldValue> values,
+        string field,
+        string? typed = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null)
+    {
+        var idText = new Utf8(id);
+        var valuesText = new Utf8(Values(values));
+        var allowedText = new Utf8(Allowed(allowed));
+        var fieldText = new Utf8(field);
+        var typedText = new Utf8(typed);
+        nuint length;
+        string json;
+        using (Read())
+        {
+            fixed (byte* i = idText.Bytes, v = valuesText.Bytes, a = allowedText.Bytes, f = fieldText.Bytes,
+                   t = typedText.Bytes)
+            {
+                Native.Check(Native.EngineProposeField(
+                    _handle, idText.At(i), valuesText.At(v), allowedText.At(a), fieldText.At(f), typedText.At(t),
+                    &length));
+            }
+
+            json = Native.Result(length);
+        }
+
+        return JsonSerializer.Deserialize(json, LowlineJson.Default.Proposal);
+    }
+
     /// <summary>The fields a host's model may fill for a record holding <paramref name="values"/>: those still empty
     /// that take one value, a closed choice field's choices narrowed to those this person may pick
     /// (<paramref name="allowed"/>). What to tell the model to answer.</summary>

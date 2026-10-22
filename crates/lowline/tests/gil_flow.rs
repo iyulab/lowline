@@ -190,7 +190,7 @@ fn values_taken_from_suggestions_do_not_grade_the_suggestions() {
             engine::record(&format!("r{i}"), &fields, &values, &settled, i)
         })
         .collect();
-    engine::tune(&mut schema, &records, &engine::Tune::default());
+    engine::tune(&mut schema, &fields, &records, &engine::Tune::default());
     assert_eq!(schema.attributes[1].key_threshold, None);
 }
 

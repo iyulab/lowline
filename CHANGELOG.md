@@ -6,6 +6,24 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Asking for one field while a person types into it: `Engine::propose_field` takes the text typed so far and suggests
+  only a value that begins with it, held to the threshold chosen for that many characters. A field picked from choices,
+  or typed past the lengths chosen for, is answered nothing while typed into (`unsure`). Also
+  `lowline_engine_propose_field`, `LowlineEngine.ProposeField` and `LowlineForms.ProposeFieldAsync`. `Tune.typedLongest`
+  (3 by default; 0 chooses none) bounds the lengths.
+
+### Changed
+
+- `tune` chooses every threshold the decider answers with, in the order a suggestion leans on them: how readily each
+  field's keys are believed after a few settlements, the fields that key a decided field, its key and similar records
+  thresholds, its thresholds for each length typed (free text fields), and its coarse level's thresholds (similar
+  records held to the same gate as the value's). Before, only the key and similar records thresholds were chosen, so a
+  field named after the very thing decided could be outweighed by a broad one, typing answered at the untyped
+  threshold, and a declared coarse level was never offered. `gil::tune` takes the resolved form as well (breaking).
+- The C ABI is version 2 (`lowline_engine_propose_field`).
+
 ## [0.1.0] - 2026-10-23
 
 ### Added

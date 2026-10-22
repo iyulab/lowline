@@ -51,7 +51,7 @@ pub const LOWLINE_BROKEN: i32 = support::BROKEN;
 
 /// The version of this interface — its functions and statuses, and the JSON they read and write. It changes whenever
 /// a binding built for one version would misread the library of another.
-pub const LOWLINE_ABI_VERSION: u32 = 1;
+pub const LOWLINE_ABI_VERSION: u32 = 2;
 
 /// [`lowline_engine_settle`]: a person saved the record.
 pub const LOWLINE_SETTLED_BY_PERSON: u8 = 0;
@@ -411,6 +411,37 @@ pub unsafe extern "C" fn lowline_engine_propose(
         let allowed = choices(unsafe { text(allowed, "allowed") }?)?;
         let proposals = engine.propose(id, &values, &allowed);
         unsafe { set_result(written(&proposals), result_len) }
+    })
+}
+
+/// What to show for the one decided field `field` of record `id`, given its `values` so far and `typed`, the text a
+/// person has typed into it so far (empty text for none) — `values` and `allowed` as [`lowline_engine_propose`] reads
+/// them. With text typed, only a value that begins with it is suggested, held to the threshold chosen for that many
+/// characters. The result is the proposal as JSON, or `null` when `field` is not a decided field still open.
+///
+/// # Safety
+/// `engine` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_propose_field(
+    engine: *const LowlineEngine,
+    id: LowlineStr,
+    values: LowlineStr,
+    allowed: LowlineStr,
+    field: LowlineStr,
+    typed: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let id = unsafe { text(id, "id") }?;
+        let values: BTreeMap<String, FieldValue> =
+            json(unsafe { text(values, "values") }?, "values")?;
+        let allowed = choices(unsafe { text(allowed, "allowed") }?)?;
+        let field = unsafe { text(field, "field") }?;
+        let typed = unsafe { text(typed, "typed") }?;
+        let proposal = engine.propose_field(id, &values, &allowed, field, Some(typed));
+        unsafe { set_result(written(&proposal), result_len) }
     })
 }
 
