@@ -25,3 +25,7 @@ gil = ["dep:gil"]
 
 [dev-dependencies]
 serde_json = "1"
+
+[package.metadata.docs.rs]
+# The decider and the record format are behind the `gil` feature; the documentation shows them.
+all-features = true
