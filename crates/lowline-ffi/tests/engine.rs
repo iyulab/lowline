@@ -158,6 +158,22 @@ fn a_host_round_through_the_abi() {
     assert_eq!(read["settlements"]["owner"], "Accept");
     assert_eq!(unsafe { lowline_engine_settled(engine) }, 41);
 
+    // Chosen on a worker while proposals go on: the engine is left as it was until the host restores the result.
+    let all = format!(
+        "{records}{record}
+"
+    );
+    ok(unsafe { lowline_engine_choose(engine, s(&all), &mut len) });
+    let chosen = result(len);
+    assert_eq!(chosen["settled"], 41);
+    ok(unsafe { lowline_engine_stale(engine, &mut len) });
+    assert_eq!(
+        result(len),
+        Value::Null,
+        "41 is less than a tenth more than 40"
+    );
+    ok(unsafe { lowline_engine_restore(engine, s(&chosen.to_string())) });
+
     // Started again from storage — the records with the new one, then the tuning — it answers the same.
     let restarted = self::engine();
     let all = format!("{records}{record}\n");

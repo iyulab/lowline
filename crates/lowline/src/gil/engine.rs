@@ -139,8 +139,18 @@ impl Engine {
     /// engine handed them here needs no [`Engine::learn`] for them.
     pub fn tune(&mut self, records: &[Record]) -> &Tuning {
         self.learn(records);
-        let tuning = tune(&mut self.schema, records, &self.tune);
-        self.tuning.insert(tuning)
+        let tuning = self.choose(records);
+        self.restore(Some(tuning));
+        self.tuning.as_ref().expect("restored just now")
+    }
+
+    /// The tuning [`Engine::tune`] would choose on `records`, leaving the engine as it is — for a host that chooses
+    /// while the engine goes on answering (it reads the engine only), then puts the result in with [`Engine::restore`].
+    /// The records should be the ones the engine has learned: the tuning stands for as many records as it was chosen
+    /// on.
+    pub fn choose(&self, records: &[Record]) -> Tuning {
+        let mut schema = self.schema.clone();
+        tune(&mut schema, records, &self.tune)
     }
 
     /// What to show for each decided field of the record `id` that is still open, given its `values` so far — in the

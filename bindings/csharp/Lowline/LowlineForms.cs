@@ -56,9 +56,10 @@ public sealed class LowlineForms : IDisposable
         return running.Engine.Propose(id, values, allowed);
     }
 
-    /// <summary>Settles and stores record <paramref name="id"/> as saved — see <see cref="LowlineEngine.Settle"/> —
-    /// and, when the thresholds no longer stand, chooses them again on every stored record and stores the tuning.
-    /// </summary>
+    /// <summary>Settles and stores record <paramref name="id"/> as saved — see <see cref="LowlineEngine.Settle"/>.
+    /// When the thresholds no longer stand, they are chosen again on every stored record in the background — the
+    /// engine answers with the ones it has meanwhile — then put in and stored; <see cref="WhenTunedAsync"/> waits for
+    /// that.</summary>
     public async Task<SettledRecord> SettleAsync(
         LowlineScope scope,
         string id,
@@ -73,12 +74,26 @@ public sealed class LowlineForms : IDisposable
         {
             var record = running.Engine.Settle(id, saved, draft, by, _time.GetUtcNow());
             await _store.AddRecordAsync(scope, record, cancellationToken).ConfigureAwait(false);
-            await RetuneIfStaleAsync(scope, running.Engine, cancellationToken).ConfigureAwait(false);
+            if (running.Engine.Stale is not null)
+            {
+                running.Retune(() => RetuneAsync(scope, running.Engine));
+            }
+
             return record;
         }
         finally
         {
             running.Saving.Release();
+        }
+    }
+
+    /// <summary>Completes when the scope's thresholds, if being chosen again after a save, are chosen and stored — and
+    /// fails as that did. Completes at once when nothing is being chosen.</summary>
+    public async Task WhenTunedAsync(LowlineScope scope)
+    {
+        if (_running.TryGetValue(scope, out var lazy) && lazy.IsValueCreated)
+        {
+            await (await lazy.Value.ConfigureAwait(false)).Tuned.ConfigureAwait(false);
         }
     }
 
@@ -135,7 +150,14 @@ public sealed class LowlineForms : IDisposable
             var records = await _store.ReadRecordsAsync(scope).ConfigureAwait(false);
             engine.Learn(records.Select(r => r.Json));
             engine.Restore(await _store.ReadTuningAsync(scope).ConfigureAwait(false));
-            await RetuneIfStaleAsync(scope, engine, CancellationToken.None, records).ConfigureAwait(false);
+            if (engine.Stale is not null)
+            {
+                // Nothing answers until thresholds are chosen, so the first start chooses them before it answers.
+                var tuning = engine.Choose(records.Select(r => r.Json));
+                engine.Restore(tuning);
+                await _store.WriteTuningAsync(scope, tuning, CancellationToken.None).ConfigureAwait(false);
+            }
+
             return new Running(engine);
         }
         catch
@@ -145,20 +167,12 @@ public sealed class LowlineForms : IDisposable
         }
     }
 
-    private async Task RetuneIfStaleAsync(
-        LowlineScope scope,
-        LowlineEngine engine,
-        CancellationToken cancellationToken,
-        IReadOnlyList<SettledRecord>? records = null)
+    private async Task RetuneAsync(LowlineScope scope, LowlineEngine engine)
     {
-        if (engine.Stale is null)
-        {
-            return;
-        }
-
-        records ??= await _store.ReadRecordsAsync(scope, cancellationToken).ConfigureAwait(false);
-        var tuning = engine.Tune(records.Select(r => r.Json));
-        await _store.WriteTuningAsync(scope, tuning, cancellationToken).ConfigureAwait(false);
+        var records = await _store.ReadRecordsAsync(scope).ConfigureAwait(false);
+        var tuning = engine.Choose(records.Select(r => r.Json));
+        engine.Restore(tuning);
+        await _store.WriteTuningAsync(scope, tuning).ConfigureAwait(false);
     }
 
     private void Stop(LowlineScope scope)
@@ -180,14 +194,40 @@ public sealed class LowlineForms : IDisposable
 
     private sealed class Running(LowlineEngine engine) : IDisposable
     {
+        private readonly Lock _gate = new();
+
         public LowlineEngine Engine { get; } = engine;
 
         public SemaphoreSlim Saving { get; } = new(1, 1);
 
+        /// <summary>The last choice of thresholds started after a save.</summary>
+        public Task Tuned { get; private set; } = Task.CompletedTask;
+
+        /// <summary>Starts <paramref name="retune"/> on a worker unless one is still running.</summary>
+        public void Retune(Func<Task> retune)
+        {
+            lock (_gate)
+            {
+                if (!Tuned.IsCompleted)
+                {
+                    return;
+                }
+
+                Tuned = Task.Run(retune);
+            }
+        }
+
         public void Dispose()
         {
-            Engine.Dispose();
-            Saving.Dispose();
+            Tuned.ContinueWith(
+                _ =>
+                {
+                    Engine.Dispose();
+                    Saving.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
     }
 }

@@ -116,6 +116,22 @@ public sealed unsafe class LowlineEngine : IDisposable
         return Native.Result(length);
     }
 
+    /// <summary>The tuning <see cref="Tune"/> would choose on <paramref name="records"/>, leaving the engine as it is:
+    /// proposals go on alongside it. Put the result in with <see cref="Restore"/>. The records should be the ones the
+    /// engine has learned.</summary>
+    public string Choose(IEnumerable<string> records)
+    {
+        var lines = new Utf8(Lines(records));
+        nuint length;
+        using var _ = Read();
+        fixed (byte* p = lines.Bytes)
+        {
+            Native.Check(Native.EngineChoose(_handle, lines.At(p), &length));
+        }
+
+        return Native.Result(length);
+    }
+
     /// <summary>What to show for each decided field of record <paramref name="id"/> that is still open, given its
     /// values so far, in the form's order. <paramref name="allowed"/> holds, by field, the choices this person may pick
     /// now; a field it leaves out may take any value. The record's own saved version is not evidence for itself.

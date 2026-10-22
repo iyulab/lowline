@@ -169,6 +169,7 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(List<Proposal>))]
+[JsonSerializable(typeof(IReadOnlyList<Proposal>))]
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]
 [JsonSerializable(typeof(Dictionary<string, IReadOnlyList<string>>))]
 [JsonSerializable(typeof(JsonElement))]

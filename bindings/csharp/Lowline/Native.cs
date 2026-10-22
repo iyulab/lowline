@@ -59,6 +59,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "lowline_engine_tune")]
     internal static partial int EngineTune(nint engine, Str records, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "lowline_engine_choose")]
+    internal static partial int EngineChoose(nint engine, Str records, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "lowline_engine_propose")]
     internal static partial int EnginePropose(nint engine, Str id, Str values, Str allowed, nuint* resultLen);
 

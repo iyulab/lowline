@@ -357,6 +357,26 @@ pub unsafe extern "C" fn lowline_engine_tune(
     }
 }
 
+/// The tuning [`lowline_engine_tune`] would choose on `records`, leaving the engine as it is: it only reads the engine,
+/// so proposals go on alongside it — a host chooses on a worker this way and puts the result in with
+/// [`lowline_engine_restore`]. The records should be the ones the engine has learned.
+///
+/// # Safety
+/// `engine` is a live handle; `records` is valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_choose(
+    engine: *const LowlineEngine,
+    records: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let read = self::records(engine, unsafe { text(records, "records") }?)?;
+        unsafe { set_result(written(&engine.choose(&read)), result_len) }
+    })
+}
+
 /// What to show for each decided field of record `id` that is still open, given its `values` so far — a JSON object
 /// of a text, or a list of texts for a field that takes several, by field. `allowed` is a JSON object of the choices
 /// this person may pick now, by field (empty text for none); a field it leaves out may take any value. The result is a

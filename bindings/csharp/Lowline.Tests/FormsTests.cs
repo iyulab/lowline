@@ -74,6 +74,7 @@ public sealed class FormsTests
                 cancellationToken: Ct);
         }
 
+        await forms.WhenTunedAsync(Seoul);
         var after = await store.ReadTuningAsync(Seoul, Ct);
         after.Should().NotBe(before);
         after.Should().Contain("\"settled\":44");

@@ -79,3 +79,15 @@ All notable changes to this project are written here. The format follows
   host's forms over its store: each started from the stored records and tuning when first asked, each save stored
   and learned, the thresholds chosen again and stored when they no longer stand, an engine started again after
   records are forgotten.
+- `gil::Engine::choose` (and `lowline_engine_choose`, `LowlineEngine.Choose`): the tuning `tune` would choose,
+  reading the engine only, so it goes on answering while thresholds are chosen; `restore` puts the result in.
+  `LowlineForms` chooses this way in the background after a save that leaves the thresholds stale (`WhenTunedAsync`
+  waits for it); the first start of a scope still chooses before it answers.
+- `LowlineOptions` — a store (`UseStore`) and forms (`Form`), built into `LowlineForms`.
+- `Lowline.Sqlite`: `SqliteLowlineStore` keeps records and tunings in two tables of its own (`lowline_records`,
+  `lowline_tunings`), made on first use; `options.UseSqlite(connectionString)`.
+- `Lowline.AspNetCore`: `services.AddLowline(o => o.UseSqlite(…).Form(name, definition))` and
+  `app.MapLowline("/lowline")` — `POST {form}/propose` (`{ id, values }` → proposals) and `POST {form}/settle`
+  (`{ id, saved, draft }` → `{ id, settledAt }`), 404 for a form not defined, 400 with the engine's message for input
+  it refuses. The host decides each request's memory space (`Space`, from its own authentication) and the choices its
+  person may pick (`Allowed`); authorization is the host's, on the returned route group.

@@ -4,6 +4,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Lowline\Lowline.csproj" />
+    <ProjectReference Include="..\Lowline.Sqlite\Lowline.Sqlite.csproj" />
+    <ProjectReference Include="..\Lowline.AspNetCore\Lowline.AspNetCore.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
