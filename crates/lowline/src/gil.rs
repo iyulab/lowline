@@ -71,6 +71,11 @@ pub struct Tune {
     pub target_precision: f64,
     pub minimum_answered: usize,
     /// How many independent answers the similar records layer's promise must rest on before it is trusted at all.
+    ///
+    /// The default of thirty is a gate the desktop app set before turning the layer on, and kept after replaying a
+    /// year and more of settled records of several forms through it: over a whole replay the layer's answers kept
+    /// close to their promise, while the stretches that promised more than they kept were the ones just past the gate,
+    /// on few answers. A lower gate lets the layer answer sooner at that cost; a host with its own replays may move it.
     pub similar_minimum_answered: f64,
     pub rule: gil::replay::ThresholdRule,
 }
