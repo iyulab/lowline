@@ -4,7 +4,10 @@
 //   (cd bindings/web && npm ci && npm run bundle)
 //   dotnet run --project samples/aspnet
 //
-// The first run seeds forty records — Acme's owner kim, Beta's lee — so the owner is suggested at once.
+// The first run seeds forty records — Acme's owner kim, Beta's lee — so the owner is suggested at once. Filling from
+// what a person wrote goes through a stand-in for a real model (WordModel, below): a host gives its own.
+
+using System.Text.RegularExpressions;
 
 using Lowline;
 using Lowline.AspNetCore;
@@ -22,7 +25,7 @@ const string Intake = """
 
 var builder = WebApplication.CreateSlimBuilder(args);
 var database = Path.Combine(builder.Environment.ContentRootPath, "sample.db");
-builder.Services.AddLowline(o => o.UseSqlite($"Data Source={database}").Form("intake", Intake));
+builder.Services.AddLowline(o => o.UseSqlite($"Data Source={database}").UseModel(new WordModel()).Form("intake", Intake));
 
 var app = builder.Build();
 app.UseDefaultFiles();
@@ -53,5 +56,26 @@ static async Task Seed(ILowlineStore store)
             ["owner"] = i % 2 == 0 ? "kim" : "lee",
         };
         await store.AddRecordAsync(scope, engine.Settle($"seed-{i}", saved, null, SettledBy.Person, start.AddMinutes(i)));
+    }
+}
+
+/// <summary>A stand-in for a real model: for each field it is asked about, the word written after the field's name —
+/// "customer Beta, owner lee". Whatever it gives is checked against its field before anyone sees it.</summary>
+sealed partial class WordModel : ILowlineModel
+{
+    public Task<IReadOnlyDictionary<string, FieldValue>> FillAsync(
+        LowlineFillRequest request, CancellationToken cancellationToken = default)
+    {
+        var answered = new Dictionary<string, FieldValue>();
+        foreach (var field in request.Fields)
+        {
+            var found = Regex.Match(request.Text, $@"\b{Regex.Escape(field.Name)}\s*[:=]?\s*(\w+)", RegexOptions.IgnoreCase);
+            if (found.Success)
+            {
+                answered[field.Name] = found.Groups[1].Value;
+            }
+        }
+
+        return Task.FromResult<IReadOnlyDictionary<string, FieldValue>>(answered);
     }
 }

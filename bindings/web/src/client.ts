@@ -33,6 +33,11 @@ export class LowlineClient {
     return this.post(form, 'settle', { id, saved, draft })
   }
 
+  /** What the host's model makes of `text` for the fields of record values still empty — 404 when the host gave none. */
+  fill(form: string, values: Values, text: string): Promise<Proposal[]> {
+    return this.post(form, 'fill', { values, text })
+  }
+
   private async post<T>(form: string, route: string, body: unknown): Promise<T> {
     const url = `${this.src.replace(/\/+$/, '')}/${encodeURIComponent(form)}/${route}`
     const response = await this.fetcher(url, {

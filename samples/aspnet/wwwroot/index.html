@@ -13,6 +13,9 @@
 <body>
   <h1>Intake</h1>
   <p>Type a customer — <code>Acme</code> or <code>Beta</code> — and the owner is suggested from the records saved before.</p>
+  <p><label>Or write it down — <code>customer Beta, owner lee</code> — and fill the form from it:<br>
+    <textarea id="written" rows="2" cols="48"></textarea></label><br>
+    <button id="fill" type="button">Fill from what I wrote</button></p>
   <lowline-form src="/lowline" form="intake"></lowline-form>
   <button id="save" type="button">Save</button>
   <output id="said"></output>
@@ -21,6 +24,7 @@
     form.content = '@customer: [text]\n@owner: [select options="kim,lee"]'
     // Each record takes an id of its own; opening a saved record again would take its id back.
     form.record = crypto.randomUUID()
+    document.querySelector('#fill').addEventListener('click', () => form.fill(document.querySelector('#written').value))
     document.querySelector('#save').addEventListener('click', async () => {
       await form.save()
       document.querySelector('#said').textContent = 'Saved — the next record starts empty.'

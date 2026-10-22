@@ -16,6 +16,9 @@ All notable changes to this project are written here. The format follows
   the field takes it). Also `Engine::describe` / `fill`, `lowline_engine_describe` / `_fill`, `LowlineEngine.Describe` /
   `Fill`; in .NET the host gives its model as `ILowlineModel` (`UseModel`), `LowlineForms.FillAsync` asks it, and
   `MapLowline` adds `POST {form}/fill` (`{ values, text }`) when a model is given — 404 otherwise.
+- `<lowline-form>`.`fill(text)` asks the host's `fill` route and offers each value in its field («From what you
+  wrote»), ahead of what the records suggest, until the person picks it or turns it down; nothing is put in on its own.
+  The sample host fills through a stand-in model.
 
 - A conformance test against the Gil decider's own fixture (computed with `iyulab-gil` 0.7.0): its 24 settlement
   cases — what a host reported for a field, the value saved, who saved it — give the settlement, the record line and

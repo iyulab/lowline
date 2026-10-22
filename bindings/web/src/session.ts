@@ -4,7 +4,7 @@ import { Draft, isEmpty, type Suggestion, type Values } from './draft.js'
 export type Basis = { kind: 'value'; field: string; value: string } | { kind: 'record'; id: string; similarity: number }
 
 /** Why a decided field is shown no suggestion. */
-export type Abstain = 'off' | 'no-evidence' | 'unsure' | 'not-allowed' | 'needs-judgement'
+export type Abstain = 'off' | 'no-evidence' | 'unsure' | 'not-allowed' | 'needs-judgement' | 'not-a-choice' | 'malformed'
 
 /** What the host's engine says to show for one decided field. */
 export interface Proposal {
@@ -36,6 +36,8 @@ export interface Strings {
   fromSimilar: string
   /** The note of a suggestion from a judgement made outside the records. */
   fromJudgement: string
+  /** The note of a value filled in from what the person wrote. */
+  fromWriting: string
 }
 
 export const englishStrings: Strings = {
@@ -43,6 +45,7 @@ export const englishStrings: Strings = {
   fromValue: 'As before with {field} {value}',
   fromSimilar: 'As in a similar record',
   fromJudgement: 'Suggested from what was written',
+  fromWriting: 'From what you wrote',
 }
 
 /** What the form does with one round of proposals: what each field shows, and the values to put in unasked. */
@@ -61,6 +64,8 @@ export class Session {
   private drawn = new Set<string>()
   /** Fields whose value the form put in unasked, from the suggestion still shown. */
   private filled = new Set<string>()
+  /** What filling from the person's writing offers, by field, until the person picks it or turns it down. */
+  private written = new Map<string, FieldState>()
 
   constructor(
     readonly id: string,
@@ -72,12 +77,15 @@ export class Session {
     this.draft = new Draft(opened)
   }
 
-  /** Takes a round of proposals for the form's `values` now. */
+  /**
+   * Takes a round of proposals for the form's `values` now. A field offered a value from the person's writing keeps it
+   * in view until the person picks it or turns it down.
+   */
   apply(proposals: Proposal[], values: Values): Round {
-    const round: Round = { fieldStates: {}, prefill: {} }
+    const round: Round = { fieldStates: Object.fromEntries(this.written), prefill: {} }
     for (const proposal of proposals) {
       const { field, suggestion } = proposal
-      if (!suggestion) continue
+      if (!suggestion || this.written.has(field)) continue
       if (this.draw(field, suggestion)) continue
       if (this.draft.held(field) !== undefined) continue
       // Turned down, it stays down for this record: neither shown again nor put back in.
@@ -97,6 +105,25 @@ export class Session {
   }
 
   /**
+   * Takes what filling from the person's writing offers: each value shown as a suggestion from elsewhere, never put in
+   * on its own, in place of what the records suggest for the field. Answers what every field shows now.
+   */
+  applyFill(proposals: Proposal[]): Record<string, FieldState> {
+    for (const { field, suggestion } of proposals) {
+      if (!suggestion) continue
+      this.draft.show(field, suggestion)
+      this.filled.delete(field)
+      this.written.set(field, { suggestions: [suggestion.value], decline: this.strings.decline, note: this.strings.fromWriting })
+    }
+    return Object.fromEntries(this.written)
+  }
+
+  /** The person picked a field's offered value: what was offered from their writing has done its part. */
+  picked(field: string): void {
+    this.written.delete(field)
+  }
+
+  /**
    * The person turned down the field's suggestion. Answers whether the form must empty the field: it holds the value
    * the form put in unasked — saved as it is, the turned-down value would count as taken.
    */
@@ -105,6 +132,7 @@ export class Session {
     if (!this.draft.decline(field)) return false
     const empty = this.filled.has(field) && values[field] === shown?.value
     this.filled.delete(field)
+    this.written.delete(field)
     return empty
   }
 
@@ -113,6 +141,7 @@ export class Session {
     this.draft = new Draft(values)
     this.drawn.clear()
     this.filled.clear()
+    this.written.clear()
   }
 
   /** Whether the field's answer is held back now — drawn the first time a checkable value is proposed for it. */

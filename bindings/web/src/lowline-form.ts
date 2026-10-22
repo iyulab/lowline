@@ -100,6 +100,19 @@ export class LowlineForm extends LitElement {
     return saved
   }
 
+  /**
+   * Fills the record from `text` — what the person wrote or a picture's description — through the host's model: each
+   * value it gives is offered in its field for the person to take. Nothing is put in on its own.
+   */
+  async fill(text: string): Promise<void> {
+    const session = this.session
+    if (!session || !this.form) return
+    const proposals = await this.client.fill(this.form, this.values(), text)
+    if (session !== this.session) return
+    this.fieldStates = session.applyFill(proposals)
+    if (this.formdown) this.formdown.fieldStates = this.fieldStates
+  }
+
   /** Asks again what to show for the decided fields still open. */
   async ask(): Promise<void> {
     const session = this.session
@@ -129,6 +142,7 @@ export class LowlineForm extends LitElement {
 
   private picked = (event: Event) => {
     const { field, value } = (event as CustomEvent<{ field: string; value: string }>).detail
+    this.session?.picked(field)
     const formdown = this.formdown
     if (formdown) formdown.updateData({ ...formdown.data, [field]: value })
   }

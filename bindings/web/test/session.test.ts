@@ -128,6 +128,21 @@ describe('Session', () => {
     expect(changed.decline('owner', { owner: 'kim' })).toBe(false)
   })
 
+  it('offers what was filled from the writing until it is picked or turned down, ahead of the records', () => {
+    const session = new Session('r', {}, 0.05, never)
+    const states = session.applyFill([
+      { field: 'owner', suggestion: { value: 'kim', origin: 'other', fit: 'exact' }, prefill: false, layer: null, abstain: null },
+      { field: 'kind', suggestion: null, prefill: false, layer: null, abstain: 'not-a-choice' },
+    ])
+    expect(states).toEqual({ owner: { suggestions: ['kim'], decline: 'Not this', note: 'From what you wrote' } })
+    expect(session.draft.shown('owner')?.origin).toBe('other')
+    // The records suggest lee; what was filled from the writing stays in view, and nothing is put in.
+    expect(session.apply([lee], {})).toEqual({ fieldStates: states, prefill: {} })
+    expect(session.draft.shown('owner')?.value).toBe('kim')
+    session.picked('owner')
+    expect(session.apply([lee], {}).fieldStates.owner.suggestions).toEqual(['lee'])
+  })
+
   it('shows nothing for a field it abstains on', () => {
     const session = new Session('r', {}, 0.05, never)
     const round = session.apply([{ ...lee, suggestion: null, prefill: false, layer: null, basis: [], abstain: 'unsure' }], {})
