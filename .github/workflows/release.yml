@@ -257,5 +257,6 @@ jobs:
           if npm view "@iyulab/lowline-form@$VERSION" version >/dev/null 2>&1; then
             echo "@iyulab/lowline-form@$VERSION is already on npm — skipped."
           else
-            npm publish "packages/iyulab-lowline-form-$VERSION.tgz" --provenance --access public
+            # `./` — a bare `dir/file.tgz` reads as a GitHub repository to npm.
+            npm publish "./packages/iyulab-lowline-form-$VERSION.tgz" --provenance --access public
           fi
