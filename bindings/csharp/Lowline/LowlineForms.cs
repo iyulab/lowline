@@ -55,8 +55,9 @@ public sealed class LowlineForms : IDisposable
     }
 
     /// <summary>Answers, through the host's model, the decided fields of record <paramref name="id"/> the records
-    /// could not: each field a proposal left as <see cref="Abstain.NeedsJudgement"/> is put to the model with what it
-    /// asked to read, and the model's values are offered back — see <see cref="LowlineEngine.Offer"/>. Gives the
+    /// could not: each field a proposal left as <see cref="Abstain.NeedsJudgement"/> with something to read is put to
+    /// the model with what it asked to read — one with nothing to read yet is left as it is — and the model's values are
+    /// offered back — see <see cref="LowlineEngine.Offer"/>. Gives the
     /// proposals of those fields only, in the form's order; none when every field was answered from the records. Kept
     /// apart from <see cref="ProposeAsync"/>, which answers at once: a model takes longer.</summary>
     /// <exception cref="InvalidOperationException">The host gave no model.</exception>
@@ -71,7 +72,7 @@ public sealed class LowlineForms : IDisposable
             ?? throw new InvalidOperationException("Lowline has no model to judge with: give one with UseModel.");
         var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
         var asking = running.Engine.Propose(id, values, allowed)
-            .Where(p => p.Abstain == Abstain.NeedsJudgement)
+            .Where(p => p.Abstain == Abstain.NeedsJudgement && p.Asks.Count > 0)
             .ToList();
         if (asking.Count == 0)
         {

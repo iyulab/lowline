@@ -66,6 +66,8 @@ export class Session {
   private filled = new Set<string>()
   /** What filling from the person's writing offers, by field, until the person picks it or turns it down. */
   private written = new Map<string, FieldState>()
+  /** The judgement asked for each field, by what it reads; `null` while the host is still judging. */
+  private judgements = new Map<string, { reads: string; proposal: Proposal | null }>()
 
   constructor(
     readonly id: string,
@@ -102,6 +104,51 @@ export class Session {
       }
     }
     return round
+  }
+
+  /**
+   * The round's proposals with each field that asks for a judgement answered by the one already judged on the same
+   * values, if there is one — so a judgement stays in view while the person writes on, and is not asked for again.
+   */
+  judged(proposals: Proposal[]): Proposal[] {
+    return proposals.map((proposal) => {
+      if (proposal.abstain !== 'needs-judgement') return proposal
+      const known = this.judgements.get(proposal.field)
+      return known?.reads === reads(proposal) && known.proposal ? known.proposal : proposal
+    })
+  }
+
+  /**
+   * The fields of the round that ask for a judgement not asked for yet on what they read; marked as being asked. A field
+   * with nothing to read yet is left until there is something.
+   */
+  toJudge(proposals: Proposal[]): string[] {
+    const asking = proposals.filter(
+      (p) => p.abstain === 'needs-judgement' && (p.asks?.length ?? 0) > 0 && this.judgements.get(p.field)?.reads !== reads(p),
+    )
+    for (const p of asking) this.judgements.set(p.field, { reads: reads(p), proposal: null })
+    return asking.map((p) => p.field)
+  }
+
+  /**
+   * Takes what the host judged for the fields `asked` — each a proposal as the round would give it; a field it gave
+   * nothing for stays as it was, and is not asked about again on the same values. A field asked for again since, on
+   * other values, keeps waiting for that one.
+   */
+  takeJudged(asked: Proposal[], judged: Proposal[]): void {
+    for (const before of asked) {
+      const pending = this.judgements.get(before.field)
+      if (pending?.reads !== reads(before)) continue
+      const answer = judged.find((j) => j.field === before.field) ?? before
+      this.judgements.set(before.field, { reads: pending.reads, proposal: answer })
+    }
+  }
+
+  /** The host could not judge the fields `asked`: they may be asked about again. */
+  notJudged(asked: Proposal[]): void {
+    for (const before of asked) {
+      if (this.judgements.get(before.field)?.reads === reads(before)) this.judgements.delete(before.field)
+    }
   }
 
   /**
@@ -142,6 +189,7 @@ export class Session {
     this.drawn.clear()
     this.filled.clear()
     this.written.clear()
+    this.judgements.clear()
   }
 
   /** Whether the field's answer is held back now — drawn the first time a checkable value is proposed for it. */
@@ -169,4 +217,9 @@ export class Session {
     if (proposal.layer === 'judgement') return this.strings.fromJudgement
     return undefined
   }
+}
+
+/** What a proposal asking for a judgement reads, as one text. */
+function reads(proposal: Proposal): string {
+  return JSON.stringify(proposal.asks ?? [])
 }

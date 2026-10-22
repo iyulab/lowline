@@ -71,7 +71,8 @@ pub struct Proposal {
     /// when only the value's broader class could be suggested.
     pub suggestion: Option<Suggestion>,
     /// Whether the host may put the suggestion in as the field's starting value without a person taking it: only a
-    /// value, never a class, and only for a field whose policy is [`Policy::Offer`].
+    /// value from the records — never a class, never a judgement from outside them — and only for a field whose policy
+    /// is [`Policy::Offer`].
     pub prefill: bool,
     /// Where the suggestion came from.
     pub layer: Option<Layer>,
@@ -106,7 +107,8 @@ impl Proposal {
         }
     }
 
-    /// A field shown `suggestion`, from `layer` when known, under `policy`.
+    /// A field shown `suggestion`, from `layer` when known, under `policy`. Only an answer the records give may go in
+    /// unasked: a judgement from outside them ([`Layer::Judgement`]) is shown for a person to take, whatever the policy.
     pub fn suggest(
         field: impl Into<String>,
         suggestion: Suggestion,
@@ -114,7 +116,9 @@ impl Proposal {
         basis: Vec<Basis>,
         policy: Policy,
     ) -> Self {
-        let prefill = policy.may_prefill() && suggestion.fit == crate::provenance::Fit::Exact;
+        let prefill = policy.may_prefill()
+            && suggestion.fit == crate::provenance::Fit::Exact
+            && layer != Some(Layer::Judgement);
         Self {
             field: field.into(),
             suggestion: Some(suggestion),

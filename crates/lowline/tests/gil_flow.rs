@@ -232,6 +232,10 @@ fn a_judgement_the_records_asked_for_is_offered_back_and_settled_as_an_answer() 
         .expect("a trusted judgement is shown");
     assert_eq!(suggestion.value, "lee");
     assert_eq!(offered.layer, Some(lowline::Layer::Judgement));
+    assert!(
+        !offered.prefill,
+        "a judgement is shown, never put in unasked"
+    );
 
     // Taken and saved, it settles as an answer the decider gave.
     let mut draft = Draft::new();

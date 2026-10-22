@@ -1,9 +1,9 @@
 import { LitElement, html } from 'lit'
 import { customElement, property, query } from 'lit/decorators.js'
 import '@formdown/ui'
-import { LowlineClient } from './client.js'
+import { LowlineClient, LowlineError } from './client.js'
 import { valuesOf, type Values } from './draft.js'
-import { Session, englishStrings, type FieldState, type Strings } from './session.js'
+import { Session, englishStrings, type FieldState, type Proposal, type Strings } from './session.js'
 
 /** How long typing pauses before the decided fields are asked about again. */
 const ASK_DELAY_MS = 300
@@ -56,13 +56,18 @@ export class LowlineForm extends LitElement {
   private asking?: ReturnType<typeof setTimeout>
   private client = new LowlineClient(this.src)
   private fieldStates: Record<string, FieldState> = {}
+  /** Whether the host judges what the records could not answer — until its `judge` route says it has no model. */
+  private canJudge = true
 
   protected override createRenderRoot() {
     return this
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
-    if (changed.has('src')) this.client = new LowlineClient(this.src)
+    if (changed.has('src')) {
+      this.client = new LowlineClient(this.src)
+      this.canJudge = true
+    }
     if (changed.has('record') || changed.has('form') || changed.has('data') || changed.has('content')) {
       // The values it was opened with are taken before anything is suggested or put in.
       this.session = new Session(this.record, valuesOf(this.data), this.rate, Math.random, this.strings)
@@ -127,12 +132,35 @@ export class LowlineForm extends LitElement {
       return
     }
     if (session !== this.session) return
-    const round = session.apply(proposals, values)
+    const shown = session.judged(proposals)
+    const round = session.apply(shown, values)
     this.fieldStates = round.fieldStates
     const formdown = this.formdown
     if (!formdown) return
     if (Object.keys(round.prefill).length > 0) formdown.updateData({ ...formdown.data, ...round.prefill })
     formdown.fieldStates = this.fieldStates
+    if (this.canJudge) void this.judge(session, values, shown)
+  }
+
+  /**
+   * Asks the host to judge the fields of a round the records could not answer — apart from the round, since a model
+   * takes longer — and asks again once it has, so the judgements are shown in their fields.
+   */
+  private async judge(session: Session, values: Values, round: Proposal[]): Promise<void> {
+    const fields = session.toJudge(round)
+    if (fields.length === 0) return
+    const asked = round.filter((p) => fields.includes(p.field))
+    let judged: Proposal[]
+    try {
+      judged = await this.client.judge(this.form, this.record, values)
+    } catch (error) {
+      if (error instanceof LowlineError && error.status === 404) this.canJudge = false
+      session.notJudged(asked)
+      return
+    }
+    if (session !== this.session) return
+    session.takeJudged(asked, judged)
+    void this.ask()
   }
 
   private changed = () => {

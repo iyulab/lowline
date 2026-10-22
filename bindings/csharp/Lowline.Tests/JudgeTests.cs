@@ -99,6 +99,24 @@ public sealed class JudgeTests
     }
 
     [Fact]
+    public async Task A_field_with_nothing_to_read_yet_is_not_put_to_the_model()
+    {
+        // Nothing written yet: the proposal asks with nothing to read — its lists empty, not missing — and a model
+        // would only guess, which the decider's guesses already do.
+        using var engine = LowlineEngine.Create(EngineTests.Intake);
+        var asked = engine.Propose("new", new Dictionary<string, FieldValue>()).Single();
+        asked.Asks.Should().BeEmpty();
+        asked.Basis.Should().BeEmpty();
+
+        var model = new LeeModel();
+        using var forms = new LowlineOptions().UseStore(new InMemoryLowlineStore()).UseModel(model)
+            .Form("intake", EngineTests.Intake).Build();
+        var judged = await forms.JudgeAsync(Seoul, "r", new Dictionary<string, FieldValue>(), cancellationToken: Ct);
+        model.Asked.Should().BeEmpty();
+        judged.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task A_model_that_does_not_judge_leaves_the_field_asking()
     {
         using var forms = new LowlineOptions().UseStore(new InMemoryLowlineStore()).UseModel(new FillOnlyModel())

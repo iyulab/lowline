@@ -13,8 +13,8 @@ export class LowlineError extends Error {
 }
 
 /**
- * The two routes a Lowline host maps (`MapLowline` in .NET): `POST {src}/{form}/propose` and
- * `POST {src}/{form}/settle`. The host decides the memory space and the choices a person may pick from the request
+ * The routes a Lowline host maps (`MapLowline` in .NET): `POST {src}/{form}/propose` and `POST {src}/{form}/settle`,
+ * and — when the host gave a model — `fill` and `judge`. The host decides the memory space and the choices a person may pick from the request
  * itself — its sign-in — so the calls carry the record only.
  */
 export class LowlineClient {
@@ -36,6 +36,14 @@ export class LowlineClient {
   /** What the host's model makes of `text` for the fields of record values still empty — 404 when the host gave none. */
   fill(form: string, values: Values, text: string): Promise<Proposal[]> {
     return this.post(form, 'fill', { values, text })
+  }
+
+  /**
+   * What the host's model judged for the decided fields of record `id` the records could not answer
+   * (`needs-judgement`) — 404 when the host gave no model.
+   */
+  judge(form: string, id: string, values: Values): Promise<Proposal[]> {
+    return this.post(form, 'judge', { id, values })
   }
 
   private async post<T>(form: string, route: string, body: unknown): Promise<T> {

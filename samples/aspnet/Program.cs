@@ -5,7 +5,8 @@
 //   dotnet run --project samples/aspnet
 //
 // The first run seeds forty records — Acme's owner kim, Beta's lee — so the owner is suggested at once. Filling from
-// what a person wrote goes through a stand-in for a real model (WordModel, below): a host gives its own.
+// what a person wrote, and judging an owner the records cannot answer (a customer never seen), go through a stand-in for
+// a real model (WordModel, below): a host gives its own.
 
 using System.Text.RegularExpressions;
 
@@ -77,5 +78,18 @@ sealed partial class WordModel : ILowlineModel
         }
 
         return Task.FromResult<IReadOnlyDictionary<string, FieldValue>>(answered);
+    }
+
+    /// <summary>For a field the records cannot answer: the first choice that does not come before the first value it
+    /// reads, alphabetically — a rule standing in for a model's judgement, trusted so the sample shows it.</summary>
+    public Task<IReadOnlyList<JudgedValue>> JudgeAsync(
+        LowlineJudgeRequest request, CancellationToken cancellationToken = default)
+    {
+        var read = request.Evidence.FirstOrDefault().Value ?? "";
+        var choice = request.Choices?
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(c => string.Compare(c, read, StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? request.Choices?.FirstOrDefault();
+        return Task.FromResult<IReadOnlyList<JudgedValue>>(choice is null ? [] : [new JudgedValue(choice, 0.6, true)]);
     }
 }

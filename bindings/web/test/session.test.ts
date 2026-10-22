@@ -143,6 +143,56 @@ describe('Session', () => {
     expect(session.apply([lee], {}).fieldStates.owner.suggestions).toEqual(['lee'])
   })
 
+  it('asks for a judgement once on what it reads, and shows it from then on', () => {
+    const session = new Session('r', {}, 0.05, never)
+    const asking: Proposal = {
+      field: 'owner',
+      suggestion: null,
+      prefill: false,
+      layer: null,
+      abstain: 'needs-judgement',
+      asks: [['customer', 'Gamma']],
+    }
+    expect(session.toJudge([asking])).toEqual(['owner'])
+    // Asked again while the host is still judging, or on the same values: not asked twice.
+    expect(session.toJudge([asking])).toEqual([])
+    expect(session.judged([asking])).toEqual([asking])
+
+    const judged: Proposal = { ...lee, layer: 'judgement', basis: [], prefill: false }
+    session.takeJudged([asking], [judged])
+    expect(session.judged([asking])).toEqual([judged])
+    const round = session.apply(session.judged([asking]), { customer: 'Gamma' })
+    expect(round.fieldStates.owner).toEqual({
+      suggestions: ['lee'],
+      decline: 'Not this',
+      note: 'Suggested from what was written',
+    })
+
+    // Other values to read: asked again, and the old judgement is not shown for them.
+    const other = { ...asking, asks: [['customer', 'Delta']] as [string, string][] }
+    expect(session.judged([other])).toEqual([other])
+    expect(session.toJudge([other])).toEqual(['owner'])
+    // A judgement for what it read before arrives late: it does not answer the newer question.
+    session.takeJudged([asking], [judged])
+    expect(session.judged([other])).toEqual([other])
+  })
+
+  it('does not ask again what the host judged to nothing, and asks again what it could not judge', () => {
+    const session = new Session('r', {}, 0.05, never)
+    const blank: Proposal = { field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement', asks: [] }
+    expect(session.toJudge([blank]), 'nothing to read yet').toEqual([])
+    const asking: Proposal = { ...blank, asks: [['customer', 'Gamma']] }
+    session.toJudge([asking])
+    session.takeJudged([asking], [])
+    expect(session.toJudge([asking])).toEqual([])
+    expect(session.judged([asking])).toEqual([asking])
+
+    const other = new Session('r', {}, 0.05, never)
+    other.toJudge([asking])
+    other.notJudged([asking])
+    expect(other.toJudge([asking])).toEqual(['owner'])
+  })
+
   it('shows nothing for a field it abstains on', () => {
     const session = new Session('r', {}, 0.05, never)
     const round = session.apply([{ ...lee, suggestion: null, prefill: false, layer: null, basis: [], abstain: 'unsure' }], {})
@@ -168,6 +218,16 @@ describe('LowlineClient', () => {
         body: { id: 'r', saved: { owner: 'lee' }, draft: { opened: {}, fields: { owner: { shown: { value: 'lee' }, declined: false } } } },
       },
     ])
+  })
+
+  it('asks the judge route with the record', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    const client = new LowlineClient('/lowline', async (url, init) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init?.body)) })
+      return new Response(JSON.stringify([lee]))
+    })
+    expect(await client.judge('intake', 'r', { customer: 'Gamma' })).toEqual([lee])
+    expect(calls).toEqual([{ url: '/lowline/intake/judge', body: { id: 'r', values: { customer: 'Gamma' } } }])
   })
 
   it('says what a route refused', async () => {

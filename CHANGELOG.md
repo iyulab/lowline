@@ -18,7 +18,11 @@ All notable changes to this project are written here. The format follows
   takes it. Where a memory has evidence a judgement changes nothing. Also `lowline_engine_offer`, `LowlineEngine.Offer`;
   in .NET the model judges through `ILowlineModel.JudgeAsync` (a model that only fills answers nothing),
   `LowlineForms.JudgeAsync` puts each asking field to it, and `MapLowline` adds `POST {form}/judge` (`{ id, values }`)
-  when a model is given — kept apart from `propose`, which answers at once.
+  when a model is given — kept apart from `propose`, which answers at once. A field with nothing to read yet is not put
+  to the model. A judgement is shown for a person to take and never put in unasked, whatever the field's policy.
+  `<lowline-form>` asks `judge` after a round in which a field asks for a judgement, once for what it reads, and shows
+  the answer in its field («Suggested from what was written») while the person writes on; without a model (404) it
+  stops asking. The sample's stand-in model judges too.
 - Filling a form from what a person wrote or showed, through the host's model — the engine calls none. `fill::describe`
   tells the host what to ask for: the fields still empty that take one value, each with its kind and, for a closed
   choice, the choices this person may pick. `fill::fill` checks the model's values against their fields and shows each

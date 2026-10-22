@@ -195,14 +195,14 @@ public sealed record Proposal
     [JsonPropertyName("layer")] public Layer? Layer { get; init; }
 
     /// <summary>What the suggestion rests on, strongest first.</summary>
-    [JsonPropertyName("basis")] public IReadOnlyList<Basis> Basis { get; init; } = [];
+    [JsonPropertyName("basis")] public IReadOnlyList<Basis> Basis { get => field ?? []; init; } = [];
 
     /// <summary>Why there is no suggestion, when there is none.</summary>
     [JsonPropertyName("abstain")] public Abstain? Abstain { get; init; }
 
     /// <summary>For <see cref="Lowline.Abstain.NeedsJudgement"/>: the fields and values a judgement from outside the
     /// records would read, each as a pair.</summary>
-    [JsonPropertyName("asks")] public IReadOnlyList<IReadOnlyList<string>> Asks { get; init; } = [];
+    [JsonPropertyName("asks")] public IReadOnlyList<IReadOnlyList<string>> Asks { get => field ?? []; init; } = [];
 }
 
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the
