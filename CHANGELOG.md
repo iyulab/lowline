@@ -6,6 +6,20 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking (Rust, feature `gil`): the decider is `iyulab-gil` 0.8.** The Gil schema an engine hands out
+  (`Engine::schema`, `lowline::gil::schema`) has private fields: read it with `schema.name()` and
+  `schema.attributes()`, and build a changed one with `gil::schema::Schema::new`. Answer sources in Gil's own vocabulary
+  are `Source::KeyMemory` and `Source::SimilarRecord`; the engine's `Layer` is unchanged. The .NET and web bindings and
+  the C ABI are unchanged.
+- Choosing thresholds is about four times quicker on a large history: on 10,000 settled records, `Engine::tune` took
+  2.9 s instead of 12.1 s, with the same choices (Gil 0.8's key layer and replays).
+- `Engine::restore` does not put back a tuning the form can no longer take — one naming a key field the form has
+  dropped. The engine stays untuned and `Engine::stale` says so, where it used to set the old settings on the new form.
+- `Engine::forget` takes a record out of the decider's memories (Gil's `Decider::remove`) instead of learning an empty
+  record in its place, so a forgotten record is never offered again as a similar record.
+
 ## [0.4.0] - 2026-10-23
 
 ### Added

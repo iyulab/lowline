@@ -146,7 +146,7 @@ fn records(engine: &Engine, lines: &str) -> Result<Vec<Record>, Failure> {
                 .map_err(|e| input(format!("record line {} does not read: {e}", at + 1)))
         })
         .collect::<Result<_, _>>()?;
-    let attributes = &engine.schema().attributes;
+    let attributes = &engine.schema().attributes();
     for record in &read {
         for name in record.values.keys().chain(record.sets.keys()) {
             let Some(attribute) = attributes.iter().find(|a| &a.name == name) else {

@@ -15,6 +15,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 lowline = { path = "../lowline", features = ["gil", "formdown", "serde"] }
-gil = { package = "iyulab-gil", version = "0.7", features = ["serde"] }
+gil = { package = "iyulab-gil", version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }

@@ -150,15 +150,17 @@ fn a_tuning_goes_stale_where_the_decider_says() {
             tuning.stale(&schema, now as usize)
         } else {
             let tuning = gil::tuning::Tuning::capture(&schema, 100, 0.8);
-            let mut changed = schema.clone();
-            match id {
-                "threshold-changed" => {
-                    changed.attributes[0].key_threshold = Some(0.5);
-                    changed.attributes[0].memory_threshold = Some(0.5);
-                }
-                "candidates-changed" => {
-                    changed.attributes[0].candidates = Some(vec!["A".to_owned()]);
-                }
+            let first = |change: fn(&mut gil::schema::Attribute)| {
+                let mut attributes = schema.attributes().to_vec();
+                change(&mut attributes[0]);
+                gil::schema::Schema::new(schema.name(), attributes).unwrap()
+            };
+            let changed = match id {
+                "threshold-changed" => first(|a| {
+                    a.key_threshold = Some(0.5);
+                    a.memory_threshold = Some(0.5);
+                }),
+                "candidates-changed" => first(|a| a.candidates = Some(vec!["A".to_owned()])),
                 "field-added" => {
                     let mut more = fields.clone();
                     more.extend(
@@ -172,7 +174,7 @@ fn a_tuning_goes_stale_where_the_decider_says() {
                         .resolve(Inference::DeclaredOnly)
                         .unwrap(),
                     );
-                    changed = engine::schema("form", &more).unwrap();
+                    engine::schema("form", &more).unwrap()
                 }
                 "version-changed" => {
                     let old = gil::tuning::Tuning {
@@ -183,7 +185,7 @@ fn a_tuning_goes_stale_where_the_decider_says() {
                     continue;
                 }
                 other => panic!("unknown change {other}"),
-            }
+            };
             tuning.stale(&changed, 100)
         };
         assert_eq!(json!(found), *expected, "{id}");

@@ -122,27 +122,28 @@ impl Engine {
     /// Forgets the records `ids` taught — records deleted since they were learned — so the engine answers as if they
     /// had never been learned, without learning the rest again. An id it never learned is passed by.
     pub fn forget<S: AsRef<str>>(&mut self, ids: &[S]) {
-        let gone: Vec<Record> = ids
-            .iter()
-            .map(AsRef::as_ref)
-            .filter(|id| self.learned.contains(*id))
-            .map(|id| record(id, &self.fields, &BTreeMap::new(), &[], 0))
-            .collect();
-        // A record with no values implies nothing: put in place of the one learned, it takes back all that one taught.
-        self.decider.rebuild(&self.schema, &gone);
-        for record in &gone {
-            self.learned.remove(&record.id);
+        for id in ids.iter().map(AsRef::as_ref) {
+            if self.learned.remove(id) {
+                self.decider.remove(&self.schema, id);
+            }
         }
     }
 
     /// Puts back a tuning the host stored, setting its thresholds on the schema; `None` leaves the engine untuned.
     /// Whether it still stands is [`Engine::stale`]'s to say — restore it after learning the stored records, so that it
-    /// is judged on them.
+    /// is judged on them. A tuning the form can no longer take — one naming key fields it has dropped — is not put
+    /// back: the engine stays untuned, and [`Engine::stale`] says so.
     pub fn restore(&mut self, tuned: Option<Tuned>) {
-        if let Some(tuned) = &tuned {
-            tuned.tuning.apply(&mut self.schema);
-        }
-        self.tuned = tuned;
+        self.tuned = match tuned {
+            Some(tuned) => match tuned.tuning.apply(&self.schema) {
+                Ok(schema) => {
+                    self.schema = schema;
+                    Some(tuned)
+                }
+                Err(_) => None,
+            },
+            None => None,
+        };
     }
 
     /// Why the thresholds should be chosen again, or `None` while they stand: none chosen yet, or Gil's reason — another
@@ -220,7 +221,7 @@ impl Engine {
         typed: Option<&str>,
     ) -> Option<Proposal> {
         let resolved = self.fields.iter().find(|f| f.field.name == field)?;
-        let attribute = self.schema.attributes.iter().find(|a| a.name == field)?;
+        let attribute = self.schema.attributes().iter().find(|a| a.name == field)?;
         let known = record(id, &self.fields, values, &[], 0);
         let open = attribute.role == AttributeRole::Decided
             && attribute.policy != AttributePolicy::Off
@@ -287,7 +288,7 @@ impl Engine {
         ranked: &[ExternalCandidate],
     ) -> Option<Proposal> {
         let resolved = self.fields.iter().find(|f| f.field.name == field)?;
-        let attribute = self.schema.attributes.iter().find(|a| a.name == field)?;
+        let attribute = self.schema.attributes().iter().find(|a| a.name == field)?;
         let known = record(id, &self.fields, values, &[], 0);
         let open = attribute.role == AttributeRole::Decided
             && attribute.policy != AttributePolicy::Off

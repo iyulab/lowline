@@ -57,7 +57,7 @@ fn history(
 fn attribute<'a>(engine: &'a Engine, name: &str) -> &'a gil::schema::Attribute {
     engine
         .schema()
-        .attributes
+        .attributes()
         .iter()
         .find(|a| a.name == name)
         .unwrap()

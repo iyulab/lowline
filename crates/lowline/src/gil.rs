@@ -27,12 +27,7 @@ use crate::schema::{FieldKind, ResolvedField, Role};
 ///
 /// The error is Gil's, naming the first rule the form breaks for it — a form with no decided field among them.
 pub fn schema(name: &str, fields: &[ResolvedField]) -> Result<gil::schema::Schema, String> {
-    let schema = gil::schema::Schema {
-        name: name.to_owned(),
-        attributes: fields.iter().map(attribute).collect(),
-    };
-    schema.check()?;
-    Ok(schema)
+    gil::schema::Schema::new(name, fields.iter().map(attribute).collect())
 }
 
 fn attribute(resolved: &ResolvedField) -> gil::schema::Attribute {
@@ -233,7 +228,7 @@ pub fn tune(
     let mut ordered: Vec<gil::schema::Record> = records.to_vec();
     ordered.sort_by_key(|r| r.settled_at);
     let decided: Vec<(String, bool)> = schema
-        .attributes
+        .attributes()
         .iter()
         .filter(|a| a.role == gil::schema::AttributeRole::Decided)
         .map(|a| (a.name.clone(), a.multiple))
@@ -243,8 +238,7 @@ pub fn tune(
     let mut report = Vec::new();
     for (name, multiple) in decided {
         // Chosen afresh: what an earlier choice set is not evidence for this one.
-        {
-            let attribute = attribute_mut(schema, &name);
+        edit(schema, &name, |attribute| {
             attribute.key_fields = None;
             attribute.key_concentrations.clear();
             attribute.key_threshold = None;
@@ -256,14 +250,14 @@ pub fn tune(
                 coarse.memory_threshold = None;
                 coarse.memory_floor = None;
             }
-        }
+        });
         let concentrations = gil::replay::select_key_concentrations(
             &mut gil::key_memory::KeyMemory::default(),
             schema,
             &name,
             &ordered,
         );
-        attribute_mut(schema, &name).key_concentrations = concentrations;
+        edit(schema, &name, |a| a.key_concentrations = concentrations);
 
         let checks = ordered
             .iter()
@@ -282,11 +276,10 @@ pub fn tune(
             0
         };
         let keyed = gil::replay::select_key_fields(schema, &name, &ordered, choice, typed_longest);
-        {
-            let attribute = attribute_mut(schema, &name);
+        edit(schema, &name, |attribute| {
             attribute.key_fields = keyed.key_fields.clone();
             attribute.key_threshold = keyed.chosen.chosen.as_ref().map(|c| c.threshold);
-        }
+        });
         let mut field = FieldReport {
             field: name.clone(),
             lookups: keyed.chosen.lookups,
@@ -297,7 +290,7 @@ pub fn tune(
             coarse: None,
             similar: None,
             similar_offered: false,
-            promise_over: gil::replay::RECENT_DOCUMENTS,
+            promise_over: gil::replay::RECENT_RECORDS,
             checks,
             counting,
         };
@@ -317,12 +310,11 @@ pub fn tune(
             tune.rule,
         );
         let similar = trusted(&layers, tune);
-        {
-            let attribute = attribute_mut(schema, &name);
+        edit(schema, &name, |attribute| {
             attribute.key_threshold = layers.key.chosen.as_ref().map(|c| c.threshold);
             attribute.memory_threshold = similar.map(|c| c.threshold);
             attribute.memory_floor = similar.and_then(|c| c.similarity_floor);
-        }
+        });
         field.lookups = layers.key.lookups;
         field.key = layers.key.chosen.clone();
         field.closest = closest(&layers.key);
@@ -338,12 +330,14 @@ pub fn tune(
                 choice,
                 typed_longest,
             );
-            attribute_mut(schema, &name).typed_key_thresholds = Some(typed.thresholds());
+            edit(schema, &name, |a| {
+                a.typed_key_thresholds = Some(typed.thresholds())
+            });
             field.typed = Some(typed.by_length.iter().map(|r| r.chosen.clone()).collect());
         }
 
         if schema
-            .attributes
+            .attributes()
             .iter()
             .any(|a| a.name == name && a.coarse.is_some())
         {
@@ -356,13 +350,12 @@ pub fn tune(
                 choice,
             );
             let similar = trusted(&classed, tune);
-            let coarse = attribute_mut(schema, &name)
-                .coarse
-                .as_mut()
-                .expect("a coarse level");
-            coarse.key_threshold = classed.key.chosen.as_ref().map(|c| c.threshold);
-            coarse.memory_threshold = similar.map(|c| c.threshold);
-            coarse.memory_floor = similar.and_then(|c| c.similarity_floor);
+            edit(schema, &name, |attribute| {
+                let coarse = attribute.coarse.as_mut().expect("a coarse level");
+                coarse.key_threshold = classed.key.chosen.as_ref().map(|c| c.threshold);
+                coarse.memory_threshold = similar.map(|c| c.threshold);
+                coarse.memory_floor = similar.and_then(|c| c.similarity_floor);
+            });
             field.coarse = classed.key.chosen.clone();
         }
         report.push(field);
@@ -414,15 +407,22 @@ fn typeable(fields: &[ResolvedField], name: &str) -> bool {
     })
 }
 
-fn attribute_mut<'a>(
-    schema: &'a mut gil::schema::Schema,
+/// Makes `change` to the attribute named `name` — a threshold or key setting a replay chose on this schema, which
+/// keeps it valid.
+fn edit(
+    schema: &mut gil::schema::Schema,
     name: &str,
-) -> &'a mut gil::schema::Attribute {
-    schema
-        .attributes
-        .iter_mut()
-        .find(|a| a.name == name)
-        .expect("an attribute of the schema")
+    change: impl FnOnce(&mut gil::schema::Attribute),
+) {
+    let mut attributes = schema.attributes().to_vec();
+    change(
+        attributes
+            .iter_mut()
+            .find(|a| a.name == name)
+            .expect("an attribute of the schema"),
+    );
+    *schema = gil::schema::Schema::new(schema.name(), attributes)
+        .expect("a setting a replay chose keeps the schema valid");
 }
 
 /// A saved record as Gil keeps it: its values by field, a decided field that takes several as a set, an observed one
@@ -534,8 +534,8 @@ pub fn proposal(
 
 fn layer(source: gil::decider::Source) -> Option<Layer> {
     match source {
-        gil::decider::Source::SettledFieldMemory => Some(Layer::Key),
-        gil::decider::Source::SimilarDocument => Some(Layer::Similar),
+        gil::decider::Source::KeyMemory => Some(Layer::Key),
+        gil::decider::Source::SimilarRecord => Some(Layer::Similar),
         gil::decider::Source::External => Some(Layer::Judgement),
         gil::decider::Source::None => None,
     }
@@ -675,8 +675,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(schema.name, "intake");
-        let by = |n: &str| schema.attributes.iter().find(|a| a.name == n).unwrap();
+        assert_eq!(schema.name(), "intake");
+        let by = |n: &str| schema.attributes().iter().find(|a| a.name == n).unwrap();
         assert_eq!(by("note").role, AttributeRole::Observed);
         assert!(!by("name").use_as_evidence);
         let code = by("code");
@@ -692,7 +692,7 @@ mod tests {
         assert!(!by("tags").multiple);
         assert_eq!(
             schema
-                .attributes
+                .attributes()
                 .iter()
                 .map(|a| a.name.as_str())
                 .collect::<Vec<_>>(),
@@ -709,9 +709,9 @@ mod tests {
         owner.open = true;
         owner.role = Some(Role::Decided);
         let schema = schema("f", &resolved(vec![topics, owner])).unwrap();
-        assert!(schema.attributes[0].multiple);
-        assert!(schema.attributes[0].coarse.is_none());
-        assert!(schema.attributes[1].candidates.is_none());
+        assert!(schema.attributes()[0].multiple);
+        assert!(schema.attributes()[0].coarse.is_none());
+        assert!(schema.attributes()[1].candidates.is_none());
     }
 
     #[test]
@@ -801,7 +801,7 @@ mod tests {
         gil::decider::Candidate {
             value: value.into(),
             score: 0.9,
-            source: gil::decider::Source::SettledFieldMemory,
+            source: gil::decider::Source::KeyMemory,
             evidence: Some(gil::decider::Evidence::Key(gil::key_memory::Key {
                 attribute: "customer".into(),
                 value: "Acme".into(),

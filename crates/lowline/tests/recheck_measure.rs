@@ -66,7 +66,7 @@ fn records_until_a_threshold(rate: f64, limit: usize, seed: u64) -> Option<usize
         ));
         if (i + 1) % 10 == 0 {
             engine::tune(&mut schema, &fields, &records, &engine::Tune::default());
-            if schema.attributes[1].key_threshold.is_some() {
+            if schema.attributes()[1].key_threshold.is_some() {
                 return Some(i + 1);
             }
         }

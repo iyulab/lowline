@@ -91,21 +91,11 @@ fn measures_choosing_thresholds_on_ten_thousand_records() {
         &records,
     );
     let t1 = at.elapsed();
-    schema
-        .attributes
-        .iter_mut()
-        .find(|a| a.name == "owner")
-        .unwrap()
-        .key_concentrations = concentrations;
+    schema = changed(&schema, |a| a.key_concentrations = concentrations);
     let at = Instant::now();
     let keyed = gil::replay::select_key_fields(&schema, "owner", &records, choice, 0);
     let t2 = at.elapsed();
-    schema
-        .attributes
-        .iter_mut()
-        .find(|a| a.name == "owner")
-        .unwrap()
-        .key_fields = keyed.key_fields.clone();
+    schema = changed(&schema, |a| a.key_fields = keyed.key_fields.clone());
     let at = Instant::now();
     let _layers = gil::replay::select_layers_by_rule(
         &mut gil::key_memory::KeyMemory::default(),
@@ -160,4 +150,14 @@ fn measures_choosing_thresholds_on_ten_thousand_records() {
         all.as_millis(),
         one.as_millis()
     );
+}
+
+/// `schema` with `change` made to its `owner` attribute.
+fn changed(
+    schema: &gil::schema::Schema,
+    change: impl FnOnce(&mut gil::schema::Attribute),
+) -> gil::schema::Schema {
+    let mut attributes = schema.attributes().to_vec();
+    change(attributes.iter_mut().find(|a| a.name == "owner").unwrap());
+    gil::schema::Schema::new(schema.name(), attributes).unwrap()
 }

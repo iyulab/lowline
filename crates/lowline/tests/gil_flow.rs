@@ -114,7 +114,7 @@ fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
 
     let tuned = intake.tune(&records).clone();
     let tuning = &tuned.tuning;
-    assert!(intake.schema().attributes[1].key_threshold.is_some());
+    assert!(intake.schema().attributes()[1].key_threshold.is_some());
     assert_eq!(tuning.settled, 40);
     assert!(tuning.attributes[0].key_promise.is_some());
     // How the replay went, for the host to show.
@@ -151,10 +151,34 @@ fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
     assert_eq!(restarted.report(), intake.report());
     assert_eq!(restarted.stale(), None);
     assert_eq!(
-        restarted.schema().attributes[1].key_threshold,
-        intake.schema().attributes[1].key_threshold
+        restarted.schema().attributes()[1].key_threshold,
+        intake.schema().attributes()[1].key_threshold
     );
     assert_eq!(restarted.propose("new", &typed, &BTreeMap::new()), shown);
+}
+
+#[test]
+fn a_tuning_naming_a_field_the_form_dropped_is_not_put_back() {
+    let form = |clue: &str| Form {
+        fields: vec![
+            Field::new(clue, FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form("customer").resolve(Inference::ClosedChoices).unwrap();
+    let mut intake = Engine::new("intake", fields, engine::Tune::default()).unwrap();
+    let records = alternating(&intake, 40);
+    let mut tuned = intake.tune(&records).clone();
+    // Stored when the owner was keyed on the customer alone.
+    tuned.tuning.attributes[0].key_fields = Some(vec!["customer".to_owned()]);
+
+    // The form now keys on another field: the stored tuning cannot be put on it, and the engine says to choose again.
+    let renamed = form("client").resolve(Inference::ClosedChoices).unwrap();
+    let mut restarted = Engine::new("intake", renamed, engine::Tune::default()).unwrap();
+    restarted.restore(Some(tuned));
+    assert_eq!(restarted.stale(), Some(Stale::Untuned));
+    assert_eq!(restarted.tuning(), None);
+    assert_eq!(restarted.schema().attributes()[1].key_threshold, None);
 }
 
 #[test]
@@ -198,7 +222,7 @@ fn values_taken_from_suggestions_do_not_grade_the_suggestions() {
         })
         .collect();
     engine::tune(&mut schema, &fields, &records, &engine::Tune::default());
-    assert_eq!(schema.attributes[1].key_threshold, None);
+    assert_eq!(schema.attributes()[1].key_threshold, None);
 }
 
 #[test]
@@ -226,7 +250,7 @@ fn counting_every_settled_value_grades_the_suggestions_on_what_people_took() {
         ..engine::Tune::default()
     };
     engine::tune(&mut schema, &fields, &records, &tune);
-    assert!(schema.attributes[1].key_threshold.is_some());
+    assert!(schema.attributes()[1].key_threshold.is_some());
 }
 
 #[test]
