@@ -42,6 +42,12 @@ host decides, per request, the memory space a record belongs to (`Space` — a w
 never answer for another) and the choices its person may pick (`Allowed`) — a value outside them is never suggested.
 Authentication and authorization stay the host's.
 
+What the engine learns is what a person confirmed, so `settle` takes the values it is sent as the save itself. A host
+that already stores its records through its own API — its permissions, validation and corrections — gives `Saved`,
+which reads a record back from its own store: the element then calls `settle()` after the host's save, the request
+carries only the account of what was shown, and the engine learns the record as stored. A record the host has not
+stored is 404, and nothing is learned.
+
 Filling from what a person wrote is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
 tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
 in its field for the person to take — never put in on its own, and never counted as the records' own answer.

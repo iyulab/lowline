@@ -28,8 +28,11 @@ export class LowlineClient {
     return this.post(form, 'propose', { id, values })
   }
 
-  /** Saves record `id` holding `saved`, with the draft kept while it was written. */
-  settle(form: string, id: string, saved: Values, draft: Draft): Promise<{ id: string; settledAt: string }> {
+  /**
+   * Settles record `id` with the draft kept while it was written: saves it holding `saved`, or — left out, for a host
+   * that stores its records through its own API and reads them back (`Saved` in .NET) — learns what the host stored.
+   */
+  settle(form: string, id: string, draft: Draft, saved?: Values): Promise<{ id: string; settledAt: string }> {
     return this.post(form, 'settle', { id, saved, draft })
   }
 

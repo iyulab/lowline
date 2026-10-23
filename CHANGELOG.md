@@ -6,6 +6,19 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `LowlineWebOptions.Saved`: a host that stores its records through its own API reads a record back from its own
+  store, and `settle` learns that — not the values the request carries. A record the host has not stored is 404 and
+  nothing is learned, so a request cannot have values learned as a person's that were never saved. The form element's
+  `settle()` sends only the account of what was shown, for such a host.
+
+### Changed
+
+- `LowlineClient.settle(form, id, draft, saved?)`: the draft comes before the values, which a host reading its own
+  records leaves out (was `settle(form, id, saved, draft)`). A `settle` request with no `saved` values to a host that
+  reads none of its own is refused (400).
+
 ### Fixed
 
 - The npm package `@iyulab/lowline-form` carries the license text (`LICENSE`), not only its name, as the NuGet packages

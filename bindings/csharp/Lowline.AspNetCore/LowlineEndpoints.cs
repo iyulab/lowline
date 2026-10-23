@@ -20,6 +20,14 @@ public sealed class LowlineWebOptions : LowlineOptions
     /// filters; <c>null</c>, or a field left out, allows any value. A value outside them is never suggested.</summary>
     public Func<HttpContext, string, IReadOnlyDictionary<string, IReadOnlyList<string>>?> Allowed { get; set; } =
         (_, _) => null;
+
+    /// <summary>The values the host stored for record <c>id</c> of a form, read from its own records — for a host that
+    /// saves through its own API (its permissions, validation and corrections) before <c>settle</c> is called. When
+    /// given, <c>settle</c> learns these and does not read values from the request, so what is learned is what was
+    /// stored; <c>null</c> — a record the host has not stored, or this person may not settle — is 404 and nothing is
+    /// learned. Left <c>null</c>, the request's <c>saved</c> is the save: the route stores and learns it.</summary>
+    public Func<HttpContext, string, string, CancellationToken, ValueTask<IReadOnlyDictionary<string, FieldValue>?>>?
+        Saved { get; set; }
 }
 
 /// <summary>Putting a host's forms behind two routes.</summary>
@@ -40,8 +48,9 @@ public static class LowlineEndpoints
 
     /// <summary>Maps the forms under <paramref name="prefix"/>: <c>POST {prefix}/{form}/propose</c> takes
     /// <c>{ "id", "values" }</c> and answers what to show for each open decided field; <c>POST {prefix}/{form}/settle</c>
-    /// takes <c>{ "id", "saved", "draft" }</c> — the draft the form element kept while the record was written — and
-    /// answers <c>{ "id", "settledAt" }</c> once the save is stored and learned; <c>POST {prefix}/{form}/fill</c>, when
+    /// takes <c>{ "id", "saved", "draft" }</c> — the draft the form element kept while the record was written; no
+    /// <c>saved</c> when the host reads its own (<see cref="LowlineWebOptions.Saved"/>) — and answers
+    /// <c>{ "id", "settledAt" }</c> once the save is stored and learned; <c>POST {prefix}/{form}/fill</c>, when
     /// the host gave a model (<c>UseModel</c>), takes <c>{ "values", "text" }</c> and answers the model's values as
     /// suggestions from elsewhere; <c>POST {prefix}/{form}/judge</c>, with a model too, takes <c>{ "id", "values" }</c>
     /// and answers, for the decided fields the records could not, what the model judged. A form not defined is 404; input the
@@ -99,6 +108,24 @@ public static class LowlineEndpoints
             return;
         }
 
+        IReadOnlyDictionary<string, FieldValue>? saved = request.Saved;
+        if (options.Saved is { } stored)
+        {
+            // The host's own record is what a person settled; values the request carries are not read.
+            saved = await stored(context, form, request.Id, context.RequestAborted).ConfigureAwait(false);
+            if (saved is null)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+        }
+        else if (saved is null)
+        {
+            await Results.Problem("The request carries no saved values.", statusCode: StatusCodes.Status400BadRequest)
+                .ExecuteAsync(context).ConfigureAwait(false);
+            return;
+        }
+
         await RespondAsync(context, async () =>
         {
             var scope = new LowlineScope(form, options.Space(context));
@@ -106,7 +133,7 @@ public static class LowlineEndpoints
                 ? kept.GetRawText()
                 : null;
             var settled = await forms.SettleAsync(
-                    scope, request.Id, request.Saved, draft, SettledBy.Person, context.RequestAborted)
+                    scope, request.Id, saved, draft, SettledBy.Person, context.RequestAborted)
                 .ConfigureAwait(false);
             await context.Response.WriteAsJsonAsync(
                     new SettleResponse(settled.Id, settled.SettledAt), WebJson.Default.SettleResponse,
@@ -218,7 +245,7 @@ internal sealed record ProposeRequest(
 
 internal sealed record SettleRequest(
     [property: JsonPropertyName("id")] string Id,
-    [property: JsonPropertyName("saved")] Dictionary<string, FieldValue> Saved,
+    [property: JsonPropertyName("saved")] Dictionary<string, FieldValue>? Saved,
     [property: JsonPropertyName("draft")] JsonElement? Draft);
 
 internal sealed record FillRequest(

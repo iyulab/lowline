@@ -96,10 +96,22 @@ export class LowlineForm extends LitElement {
   }
 
   /** Saves the record as it stands, with the account of what was shown and done; what is written next starts here. */
-  async save(): Promise<{ id: string; settledAt: string }> {
+  save(): Promise<{ id: string; settledAt: string }> {
+    return this.settleWith(true)
+  }
+
+  /**
+   * For a host that stores the record through its own API first: sends only the account of what was shown and done,
+   * and the host's engine learns the record as the host stored it (`Saved` in .NET). What is written next starts here.
+   */
+  settle(): Promise<{ id: string; settledAt: string }> {
+    return this.settleWith(false)
+  }
+
+  private async settleWith(sendValues: boolean): Promise<{ id: string; settledAt: string }> {
     if (!this.session || !this.form || !this.record) throw new Error('lowline-form needs a form and a record to save')
     const values = this.values()
-    const saved = await this.client.settle(this.form, this.record, values, this.session.draft)
+    const saved = await this.client.settle(this.form, this.record, this.session.draft, sendValues ? values : undefined)
     this.session.saved(values)
     this.dispatchEvent(new CustomEvent('lowline-saved', { detail: { ...saved, values }, bubbles: true, composed: true }))
     return saved

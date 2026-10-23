@@ -22,7 +22,9 @@ routes (`MapLowline` in .NET).
 | `rate` | How often a field's answer is held back to check it, from 0 to 1 (one in twenty by default). |
 | `strings` | The words the form shows, in the host's language. |
 
-`save()` sends the values with the account of what was shown, taken and turned down, and fires `lowline-saved`;
+`save()` sends the values with the account of what was shown, taken and turned down, and fires `lowline-saved`; a
+host that stores the record through its own API calls `settle()` after its save instead, which sends only the account
+and has the host's engine learn the record as stored (`Saved` in .NET);
 `fill(text)` offers the host model's values in their fields. A field the records cannot answer yet is judged by the
 host's model when it has one (`judge`): asked once for the values it reads, shown in the field while the person writes
 on, never put in on its own. When the routes do not answer, `lowline-unavailable` fires and the form is filled in by

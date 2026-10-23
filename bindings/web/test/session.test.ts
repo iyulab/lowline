@@ -210,12 +210,18 @@ describe('LowlineClient', () => {
     expect(await client.propose('in take', 'r', { customer: 'Beta' })).toEqual([lee])
     const draft = new Draft()
     draft.show('owner', { value: 'lee' })
-    expect(await client.settle('in take', 'r', { owner: 'lee' }, draft)).toEqual({ id: 'r', settledAt: 'now' })
+    expect(await client.settle('in take', 'r', draft, { owner: 'lee' })).toEqual({ id: 'r', settledAt: 'now' })
+    // A host that stores its own records reads them back: the call carries the draft only.
+    await client.settle('in take', 'r', draft)
     expect(calls).toEqual([
       { url: '/lowline/in%20take/propose', body: { id: 'r', values: { customer: 'Beta' } } },
       {
         url: '/lowline/in%20take/settle',
         body: { id: 'r', saved: { owner: 'lee' }, draft: { opened: {}, fields: { owner: { shown: { value: 'lee' }, declined: false } } } },
+      },
+      {
+        url: '/lowline/in%20take/settle',
+        body: { id: 'r', draft: { opened: {}, fields: { owner: { shown: { value: 'lee' }, declined: false } } } },
       },
     ])
   })

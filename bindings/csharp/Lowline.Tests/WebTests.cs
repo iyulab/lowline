@@ -23,7 +23,7 @@ public sealed class WebTests : IAsyncDisposable
 
     /// <summary>A host on a free local port whose memory space is the request's <c>X-Space</c> header (a stand-in for
     /// the signed-in user's workplace), and whose people in space <c>kim-only</c> may pick only kim.</summary>
-    private async Task<HttpClient> StartAsync()
+    private async Task<HttpClient> StartAsync(Action<LowlineWebOptions>? configure = null)
     {
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -37,6 +37,7 @@ public sealed class WebTests : IAsyncDisposable
             o.Allowed = (context, _) => context.Request.Headers["X-Space"] == "kim-only"
                 ? new Dictionary<string, IReadOnlyList<string>> { ["owner"] = ["kim"] }
                 : null;
+            configure?.Invoke(o);
         });
         _app = builder.Build();
         _app.MapLowline("/lowline");
@@ -127,6 +128,59 @@ public sealed class WebTests : IAsyncDisposable
             Post("/lowline/intake/settle", new { id = "r", saved = new { }, draft = new { opened = 3 } }), Ct);
         refused.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await refused.Content.ReadAsStringAsync(Ct)).Should().Contain("draft does not read");
+    }
+
+    [Fact]
+    public async Task A_host_that_stores_its_own_records_has_what_it_stored_learned_not_what_the_request_says()
+    {
+        await Seed("seoul");
+        // The host's own table: record "new" was saved through its API, with owner corrected to lee.
+        var hosted = new Dictionary<string, IReadOnlyDictionary<string, FieldValue>>
+        {
+            ["new"] = new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" },
+        };
+        using var client = await StartAsync(o => o.Saved = (_, form, id, _) =>
+            ValueTask.FromResult(form == "intake" && hosted.TryGetValue(id, out var values) ? values : null));
+
+        using var settled = await client.SendAsync(
+            Post(
+                "/lowline/intake/settle",
+                new
+                {
+                    id = "new",
+                    saved = new { customer = "Beta", owner = "kim" },
+                    draft = JsonNode.Parse(EngineTests.Shown("owner", "lee")),
+                },
+                "seoul"),
+            Ct);
+        settled.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stored = await _store.ReadRecordsAsync(new LowlineScope("intake", "seoul"), Ct);
+        var record = JsonNode.Parse(stored.Single(r => r.Id == "new").Json)!;
+        record["values"]!["owner"]!.GetValue<string>().Should().Be("lee");
+        record["settlements"]!["owner"]!.GetValue<string>().Should().Be("Accept");
+
+        // A record the host never stored is not found, and nothing is learned from what the request carries.
+        using var unstored = await client.SendAsync(
+            Post("/lowline/intake/settle", new { id = "forged", saved = new { owner = "kim" }, draft = (object?)null }, "seoul"),
+            Ct);
+        unstored.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await _store.ReadRecordsAsync(new LowlineScope("intake", "seoul"), Ct)).Should().HaveCount(41);
+
+        // Without saved values of its own to read, the host reads them from its records: none needed in the request.
+        hosted["second"] = new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" };
+        using var bare = await client.SendAsync(
+            Post("/lowline/intake/settle", new { id = "second", draft = (object?)null }, "seoul"), Ct);
+        bare.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_host_that_reads_no_records_of_its_own_needs_the_saved_values_in_the_request()
+    {
+        using var client = await StartAsync();
+        using var bare = await client.SendAsync(Post("/lowline/intake/settle", new { id = "r", draft = (object?)null }), Ct);
+        bare.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await bare.Content.ReadAsStringAsync(Ct)).Should().Contain("no saved values");
+        (await _store.ReadRecordsAsync(new LowlineScope("intake", "default"), Ct)).Should().BeEmpty();
     }
 
     public async ValueTask DisposeAsync()
