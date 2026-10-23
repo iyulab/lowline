@@ -64,6 +64,20 @@ public sealed unsafe class LowlineEngine : IDisposable
         }
     }
 
+    /// <summary>Forgets the records <paramref name="ids"/> taught — records deleted since they were learned — so the
+    /// engine answers as if they had never been learned, without learning the rest again. An id it never learned is
+    /// passed by.</summary>
+    public void Forget(IEnumerable<string> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var text = new Utf8(JsonSerializer.Serialize(ids.ToList(), LowlineJson.Default.ListString));
+        using var _ = Write();
+        fixed (byte* p = text.Bytes)
+        {
+            Native.Check(Native.EngineForget(_handle, text.At(p)));
+        }
+    }
+
     /// <summary>Puts back a tuning the host stored; <c>null</c> leaves the engine untuned. Restore it after learning the
     /// stored records, so that whether it still stands is judged on them.</summary>
     public void Restore(string? tuning)

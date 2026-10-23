@@ -86,6 +86,18 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void A_record_deleted_since_is_forgotten_without_learning_the_rest_again()
+    {
+        var stored = Alternating(40);
+        using var engine = LowlineEngine.Create(Intake);
+        engine.Learn(stored.Select(r => r.Json));
+        engine.Forget(["r0", "r2", "never-learned"]);
+        engine.Settled.Should().Be(38);
+        engine.Learn([stored[0].Json]);
+        engine.Settled.Should().Be(39);
+    }
+
+    [Fact]
     public void Only_a_value_the_decider_would_show_is_drawn_for_a_check()
     {
         var stored = Alternating(40);

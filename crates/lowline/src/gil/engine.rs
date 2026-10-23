@@ -119,6 +119,22 @@ impl Engine {
         self.learned.extend(records.iter().map(|r| r.id.clone()));
     }
 
+    /// Forgets the records `ids` taught — records deleted since they were learned — so the engine answers as if they
+    /// had never been learned, without learning the rest again. An id it never learned is passed by.
+    pub fn forget<S: AsRef<str>>(&mut self, ids: &[S]) {
+        let gone: Vec<Record> = ids
+            .iter()
+            .map(AsRef::as_ref)
+            .filter(|id| self.learned.contains(*id))
+            .map(|id| record(id, &self.fields, &BTreeMap::new(), &[], 0))
+            .collect();
+        // A record with no values implies nothing: put in place of the one learned, it takes back all that one taught.
+        self.decider.rebuild(&self.schema, &gone);
+        for record in &gone {
+            self.learned.remove(&record.id);
+        }
+    }
+
     /// Puts back a tuning the host stored, setting its thresholds on the schema; `None` leaves the engine untuned.
     /// Whether it still stands is [`Engine::stale`]'s to say — restore it after learning the stored records, so that it
     /// is judged on them.

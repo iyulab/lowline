@@ -128,6 +128,16 @@ fn a_host_round_through_the_abi() {
     // Start-up: the stored records, no tuning yet — so it is chosen and handed back to store.
     ok(unsafe { lowline_engine_learn(engine, s(&records)) });
     assert_eq!(unsafe { lowline_engine_settled(engine) }, 40);
+    // A record deleted since is forgotten, and learned again as it was.
+    ok(unsafe { lowline_engine_forget(engine, s(r#"["r0", "never-learned"]"#)) });
+    assert_eq!(unsafe { lowline_engine_settled(engine) }, 39);
+    assert_eq!(
+        unsafe { lowline_engine_forget(engine, s("r0")) },
+        LOWLINE_INVALID_INPUT,
+        "ids are a JSON array"
+    );
+    ok(unsafe { lowline_engine_learn(engine, s(&records)) });
+    assert_eq!(unsafe { lowline_engine_settled(engine) }, 40);
     ok(unsafe { lowline_engine_restore(engine, NONE) });
     let mut len = 0;
     ok(unsafe { lowline_engine_stale(engine, &mut len) });

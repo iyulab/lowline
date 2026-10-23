@@ -350,6 +350,7 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(List<Proposal>))]
 [JsonSerializable(typeof(List<FillField>))]
 [JsonSerializable(typeof(List<JudgedValue>))]
+[JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(Proposal))]
 [JsonSerializable(typeof(IReadOnlyList<Proposal>))]
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]

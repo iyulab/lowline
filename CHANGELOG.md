@@ -11,6 +11,9 @@ All notable changes to this project are written here. The format follows
 - .NET's `Recheck` draws a decided field for a check as the Rust `Recheck` does: `new Recheck(rate).Draw(proposal, roll)`
   answers the probability to give `LowlineEngine.Record` among its checks, or `null` — only a value the decider would
   show is drawn. A host that writes its own form no longer restates the rule.
+- An engine forgets records deleted since it learned them: `Engine::forget(ids)` (`LowlineEngine.Forget`,
+  `lowline_engine_forget`) takes back what they taught, so a host that keeps its engine between changes to its records
+  need not learn all the rest again after a deletion. An id never learned is passed by.
 
 ### Changed
 

@@ -300,6 +300,24 @@ pub unsafe extern "C" fn lowline_engine_learn(
     }
 }
 
+/// Forgets the records whose ids are given — a JSON array of strings — so the engine answers as if they had never been
+/// learned: records deleted since. An id it never learned is passed by.
+///
+/// # Safety
+/// `engine` is a live handle used by nothing else during the call; `ids` is valid for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_forget(engine: *mut LowlineEngine, ids: LowlineStr) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        changing(engine, |engine| {
+            let ids: Vec<String> = serde_json::from_str(text(ids, "ids")?)
+                .map_err(|e| input(format!("ids do not read as a JSON array of strings: {e}")))?;
+            engine.forget(&ids);
+            Ok(())
+        })
+    }
+}
+
 /// Puts back a tuning the host stored — what [`lowline_engine_tune`] handed back: Gil's tuning and how each field's
 /// replays went, as JSON — setting its thresholds on the engine's schema. Empty text leaves the engine untuned, and so
 /// does a tuning stored by an engine before 0.2 (Gil's tuning alone), which is then chosen again. Restore it after learning the stored records, so that whether it still stands is

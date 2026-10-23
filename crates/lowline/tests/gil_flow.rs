@@ -419,3 +419,48 @@ fn a_judgement_changes_nothing_where_the_records_have_evidence() {
     assert_eq!(offered.suggestion.unwrap().value, "kim");
     assert_eq!(offered.layer, Some(lowline::Layer::Key));
 }
+
+#[test]
+fn a_record_forgotten_answers_as_if_it_had_never_been_learned() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut intake = Engine::new("intake", fields.clone(), engine::Tune::default()).unwrap();
+    let history = alternating(&intake, 40);
+    let tuned = intake.tune(&history).clone();
+    // Gamma's records, deleted since: forgotten, the engine answers as one that never learned them.
+    let gamma: Vec<_> = (40..46)
+        .map(|i| {
+            let values = saved(&[("customer", "Gamma"), ("owner", "lee")]);
+            let settled = Draft::new().settle(["owner"], &values, SettledBy::Person);
+            engine::record(&format!("g{i}"), &fields, &values, &settled, i)
+        })
+        .collect();
+    intake.learn(&gamma);
+    let asked = saved(&[("customer", "Gamma")]);
+    assert!(
+        intake.propose("new", &asked, &BTreeMap::new())[0]
+            .suggestion
+            .is_some()
+    );
+
+    intake.forget(&gamma.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
+    intake.forget(&["never-learned"]);
+    let mut never = Engine::new("intake", fields, engine::Tune::default()).unwrap();
+    never.learn(&history);
+    never.restore(Some(tuned));
+    assert_eq!(intake.settled(), 40);
+    assert_eq!(
+        intake.propose("new", &asked, &BTreeMap::new()),
+        never.propose("new", &asked, &BTreeMap::new())
+    );
+    let acme = saved(&[("customer", "Acme")]);
+    assert_eq!(
+        intake.propose("new", &acme, &BTreeMap::new()),
+        never.propose("new", &acme, &BTreeMap::new())
+    );
+}

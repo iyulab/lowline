@@ -50,6 +50,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "lowline_engine_learn")]
     internal static partial int EngineLearn(nint engine, Str records);
 
+    [LibraryImport(Library, EntryPoint = "lowline_engine_forget")]
+    internal static partial int EngineForget(nint engine, Str ids);
+
     [LibraryImport(Library, EntryPoint = "lowline_engine_restore")]
     internal static partial int EngineRestore(nint engine, Str tuning);
 
