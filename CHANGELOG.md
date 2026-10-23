@@ -17,6 +17,11 @@ All notable changes to this project are written here. The format follows
 
 ### Changed
 
+- `ILowlineStore.ForgetBeforeAsync` gives the ids of the records it removed, not their count, so `LowlineForms` can have
+  a running engine forget them. A host with a store of its own returns the ids (`Lowline.Sqlite` reads them with
+  `DELETE … RETURNING id`). `LowlineForms.ForgetAsync` and `ForgetBeforeAsync` no longer stop the scope's engine to
+  learn every remaining record again on its next use: it forgets what went, and chooses its thresholds again in the
+  background when the rest no longer bear them out.
 - A record settled elsewhere carries its checks: `Engine::record(id, saved, settled, checks, settled_at)` takes the
   fields whose answer was held back for a check while the record was written, each with the probability it was drawn
   with, and settles them as checks — the same line a draft that held them back makes. A host that keeps its records

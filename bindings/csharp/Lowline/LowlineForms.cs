@@ -179,31 +179,71 @@ public sealed class LowlineForms : IDisposable
         }
     }
 
-    /// <summary>Removes the scope's records settled before <paramref name="before"/> from the store and starts its
-    /// engine again from what is left on its next use; says how many went.</summary>
+    /// <summary>Removes the scope's records settled before <paramref name="before"/> from the store, and has its
+    /// engine, if running, forget them (see <see cref="LowlineEngine.Forget"/>) — choosing thresholds again in the
+    /// background when the rest no longer bear them out; says how many went.</summary>
     public async Task<int> ForgetBeforeAsync(
         LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default)
     {
-        var gone = await _store.ForgetBeforeAsync(scope, before, cancellationToken).ConfigureAwait(false);
-        if (gone > 0)
+        IReadOnlyList<string> gone = [];
+        await ForgettingAsync(scope, async () =>
         {
-            Stop(scope);
-        }
+            gone = await _store.ForgetBeforeAsync(scope, before, cancellationToken).ConfigureAwait(false);
+            return gone;
+        }, cancellationToken).ConfigureAwait(false);
+        return gone.Count;
+    }
 
+    /// <summary>Removes the scope's record <paramref name="id"/> from the store, and has its engine, if running,
+    /// forget it — choosing thresholds again in the background when the rest no longer bear them out.</summary>
+    public async Task<bool> ForgetAsync(LowlineScope scope, string id, CancellationToken cancellationToken = default)
+    {
+        var gone = false;
+        await ForgettingAsync(scope, async () =>
+        {
+            gone = await _store.ForgetAsync(scope, id, cancellationToken).ConfigureAwait(false);
+            return gone ? [id] : [];
+        }, cancellationToken).ConfigureAwait(false);
         return gone;
     }
 
-    /// <summary>Removes the scope's record <paramref name="id"/> from the store and starts its engine again from what
-    /// is left on its next use.</summary>
-    public async Task<bool> ForgetAsync(LowlineScope scope, string id, CancellationToken cancellationToken = default)
+    /// <summary>Runs <paramref name="forget"/> — removing records from the store, answering their ids — between the
+    /// saves to a running engine, which then forgets them. A scope whose engine is still starting starts again from the
+    /// store on its next use; one not running reads the store as it is then.</summary>
+    private async Task ForgettingAsync(
+        LowlineScope scope, Func<Task<IReadOnlyList<string>>> forget, CancellationToken cancellationToken)
     {
-        var gone = await _store.ForgetAsync(scope, id, cancellationToken).ConfigureAwait(false);
-        if (gone)
+        if (!_running.TryGetValue(scope, out var lazy) || !lazy.IsValueCreated || !lazy.Value.IsCompletedSuccessfully)
         {
-            Stop(scope);
+            var gone = await forget().ConfigureAwait(false);
+            if (gone.Count > 0 && lazy is not null)
+            {
+                Stop(scope);
+            }
+
+            return;
         }
 
-        return gone;
+        var running = lazy.Value.Result;
+        await running.Saving.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var gone = await forget().ConfigureAwait(false);
+            if (gone.Count == 0)
+            {
+                return;
+            }
+
+            running.Engine.Forget(gone);
+            if (running.Engine.Stale is not null)
+            {
+                running.Retune(() => RetuneAsync(scope, running.Engine));
+            }
+        }
+        finally
+        {
+            running.Saving.Release();
+        }
     }
 
     private Task<Running> StartAsync(LowlineScope scope, CancellationToken cancellationToken)

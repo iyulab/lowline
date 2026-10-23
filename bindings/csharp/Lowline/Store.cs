@@ -22,9 +22,10 @@ public interface ILowlineStore
     /// <summary>Keeps the scope's tuning, replacing the one before.</summary>
     Task WriteTuningAsync(LowlineScope scope, string tuning, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes the scope's records settled before <paramref name="before"/> — a retention period — and says
-    /// how many went.</summary>
-    Task<int> ForgetBeforeAsync(LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default);
+    /// <summary>Removes the scope's records settled before <paramref name="before"/> — a retention period — and gives
+    /// the ids of those that went.</summary>
+    Task<IReadOnlyList<string>> ForgetBeforeAsync(
+        LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default);
 
     /// <summary>Removes the scope's record of id <paramref name="id"/>, if it holds one.</summary>
     Task<bool> ForgetAsync(LowlineScope scope, string id, CancellationToken cancellationToken = default);
@@ -86,7 +87,7 @@ public sealed class InMemoryLowlineStore : ILowlineStore
     }
 
     /// <inheritdoc/>
-    public Task<int> ForgetBeforeAsync(
+    public Task<IReadOnlyList<string>> ForgetBeforeAsync(
         LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default)
     {
         var kept = Of(scope);
@@ -98,7 +99,7 @@ public sealed class InMemoryLowlineStore : ILowlineStore
                 kept.Records.Remove(id);
             }
 
-            return Task.FromResult(old.Count);
+            return Task.FromResult<IReadOnlyList<string>>(old);
         }
     }
 

@@ -48,7 +48,7 @@ public sealed class SqliteTests : IDisposable
             await store.AddRecordAsync(Seoul, At(id, minute), Ct);
         }
 
-        (await store.ForgetBeforeAsync(Seoul, EngineTests.Start.AddMinutes(2), Ct)).Should().Be(1);
+        (await store.ForgetBeforeAsync(Seoul, EngineTests.Start.AddMinutes(2), Ct)).Should().Equal("a");
         (await store.ForgetAsync(Seoul, "c", Ct)).Should().BeTrue();
         (await store.ForgetAsync(Seoul, "c", Ct)).Should().BeFalse();
         (await store.ReadRecordsAsync(Seoul, Ct)).Should().Equal(At("b", 2));

@@ -95,6 +95,27 @@ public sealed class FormsTests
     }
 
     [Fact]
+    public async Task A_record_forgotten_while_its_engine_runs_answers_no_more()
+    {
+        var records = EngineTests.Alternating(40);
+        var store = await StoreWith(Seoul, records);
+        using var forms = new LowlineForms(store);
+        forms.Define("intake", EngineTests.Intake);
+        (await forms.ProposeAsync(Seoul, "new", Customer("Acme"), cancellationToken: Ct))[0].Suggestion!.Value.Should().Be("kim");
+
+        // Every Acme record goes, one by one, while the engine runs: it forgets each, and Acme is answered no more.
+        foreach (var id in Enumerable.Range(0, 40).Where(i => i % 2 == 0).Select(i => $"r{i}"))
+        {
+            (await forms.ForgetAsync(Seoul, id, Ct)).Should().BeTrue();
+        }
+
+        (await forms.ForgetAsync(Seoul, "r0", Ct)).Should().BeFalse();
+        (await forms.ProposeAsync(Seoul, "new", Customer("Acme"), cancellationToken: Ct))[0].Suggestion.Should().BeNull();
+        await forms.WhenTunedAsync(Seoul);
+        (await forms.ProposeAsync(Seoul, "new", Customer("Beta"), cancellationToken: Ct))[0].Suggestion!.Value.Should().Be("lee");
+    }
+
+    [Fact]
     public async Task An_undefined_form_is_refused()
     {
         using var forms = new LowlineForms(new InMemoryLowlineStore());

@@ -129,16 +129,23 @@ public sealed class SqliteLowlineStore : ILowlineStore
     }
 
     /// <inheritdoc/>
-    public async Task<int> ForgetBeforeAsync(
+    public async Task<IReadOnlyList<string>> ForgetBeforeAsync(
         LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var forget = Command(
             connection,
-            "DELETE FROM lowline_records WHERE form = $form AND space = $space AND settled_at < $before",
+            "DELETE FROM lowline_records WHERE form = $form AND space = $space AND settled_at < $before RETURNING id",
             scope);
         forget.Parameters.AddWithValue("$before", before.UtcTicks);
-        return await forget.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        var gone = new List<string>();
+        await using var reader = await forget.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            gone.Add(reader.GetString(0));
+        }
+
+        return gone;
     }
 
     /// <inheritdoc/>
