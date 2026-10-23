@@ -229,6 +229,62 @@ fn counting_every_settled_value_grades_the_suggestions_on_what_people_took() {
     assert!(schema.attributes[1].key_threshold.is_some());
 }
 
+#[test]
+fn a_field_counts_every_settled_value_until_its_checks_gather_then_only_what_it_did_not_suggest() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    // Forty values taken from a suggestion, and `checks` of them held back for a check instead.
+    let records = |checks: usize| -> Vec<_> {
+        (0..40)
+            .map(|i| {
+                let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
+                let mut draft = Draft::new();
+                if i < checks {
+                    draft.hold("owner", 0.05);
+                } else {
+                    draft.show("owner", lowline::Suggestion::new("kim"));
+                }
+                let settled = draft.settle(["owner"], &values, SettledBy::Person);
+                engine::record(&format!("r{i}"), &fields, &values, &settled, i as i64)
+            })
+            .collect()
+    };
+    let tune = engine::Tune {
+        counting: engine::Counting::SettledUntilChecked { checks: 20 },
+        ..engine::Tune::default()
+    };
+    let owner = |checks: usize| {
+        let mut schema = engine::schema("intake", &fields).unwrap();
+        let tuned = engine::tune(&mut schema, &fields, &records(checks), &tune);
+        tuned
+            .report
+            .into_iter()
+            .find(|r| r.field == "owner")
+            .unwrap()
+    };
+
+    // Too few checks yet: every settled value counts, and the field is answered.
+    let gathering = owner(19);
+    assert_eq!(
+        (gathering.checks, gathering.counting),
+        (19, engine::Counting::Settled)
+    );
+    assert!(gathering.key.is_some());
+    // Enough: only the checks count — 20 of them, right every time.
+    let gathered = owner(20);
+    assert_eq!(
+        (gathered.checks, gathered.counting),
+        (20, engine::Counting::Unprompted)
+    );
+    assert_eq!(gathered.key.as_ref().map(|k| k.precision), Some(1.0));
+    assert!(gathered.key.unwrap().answered < gathering.key.unwrap().answered);
+}
+
 #[cfg(feature = "serde")]
 #[test]
 fn a_tune_left_unsaid_counts_what_people_settled_with_nothing_in_view() {
@@ -236,6 +292,12 @@ fn a_tune_left_unsaid_counts_what_people_settled_with_nothing_in_view() {
     assert_eq!(unsaid.counting, engine::Counting::Unprompted);
     let settled: engine::Tune = serde_json::from_str(r#"{"counting": "settled"}"#).unwrap();
     assert_eq!(settled.counting, engine::Counting::Settled);
+    let switching: engine::Tune =
+        serde_json::from_str(r#"{"counting": {"settled-until-checked": {"checks": 20}}}"#).unwrap();
+    assert_eq!(
+        switching.counting,
+        engine::Counting::SettledUntilChecked { checks: 20 }
+    );
 }
 
 #[test]

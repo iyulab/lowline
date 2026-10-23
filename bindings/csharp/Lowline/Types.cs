@@ -133,6 +133,18 @@ public enum Layer
     [JsonStringEnumMemberName("judgement")] Judgement,
 }
 
+/// <summary>Which settlements a decided field's precision was counted on when its thresholds were chosen
+/// (<see cref="FieldReport.Counting"/>).</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<Counting>))]
+public enum Counting
+{
+    /// <summary>Values settled with nothing in view, and checks.</summary>
+    [JsonStringEnumMemberName("unprompted")] Unprompted,
+
+    /// <summary>Every value a person settled, taken from a suggestion or not.</summary>
+    [JsonStringEnumMemberName("settled")] Settled,
+}
+
 /// <summary>Why a decided field is shown no suggestion.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<Abstain>))]
 public enum Abstain
@@ -292,6 +304,14 @@ public sealed record FieldReport
     /// <summary>How many of the latest records each choice's <see cref="ThresholdChoice.Promise"/> is the precision
     /// over.</summary>
     [JsonPropertyName("promiseOver")] public int PromiseOver { get; init; }
+
+    /// <summary>How many checks of the field are among the records.</summary>
+    [JsonPropertyName("checks")] public int Checks { get; init; }
+
+    /// <summary>How the field's precision was counted — with a tuning that counts every settled value until a field's
+    /// checks gather (<c>"counting": {"settled-until-checked": {"checks": K}}</c>), which of the two its checks so far
+    /// made it.</summary>
+    [JsonPropertyName("counting")] public Counting Counting { get; init; }
 }
 
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the

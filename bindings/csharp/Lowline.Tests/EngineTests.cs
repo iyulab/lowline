@@ -96,6 +96,8 @@ public sealed class EngineTests
         report.Field.Should().Be("owner");
         report.Key!.Precision.Should().BeGreaterThanOrEqualTo(0.8);
         report.Lookups.Should().Be(39);
+        // Counted by default on values settled with nothing in view; none of these records holds a check.
+        (report.Checks, report.Counting).Should().Be((0, Counting.Unprompted));
 
         var shown = engine.Propose("new", new Dictionary<string, FieldValue> { ["customer"] = "Beta" });
         shown.Should().ContainSingle();

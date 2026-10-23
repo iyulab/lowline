@@ -113,14 +113,29 @@ pub enum Counting {
     /// Every value a person settled ([`SETTLED`]): taken from a suggestion, changed, entered, kept — not one the
     /// application put in on its own.
     Settled,
+    /// Per field, every value a person settled ([`Counting::Settled`]) until `checks` checks of the field are among
+    /// the records, then values settled with nothing in view and checks ([`Counting::Unprompted`]) — for a host that
+    /// draws checks rarely: a field is not left with nothing to count while its checks gather, and once they have, its
+    /// suggestions no longer vouch for themselves.
+    SettledUntilChecked { checks: usize },
 }
 
 impl Counting {
-    /// The settlements counted.
-    pub fn kinds(self) -> &'static [gil::schema::SettlementKind] {
+    /// How a field is counted with `checked` checks of it among the records: [`Counting::Unprompted`] or
+    /// [`Counting::Settled`].
+    pub fn resolve(self, checked: usize) -> Counting {
         match self {
-            Counting::Unprompted => COUNTED,
+            Counting::SettledUntilChecked { checks } if checked < checks => Counting::Settled,
+            Counting::SettledUntilChecked { .. } => Counting::Unprompted,
+            resolved => resolved,
+        }
+    }
+
+    /// The settlements counted for a field with `checked` checks of it among the records.
+    pub fn kinds(self, checked: usize) -> &'static [gil::schema::SettlementKind] {
+        match self.resolve(checked) {
             Counting::Settled => SETTLED,
+            _ => COUNTED,
         }
     }
 }
@@ -179,6 +194,13 @@ pub struct FieldReport {
     pub similar_offered: bool,
     /// How many of the latest records each choice's `promise` is the precision over.
     pub promise_over: usize,
+    /// How many checks of the field ([`crate::Recheck`]) are among the records.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub checks: usize,
+    /// How the field's precision was counted: [`Counting::Unprompted`] or [`Counting::Settled`] — for
+    /// [`Counting::SettledUntilChecked`], which of the two its checks so far made it.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub counting: Counting,
 }
 
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
@@ -210,11 +232,6 @@ pub fn tune(
 ) -> Tuned {
     let mut ordered: Vec<gil::schema::Record> = records.to_vec();
     ordered.sort_by_key(|r| r.settled_at);
-    let choice = gil::replay::Choice {
-        target_precision: tune.target_precision,
-        minimum_answered: tune.minimum_answered,
-        counting: Some(tune.counting.kinds()),
-    };
     let decided: Vec<(String, bool)> = schema
         .attributes
         .iter()
@@ -248,6 +265,17 @@ pub fn tune(
         );
         attribute_mut(schema, &name).key_concentrations = concentrations;
 
+        let checks = ordered
+            .iter()
+            .filter(|r| r.settlements.get(&name) == Some(&gil::schema::SettlementKind::Check))
+            .count();
+        let counting = tune.counting.resolve(checks);
+        let choice = gil::replay::Choice {
+            target_precision: tune.target_precision,
+            minimum_answered: tune.minimum_answered,
+            counting: Some(counting.kinds(checks)),
+        };
+
         let typed_longest = if typeable(fields, &name) {
             tune.typed_longest
         } else {
@@ -270,6 +298,8 @@ pub fn tune(
             similar: None,
             similar_offered: false,
             promise_over: gil::replay::RECENT_DOCUMENTS,
+            checks,
+            counting,
         };
         if multiple {
             field.closest = closest(&keyed.chosen);

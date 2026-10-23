@@ -15,12 +15,19 @@ All notable changes to this project are written here. The format follows
 - `@iyulab/lowline-form/headless`: `Draft`, `Session`, `LowlineClient` and their types without the element — it brings
   in neither Lit nor formdown, so a host drawing its own form ships a few kilobytes instead of both. The package
   declares which of its files register the element (`sideEffects`), so a bundler drops what is not used.
+- Counting a field on every settled value until its checks gather: `Counting::SettledUntilChecked { checks }`
+  (`"counting": {"settled-until-checked": {"checks": 20}}`) counts each decided field on every value a person settled
+  until `checks` checks of it are among the records, then only on values settled with nothing in view and checks — for
+  a host that draws checks rarely, so a field is not left with nothing to count while they gather. A field's report
+  says how many checks it has (`checks`) and how it was counted (`counting`; `Counting` in .NET).
 
 ### Changed
 
 - `LowlineClient.settle(form, id, draft, saved?)`: the draft comes before the values, which a host reading its own
   records leaves out (was `settle(form, id, saved, draft)`). A `settle` request with no `saved` values to a host that
   reads none of its own is refused (400).
+- `Counting::kinds(checked)` takes the number of checks of the field; `Counting::resolve(checked)` says which of the
+  two countings that makes it.
 
 ### Fixed
 
