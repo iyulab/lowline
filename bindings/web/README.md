@@ -30,7 +30,8 @@ host's model when it has one (`judge`): asked once for the values it reads, show
 on, never put in on its own. When the routes do not answer, `lowline-unavailable` fires and the form is filled in by
 hand. Nothing is counted in the browser: the host's engine counts what it is sent.
 
-`Draft`, `Session` and `LowlineClient` are exported for a host that draws its own form.
+A host that draws its own form imports `Draft`, `Session` and `LowlineClient` from `@iyulab/lowline-form/headless`,
+which brings in neither Lit nor formdown and registers no element (the package root carries them too, with the element).
 
 The package is `@iyulab/lowline-form`, with Lit and formdown as dependencies. A page with no build step takes the one
 file in it that carries both: `dist/bundle/lowline-form.bundle.js`.

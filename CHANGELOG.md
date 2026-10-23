@@ -12,6 +12,9 @@ All notable changes to this project are written here. The format follows
   store, and `settle` learns that — not the values the request carries. A record the host has not stored is 404 and
   nothing is learned, so a request cannot have values learned as a person's that were never saved. The form element's
   `settle()` sends only the account of what was shown, for such a host.
+- `@iyulab/lowline-form/headless`: `Draft`, `Session`, `LowlineClient` and their types without the element — it brings
+  in neither Lit nor formdown, so a host drawing its own form ships a few kilobytes instead of both. The package
+  declares which of its files register the element (`sideEffects`), so a bundler drops what is not used.
 
 ### Changed
 

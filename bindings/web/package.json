@@ -15,8 +15,17 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./headless": {
+      "types": "./dist/headless.d.ts",
+      "import": "./dist/headless.js"
     }
   },
+  "sideEffects": [
+    "./dist/index.js",
+    "./dist/lowline-form.js",
+    "./dist/bundle/*"
+  ],
   "files": [
     "dist"
   ],
