@@ -6,6 +6,12 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- .NET's `Recheck` draws a decided field for a check as the Rust `Recheck` does: `new Recheck(rate).Draw(proposal, roll)`
+  answers the probability to give `LowlineEngine.Record` among its checks, or `null` — only a value the decider would
+  show is drawn. A host that writes its own form no longer restates the rule.
+
 ### Changed
 
 - A record settled elsewhere carries its checks: `Engine::record(id, saved, settled, checks, settled_at)` takes the

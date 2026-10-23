@@ -86,6 +86,25 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void Only_a_value_the_decider_would_show_is_drawn_for_a_check()
+    {
+        var stored = Alternating(40);
+        using var engine = LowlineEngine.Create(Intake);
+        engine.Tune(stored.Select(r => r.Json));
+        var shown = engine.ProposeField("new", new Dictionary<string, FieldValue> { ["customer"] = "Beta" }, "owner")!;
+        var recheck = new Recheck(0.1);
+
+        recheck.Draw(shown, 0.05).Should().Be(0.1);
+        recheck.Draw(shown, 0.1).Should().BeNull();
+        new Recheck().Rate.Should().Be(0.05);
+        // A class, a value from elsewhere and a field shown nothing are left as they are.
+        recheck.Draw(shown with { Suggestion = shown.Suggestion! with { Fit = "prefix" } }, 0).Should().BeNull();
+        recheck.Draw(shown with { Suggestion = shown.Suggestion! with { Origin = "other" } }, 0).Should().BeNull();
+        recheck.Draw(shown with { Suggestion = null }, 0).Should().BeNull();
+        new Recheck(0).Draw(shown, 0).Should().BeNull();
+    }
+
+    [Fact]
     public void A_host_round()
     {
         var stored = Alternating(40);

@@ -258,6 +258,27 @@ public sealed record Proposal
     [JsonPropertyName("asks")] public IReadOnlyList<IReadOnlyList<string>> Asks { get => field ?? []; init; } = [];
 }
 
+/// <summary>How often a decided field whose answer would be shown is drawn instead to be checked: its answer is held
+/// back, and the value the person settles counts for the field's precision as a value settled with nothing in view,
+/// weighted by one ÷ the rate. Without such draws, a field suggested well is settled mostly by taking the suggestion,
+/// and the values its precision is counted on — those settled with nothing in view — run out. A field drawn is given to
+/// <see cref="LowlineEngine.Record"/> among its checks, with the probability <see cref="Draw"/> answered.</summary>
+/// <param name="Rate">The probability of a draw, fixed before it: above 0 and at most 1. One answer in twenty by
+/// default.</param>
+public sealed record Recheck(double Rate = 0.05)
+{
+    /// <summary>Whether to hold back the answer <paramref name="proposal"/> shows, given <paramref name="roll"/> — a
+    /// number drawn uniformly from [0, 1) by the host, for this field of this record, before looking at the answer.
+    /// Answers the probability the field was drawn with, or <c>null</c> when it is not drawn. Only a value the decider
+    /// suggests is drawn: a class, a suggestion from elsewhere and a field shown nothing are left as they are.</summary>
+    public double? Draw(Proposal proposal, double roll)
+    {
+        ArgumentNullException.ThrowIfNull(proposal);
+        var checkable = proposal.Suggestion is { Origin: "decider", Fit: "exact" };
+        return checkable && Rate > 0 && Rate <= 1 && roll < Rate ? Rate : null;
+    }
+}
+
 /// <summary>A threshold chosen on a replay of the settled records, and what the replay saw at it: the share of answers
 /// that matched (<see cref="Precision"/>), the share of lookups answered (<see cref="AnswerRate"/>), the answers and
 /// lookups, and the precision to expect of the next answers (<see cref="Promise"/>, resting on
