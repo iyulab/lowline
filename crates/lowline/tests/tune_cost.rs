@@ -129,4 +129,35 @@ fn measures_choosing_thresholds_on_ten_thousand_records() {
         t3.as_millis(),
         t4.as_millis()
     );
+
+    // Learning them all, as a host does at start-up — and one of them again, as after an edit.
+    let mut learner = Engine::new("intake", fields.clone(), Tune::default()).unwrap();
+    let at = Instant::now();
+    learner.learn(&records);
+    let all = at.elapsed();
+    let at = Instant::now();
+    learner.learn(&records[..1]);
+    let one = at.elapsed();
+    #[cfg(feature = "serde")]
+    {
+        let lines: Vec<String> = records
+            .iter()
+            .map(|r| serde_json::to_string(r).unwrap())
+            .collect();
+        let at = Instant::now();
+        let read: Vec<gil::schema::Record> = lines
+            .iter()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+        eprintln!(
+            "10000 records · read from JSON lines {} ms",
+            at.elapsed().as_millis()
+        );
+        assert_eq!(read.len(), records.len());
+    }
+    eprintln!(
+        "10000 records · learn all {} ms · learn one again {} ms",
+        all.as_millis(),
+        one.as_millis()
+    );
 }
