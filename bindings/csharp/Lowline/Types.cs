@@ -117,6 +117,10 @@ public enum SettlementKind
 
     /// <summary>A person settled another value than one suggested by something other than the decider.</summary>
     CorrectOther,
+
+    /// <summary>A person settled a value while the field's answer was held back for a check — given to
+    /// <see cref="LowlineEngine.Record"/> through its checks, with the probability it was drawn with.</summary>
+    Check,
 }
 
 /// <summary>Which part of the records a suggestion came from.</summary>
@@ -330,6 +334,7 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(Dictionary<string, FieldValue>))]
 [JsonSerializable(typeof(Dictionary<string, IReadOnlyList<string>>))]
 [JsonSerializable(typeof(Dictionary<string, SettlementKind>))]
+[JsonSerializable(typeof(Dictionary<string, double>))]
 [JsonSerializable(typeof(List<FieldReport>))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class LowlineJson : JsonSerializerContext;

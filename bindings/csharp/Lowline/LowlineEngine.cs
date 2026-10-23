@@ -351,14 +351,18 @@ public sealed unsafe class LowlineEngine : IDisposable
     /// <summary>The record to store for <paramref name="id"/>, settled elsewhere — for a host whose records are kept
     /// somewhere of its own (files, an existing database) and that builds the engine's store from them: its
     /// <paramref name="saved"/> values, how each decided field was settled (<paramref name="settled"/>; a decided field
-    /// left out was settled by a person with nothing in view) and when. Nothing is learned: hand the records to
-    /// <see cref="Learn"/> together, in settlement order. A field with no value saved is not settled.</summary>
-    /// <exception cref="ArgumentException">A value or settlement the form does not hold.</exception>
+    /// left out was settled by a person with nothing in view), the fields whose answer was held back for a check while
+    /// it was written, each with the probability it was drawn with (<paramref name="checks"/> — settled as
+    /// <see cref="SettlementKind.Check"/>) and when. Nothing is learned: hand the records to <see cref="Learn"/>
+    /// together, in settlement order. A field with no value saved is not settled.</summary>
+    /// <exception cref="ArgumentException">A value, settlement or check the form does not hold; a check said in
+    /// <paramref name="settled"/>, which carries its probability in <paramref name="checks"/>.</exception>
     public SettledRecord Record(
         string id,
         IReadOnlyDictionary<string, FieldValue> saved,
         IReadOnlyDictionary<string, SettlementKind>? settled,
-        DateTimeOffset settledAt)
+        DateTimeOffset settledAt,
+        IReadOnlyDictionary<string, double>? checks = null)
     {
         var idText = new Utf8(id);
         var savedText = new Utf8(Values(saved));
@@ -366,14 +370,18 @@ public sealed unsafe class LowlineEngine : IDisposable
             ? null
             : JsonSerializer.Serialize(new Dictionary<string, SettlementKind>(settled),
                 LowlineJson.Default.DictionaryStringSettlementKind));
+        var checksText = new Utf8(checks is null
+            ? null
+            : JsonSerializer.Serialize(new Dictionary<string, double>(checks), LowlineJson.Default.DictionaryStringDouble));
         nuint length;
         string json;
         using (Read())
         {
-            fixed (byte* i = idText.Bytes, s = savedText.Bytes, k = settledText.Bytes)
+            fixed (byte* i = idText.Bytes, s = savedText.Bytes, k = settledText.Bytes, c = checksText.Bytes)
             {
                 Native.Check(Native.EngineRecord(
-                    _handle, idText.At(i), savedText.At(s), settledText.At(k), Ticks(settledAt), &length));
+                    _handle, idText.At(i), savedText.At(s), settledText.At(k), checksText.At(c), Ticks(settledAt),
+                    &length));
             }
 
             json = Native.Result(length);

@@ -51,7 +51,7 @@ pub const LOWLINE_BROKEN: i32 = support::BROKEN;
 
 /// The version of this interface — its functions and statuses, and the JSON they read and write. It changes whenever
 /// a binding built for one version would misread the library of another.
-pub const LOWLINE_ABI_VERSION: u32 = 2;
+pub const LOWLINE_ABI_VERSION: u32 = 3;
 
 /// [`lowline_engine_settle`]: a person saved the record.
 pub const LOWLINE_SETTLED_BY_PERSON: u8 = 0;
@@ -585,9 +585,10 @@ pub unsafe extern "C" fn lowline_engine_settle(
 /// The record to store for `id`, settled elsewhere — for a host that builds the engine's store from records kept
 /// somewhere of its own: its `saved` values (as [`lowline_engine_propose`] reads them), `settled`, a JSON object of
 /// how each decided field was settled (`"Accept"`, `"Correct"`, `"Enter"`, `"Fill"`, … — empty text for none; a decided
-/// field left out was settled by a person with nothing in view) and `settled_at`. One Gil record as JSON, the line
-/// [`lowline_engine_learn`] reads; nothing is learned. Refused for a value or settlement the form does not hold, and for
-/// a check (settle that through a draft).
+/// field left out was settled by a person with nothing in view), `checks`, a JSON object of the fields whose answer was
+/// held back for a check while it was written, each with the probability it was drawn with (empty text for none), and
+/// `settled_at`. One Gil record as JSON, the line [`lowline_engine_learn`] reads; nothing is learned. Refused for a
+/// value, settlement or check the form does not hold, and for a check said in `settled`.
 ///
 /// # Safety
 /// `engine` is a live handle; the texts are valid for the call; `result_len` points to one writable `usize`.
@@ -597,6 +598,7 @@ pub unsafe extern "C" fn lowline_engine_record(
     id: LowlineStr,
     saved: LowlineStr,
     settled: LowlineStr,
+    checks: LowlineStr,
     settled_at: i64,
     result_len: *mut usize,
 ) -> i32 {
@@ -611,8 +613,14 @@ pub unsafe extern "C" fn lowline_engine_record(
         } else {
             json(settled, "settled")?
         };
+        let checks = unsafe { text(checks, "checks") }?;
+        let checks: BTreeMap<String, f64> = if checks.trim().is_empty() {
+            BTreeMap::new()
+        } else {
+            json(checks, "checks")?
+        };
         let record = engine
-            .record(id, &saved, &settled, settled_at)
+            .record(id, &saved, &settled, &checks, settled_at)
             .map_err(input)?;
         unsafe { set_result(written(&record), result_len) }
     })

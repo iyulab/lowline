@@ -443,6 +443,7 @@ fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
             s("r1"),
             s(&saved),
             s(r#"{"owner":"Accept"}"#),
+            s(""),
             7,
             &mut len,
         )
@@ -462,11 +463,28 @@ fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
             s("r2"),
             s(&saved),
             s(r#"{"customer":"Enter"}"#),
+            s(""),
             8,
             &mut len,
         )
     };
     assert_ne!(status, LOWLINE_OK);
     assert!(last_error().contains("does not decide"), "{}", last_error());
+
+    // A field held back for a check while the record was written, with the probability it was drawn with.
+    ok(unsafe {
+        lowline_engine_record(
+            engine,
+            s("r3"),
+            s(&saved),
+            s(""),
+            s(r#"{"owner":0.05}"#),
+            9,
+            &mut len,
+        )
+    });
+    let read: Value = serde_json::from_str(&copied(lowline_last_result)).unwrap();
+    assert_eq!(read["settlements"]["owner"], "Check");
+    assert_eq!(read["probabilities"]["owner"], 0.05);
     unsafe { lowline_engine_free(engine) };
 }

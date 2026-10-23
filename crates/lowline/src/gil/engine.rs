@@ -293,18 +293,22 @@ impl Engine {
     /// The record to store for `id`, settled elsewhere — for a host whose records are kept somewhere of its own (files,
     /// an existing database) and that builds the engine's store from them: its `saved` values, how each decided field
     /// was settled (`settled`, by field — a decided field left out was settled by a person with nothing in view:
-    /// [`SettlementKind::Enter`], or [`SettlementKind::Set`] for one that takes several) and when, in 100-nanosecond ticks since the Unix epoch, UTC. Nothing is learned: hand
-    /// the records to [`Engine::learn`] together, in settlement order. A field with no value saved is not settled.
+    /// [`SettlementKind::Enter`], or [`SettlementKind::Set`] for one that takes several), the fields whose answer was
+    /// held back for a check while the record was written (`checks`, by field, with the probability each was drawn
+    /// with — as [`Draft::hold`] draws them; settled as [`SettlementKind::Check`]) and when, in 100-nanosecond ticks
+    /// since the Unix epoch, UTC. Nothing is learned: hand the records to [`Engine::learn`] together, in settlement
+    /// order. A field with no value saved is not settled.
     ///
     /// The error names the first thing the form does not hold: a value for a field it does not have, several values
-    /// for a field that takes one, a settlement for a field it does not decide, or a check — a check is drawn while a
-    /// record is written ([`Draft::hold`]) and carries the probability it was drawn with, so it is settled through a
-    /// draft.
+    /// for a field that takes one, a settlement or check for a field it does not decide, a check drawn with a
+    /// probability outside (0, 1], a field both settled and checked, or a check said in `settled` — it carries the
+    /// probability it was drawn with, so it is given in `checks`.
     pub fn record(
         &self,
         id: &str,
         saved: &BTreeMap<String, FieldValue>,
         settled: &BTreeMap<String, SettlementKind>,
+        checks: &BTreeMap<String, f64>,
         settled_at: i64,
     ) -> Result<Record, String> {
         for (name, value) in saved {
@@ -331,9 +335,28 @@ impl Engine {
             }
             if *kind == SettlementKind::Check {
                 return Err(format!(
-                    "record '{id}' settles '{name}' as a check, which is drawn while a record is written — settle it \
-                     through a draft"
+                    "record '{id}' settles '{name}' as a check, which carries the probability it was drawn with — \
+                     give it in the checks"
                 ));
+            }
+        }
+        for (name, probability) in checks {
+            if !self
+                .fields
+                .iter()
+                .any(|f| &f.field.name == name && f.role == Role::Decided)
+            {
+                return Err(format!(
+                    "record '{id}' checks '{name}', which the form does not decide"
+                ));
+            }
+            if !(*probability > 0.0 && *probability <= 1.0) {
+                return Err(format!(
+                    "record '{id}' checks '{name}' drawn with {probability}, not a probability above 0 and at most 1"
+                ));
+            }
+            if settled.contains_key(name) {
+                return Err(format!("record '{id}' both settles and checks '{name}'"));
             }
         }
         let settlements: Vec<Settlement> = self
@@ -343,17 +366,20 @@ impl Engine {
             .filter(|f| saved.get(&f.field.name).is_some_and(|v| !v.is_empty()))
             .map(|f| {
                 let name = &f.field.name;
+                let probability = checks.get(name).copied();
+                let kind = match (probability, settled.get(name)) {
+                    (Some(_), _) => SettlementKind::Check,
+                    (None, Some(kind)) => *kind,
+                    (None, None) if f.field.multiple => SettlementKind::Set,
+                    (None, None) => SettlementKind::Enter,
+                };
                 Settlement {
                     field: name.clone(),
-                    kind: settled.get(name).copied().unwrap_or(if f.field.multiple {
-                        SettlementKind::Set
-                    } else {
-                        SettlementKind::Enter
-                    }),
+                    kind,
                     value: None,
                     values: None,
                     suggested: None,
-                    probability: None,
+                    probability,
                 }
             })
             .collect();

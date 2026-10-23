@@ -63,6 +63,12 @@ public sealed class EngineTests
         var refused = () => engine.Record("r2", saved,
             new Dictionary<string, SettlementKind> { ["customer"] = SettlementKind.Enter }, Start);
         refused.Should().Throw<ArgumentException>().WithMessage("*does not decide*");
+
+        // A field held back for a check while the record was written carries the probability it was drawn with.
+        var checkedRecord = engine.Record("r3", saved, null, Start, new Dictionary<string, double> { ["owner"] = 0.05 });
+        var line = JsonNode.Parse(checkedRecord.Json)!;
+        line["settlements"]!["owner"]!.GetValue<string>().Should().Be("Check");
+        line["probabilities"]!["owner"]!.GetValue<double>().Should().Be(0.05);
     }
 
     [Fact]

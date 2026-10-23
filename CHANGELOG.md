@@ -6,6 +6,15 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- A record settled elsewhere carries its checks: `Engine::record(id, saved, settled, checks, settled_at)` takes the
+  fields whose answer was held back for a check while the record was written, each with the probability it was drawn
+  with, and settles them as checks — the same line a draft that held them back makes. A host that keeps its records
+  somewhere of its own and draws checks can now build the engine's store from them. `LowlineEngine.Record` takes them as
+  an optional last argument, and .NET's `SettlementKind` gains `Check`. A check said among the settlements is still
+  refused: it carries its probability. The C ABI is version 3 (`lowline_engine_record` takes `checks`).
+
 ## [0.3.0] - 2026-10-23
 
 ### Added
