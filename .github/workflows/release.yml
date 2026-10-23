@@ -182,6 +182,7 @@ jobs:
           npm run bundle
           npm test
           npm pack --pack-destination ../../packages
+          tar -tzf ../../packages/iyulab-lowline-form-${{ needs.check.outputs.version }}.tgz | grep -x package/LICENSE
 
       - uses: actions/upload-artifact@v7
         with:

@@ -6,6 +6,11 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The npm package `@iyulab/lowline-form` carries the license text (`LICENSE`), not only its name, as the NuGet packages
+  and crates do: a host gathering the notices of what it bundles finds the text in the package.
+
 ## [0.2.0] - 2026-10-23
 
 ### Added

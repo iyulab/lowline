@@ -34,9 +34,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ steps.toolchain.outputs.cachekey }}-cargo-
 
-      # A crate ships only what is in its own folder: each carries the license, kept word for word.
-      - name: License in every crate
-        run: for f in crates/*/LICENSE; do cmp LICENSE "$f"; done; [ "$(ls crates/*/LICENSE | wc -l)" = "$(ls -d crates/*/ | wc -l)" ]
+      # A crate or npm package ships only what is in its own folder: each carries the license, kept word for word.
+      - name: License in every crate and the form element
+        run: |
+          for f in crates/*/LICENSE bindings/web/LICENSE; do cmp LICENSE "$f"; done
+          [ "$(ls crates/*/LICENSE | wc -l)" = "$(ls -d crates/*/ | wc -l)" ]
 
       - name: Format
         run: cargo fmt --all --check
