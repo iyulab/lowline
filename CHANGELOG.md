@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
 ### Added
 
 - `LowlineWebOptions.Saved`: a host that stores its records through its own API reads a record back from its own
