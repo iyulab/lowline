@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- 0.0.0 is the unreleased placeholder. One version line for every package this repository publishes:
          the crates, these packages and the form element (`versions.config.js`). -->
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-23
+
 ### Added
 
 - .NET's `Recheck` draws a decided field for a check as the Rust `Recheck` does: `new Recheck(rate).Draw(proposal, roll)`
