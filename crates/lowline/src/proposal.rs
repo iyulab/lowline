@@ -59,6 +59,10 @@ pub enum Abstain {
     /// A value from elsewhere that the field cannot hold: not a number, a date or a time as the field takes it, or
     /// several values for a field that takes one.
     Malformed,
+    /// The records answer the field, but it is settled together with others ([`crate::Field::together`]) and one of
+    /// them, still open, is shown no suggestion ([`Proposal::with`]): shown alone, the sure answer would lead a person
+    /// settling the unsure one. The field's own answer keeps its threshold and promise; it is only not shown.
+    Together,
 }
 
 /// What a host shows for one decided field.
@@ -91,6 +95,13 @@ pub struct Proposal {
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
     pub asks: Vec<(String, String)>,
+    /// For [`Abstain::Together`]: the fields of its group, still open, that are shown no suggestion — in the form's
+    /// order.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub with: Vec<String>,
     /// How often an answer of this kind for this field has been right — the precision the replay expects of the next
     /// answers at the threshold the suggestion was held to (the layer's `promise` in [`crate::gil::FieldReport`]).
     /// `None` with no suggestion, for a judgement from outside the records or a value from elsewhere, and before the
@@ -113,6 +124,7 @@ impl Proposal {
             basis: Vec::new(),
             abstain: Some(why),
             asks: Vec::new(),
+            with: Vec::new(),
             promise: None,
         }
     }
@@ -137,6 +149,7 @@ impl Proposal {
             basis,
             abstain: None,
             asks: Vec::new(),
+            with: Vec::new(),
             promise: None,
         }
     }
@@ -193,6 +206,15 @@ mod tests {
             serde_json::to_value(Abstain::NotAllowed).unwrap(),
             "not-allowed"
         );
+
+        let held = Proposal {
+            with: vec!["occupation".into()],
+            ..Proposal::abstain("industry", Abstain::Together)
+        };
+        let json = serde_json::to_value(&held).unwrap();
+        assert_eq!(json["abstain"], "together");
+        assert_eq!(json["with"], serde_json::json!(["occupation"]));
+        assert_eq!(serde_json::from_value::<Proposal>(json).unwrap(), held);
     }
 }
 

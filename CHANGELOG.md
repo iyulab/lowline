@@ -6,6 +6,23 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Fields settled together: a field's `together` (formdown's `suggest:together`) names a group of decided fields — an
+  industry and an occupation, a class and its detail. Where one open field of the group is shown no suggestion, the
+  others are shown none either: `Abstain::Together` (.NET `Abstain.Together`, web `'together'`), with the fields that
+  held them back in `Proposal::with` (.NET `With`, web `with`). The held fields keep their thresholds and promises; they
+  are only not shown, and never put in. A field the person has filled is no longer open and is not counted, so asked
+  again once the unsure one is settled, the others are shown. `propose_field` without text typed answers as `propose`
+  does. A group only one field is in is refused (`SchemaError::TogetherAlone`).
+
+### Changed
+
+- **Breaking (Rust):** `Abstain` has a variant more (`Together`), so a `match` over it needs an arm, and `Proposal` and
+  `Field` have a field more (`with`, `together`), so a struct literal needs it — `..Proposal::abstain(…)` and
+  `Field::new` give the empty value.
+- The web element takes `@formdown/ui` 0.25.
+
 ## [0.5.0] - 2026-10-24
 
 ### Added

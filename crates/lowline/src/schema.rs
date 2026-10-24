@@ -1,7 +1,7 @@
 //! The form a host hands the engine: its fields, what kind of value each takes, and what the form says about
 //! suggesting. One shape whatever the form was written in — formdown, code, or generated from an application model.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::policy::Policy;
@@ -102,6 +102,15 @@ pub struct Field {
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
     pub must_catch: Vec<String>,
+    /// The name of a group of decided fields settled together — an industry and an occupation, a class and its
+    /// detail. Where one open field of the group is shown no suggestion, none of the others is shown one either
+    /// ([`crate::Abstain::Together`]), so a person settling the unsure one is not led by the sure one. Two or more
+    /// fields share a group.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub together: Option<String>,
 }
 
 #[cfg(feature = "serde")]
@@ -126,6 +135,7 @@ impl Field {
             parent: None,
             coarse: None,
             must_catch: Vec::new(),
+            together: None,
         }
     }
 
@@ -207,6 +217,8 @@ pub enum SchemaError {
     MustCatchUnlisted { field: String, value: String },
     /// A class of no characters.
     EmptyCoarse(String),
+    /// A group of fields settled together that no other field shares, or one with no name.
+    TogetherAlone { field: String, group: String },
 }
 
 impl fmt::Display for SchemaError {
@@ -243,6 +255,12 @@ impl fmt::Display for SchemaError {
                     "field `{name}` names a class of no characters — coarse counts from 1"
                 )
             }
+            SchemaError::TogetherAlone { field, group } => {
+                write!(
+                    f,
+                    "field `{field}` is settled together with the group `{group}`, which no other field is in"
+                )
+            }
         }
     }
 }
@@ -263,6 +281,20 @@ impl Form {
             if !names.insert(field.name.as_str()) {
                 return Err(SchemaError::DuplicateField(field.name.clone()));
             }
+        }
+        let mut groups = BTreeMap::<&str, usize>::new();
+        for group in self.fields.iter().filter_map(|f| f.together.as_deref()) {
+            *groups.entry(group).or_default() += 1;
+        }
+        if let Some(field) = self.fields.iter().find(|f| {
+            f.together
+                .as_deref()
+                .is_some_and(|g| g.trim().is_empty() || groups[g] < 2)
+        }) {
+            return Err(SchemaError::TogetherAlone {
+                field: field.name.clone(),
+                group: field.together.clone().unwrap_or_default(),
+            });
         }
         let infer = inference == Inference::ClosedChoices && !self.declares_roles();
         self.fields
@@ -502,6 +534,27 @@ mod tests {
         assert_eq!(
             form.resolve(Inference::default()),
             Err(SchemaError::EmptyCoarse("code".into()))
+        );
+
+        let mut industry = Field::choice("industry", ["a", "b"]);
+        industry.together = Some("coding".into());
+        let mut occupation = Field::choice("occupation", ["x", "y"]);
+        occupation.together = Some("coding".into());
+        let mut lone = Field::choice("lone", ["p", "q"]);
+        lone.together = Some("alone".into());
+        let form = Form {
+            fields: vec![industry.clone(), occupation.clone()],
+        };
+        assert!(form.resolve(Inference::default()).is_ok());
+        let form = Form {
+            fields: vec![industry, occupation, lone],
+        };
+        assert_eq!(
+            form.resolve(Inference::default()),
+            Err(SchemaError::TogetherAlone {
+                field: "lone".into(),
+                group: "alone".into()
+            })
         );
     }
 

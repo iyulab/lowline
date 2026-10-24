@@ -46,6 +46,7 @@ struct FormdownSuggest {
     coarse: Option<u32>,
     #[serde(default)]
     must_catch: Vec<String>,
+    together: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -104,6 +105,7 @@ impl FormdownField {
         field.parent = suggest.parent;
         field.coarse = suggest.coarse;
         field.must_catch = suggest.must_catch;
+        field.together = suggest.together;
         Some(field)
     }
 }
@@ -180,6 +182,23 @@ mod tests {
             (Some(2), Some("handler"))
         );
         assert_eq!(get("customer").evidence, Some(false));
+    }
+
+    #[test]
+    fn fields_settled_together_are_read() {
+        let schema: FormdownSchema = serde_json::from_str(
+            r#"{
+                "industry": {"type": "select", "position": 1, "options": [{"value": "a"}], "suggest": {"together": "coding"}},
+                "occupation": {"type": "select", "position": 2, "options": [{"value": "x"}], "suggest": {"together": "coding"}}
+            }"#,
+        )
+        .unwrap();
+        let form = Form::from(schema);
+        assert!(
+            form.fields
+                .iter()
+                .all(|f| f.together.as_deref() == Some("coding"))
+        );
     }
 
     #[test]

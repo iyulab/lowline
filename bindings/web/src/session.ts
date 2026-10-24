@@ -4,7 +4,15 @@ import { Draft, isEmpty, type Suggestion, type Values } from './draft.js'
 export type Basis = { kind: 'value'; field: string; value: string } | { kind: 'record'; id: string; similarity: number }
 
 /** Why a decided field is shown no suggestion. */
-export type Abstain = 'off' | 'no-evidence' | 'unsure' | 'not-allowed' | 'needs-judgement' | 'not-a-choice' | 'malformed'
+export type Abstain =
+  | 'off'
+  | 'no-evidence'
+  | 'unsure'
+  | 'not-allowed'
+  | 'needs-judgement'
+  | 'not-a-choice'
+  | 'malformed'
+  | 'together'
 
 /** What the host's engine says to show for one decided field. */
 export interface Proposal {
@@ -16,6 +24,8 @@ export interface Proposal {
   basis?: Basis[]
   abstain: Abstain | null
   asks?: [string, string][]
+  /** For `together`: the fields of its group, still open, that are shown no suggestion. */
+  with?: string[]
   /**
    * How often an answer of this kind for this field has been right — the replay's precision at the threshold the
    * suggestion was held to. Absent with no suggestion, for a judgement or a value from elsewhere, and before thresholds

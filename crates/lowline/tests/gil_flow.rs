@@ -558,3 +558,77 @@ fn a_save_the_form_cannot_hold_is_refused_and_nothing_is_learned() {
     assert_eq!(stored.values["channel"], "chat");
     assert_eq!(triage.settled(), 1);
 }
+
+#[test]
+fn fields_settled_together_are_shown_together_or_not_at_all() {
+    let mut owner = Field::choice("owner", ["kim", "lee"]);
+    owner.together = Some("assign".into());
+    let mut team = Field::choice("team", ["x", "y", "z"]);
+    team.together = Some("assign".into());
+    // Neither is a clue for the other, so the thresholds are chosen on what a new record holds.
+    owner.evidence = Some(false);
+    team.evidence = Some(false);
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::new("site", FieldKind::Text),
+            owner,
+            team,
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut intake = Engine::new("intake", fields, engine::Tune::default()).unwrap();
+    // Acme's owner is always kim, but its team goes either way; Beta's are always lee and z. Each customer has its
+    // own site, a second clue.
+    let history: Vec<_> = (0..80)
+        .map(|i| {
+            let (customer, site, owner, team) = match i % 4 {
+                0 => ("Acme", "east", "kim", "x"),
+                1 => ("Beta", "west", "lee", "z"),
+                2 => ("Acme", "east", "kim", "y"),
+                _ => ("Beta", "west", "lee", "z"),
+            };
+            let values = saved(&[
+                ("customer", customer),
+                ("site", site),
+                ("owner", owner),
+                ("team", team),
+            ]);
+            let settled = Draft::new().settle(["owner", "team"], &values, SettledBy::Person);
+            engine::record(&format!("r{i}"), intake.fields(), &values, &settled, i)
+        })
+        .collect();
+    intake.tune(&history);
+    let none = BTreeMap::new();
+
+    // Both sure: both shown.
+    let beta = intake.propose(
+        "b",
+        &saved(&[("customer", "Beta"), ("site", "west")]),
+        &none,
+    );
+    assert_eq!(beta.iter().filter(|p| p.suggestion.is_some()).count(), 2);
+
+    // The team unsure: the sure owner is held back with it, naming the field that held it.
+    let acme = saved(&[("customer", "Acme"), ("site", "east")]);
+    let shown = intake.propose("a", &acme, &none);
+    let owner = shown.iter().find(|p| p.field == "owner").unwrap();
+    assert_eq!(owner.suggestion, None);
+    assert!(!owner.prefill);
+    assert_eq!(owner.abstain, Some(lowline::Abstain::Together));
+    assert_eq!(owner.with, ["team"]);
+    let team = shown.iter().find(|p| p.field == "team").unwrap();
+    assert!(team.suggestion.is_none());
+    assert_ne!(team.abstain, Some(lowline::Abstain::Together));
+    // Asked for alone, untyped, the owner says the same.
+    let alone = intake
+        .propose_field("a", &acme, &none, "owner", None)
+        .unwrap();
+    assert_eq!(alone.abstain, Some(lowline::Abstain::Together));
+
+    // Once the person has settled the team, the group is the owner alone: shown.
+    let typed = saved(&[("customer", "Acme"), ("site", "east"), ("team", "y")]);
+    let shown = intake.propose("a", &typed, &none);
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].suggestion.as_ref().unwrap().value, "kim");
+}

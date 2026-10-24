@@ -188,7 +188,8 @@ impl Engine {
         allowed: &BTreeMap<String, Vec<String>>,
     ) -> Vec<Proposal> {
         let known = record(id, &self.fields, values, &[], 0);
-        self.decider
+        let shown = self
+            .decider
             .answer(&self.schema, id, &known.values, &known.sets)
             .iter()
             .filter_map(|answer| {
@@ -205,7 +206,46 @@ impl Engine {
                     None,
                 ))
             })
-            .collect()
+            .collect();
+        self.together(shown)
+    }
+
+    /// `shown` with each group of fields settled together ([`crate::Field::together`]) held back where one of its open
+    /// fields has no suggestion: the group's other fields are shown none either ([`crate::Abstain::Together`], naming
+    /// the fields without one). A field a person has filled is not open, so it is not counted; a field never suggested
+    /// ([`crate::Policy::Off`]) is no part of the group.
+    fn together(&self, mut shown: Vec<Proposal>) -> Vec<Proposal> {
+        let group_of = |name: &str| {
+            self.fields
+                .iter()
+                .find(|f| f.field.name == name && f.policy != crate::Policy::Off)
+                .and_then(|f| f.field.together.clone())
+        };
+        let groups: Vec<Option<String>> = shown.iter().map(|p| group_of(&p.field)).collect();
+        let unanswered: Vec<(String, String)> = shown
+            .iter()
+            .zip(&groups)
+            .filter(|(p, _)| p.suggestion.is_none())
+            .filter_map(|(p, g)| Some((g.clone()?, p.field.clone())))
+            .collect();
+        for (p, group) in shown.iter_mut().zip(&groups) {
+            let Some(group) = group else { continue };
+            if p.suggestion.is_none() {
+                continue;
+            }
+            let with: Vec<String> = unanswered
+                .iter()
+                .filter(|(g, _)| g == group)
+                .map(|(_, field)| field.clone())
+                .collect();
+            if !with.is_empty() {
+                *p = Proposal {
+                    with,
+                    ..Proposal::abstain(p.field.clone(), crate::Abstain::Together)
+                };
+            }
+        }
+        shown
     }
 
     /// `shown` with the promise of the threshold its suggestion was held to, from the report of the thresholds chosen:
@@ -265,6 +305,13 @@ impl Engine {
             return None;
         }
         let typed = typed.filter(|t| !t.is_empty());
+        // Not typed into, a field settled together with others is shown what the group allows.
+        if typed.is_none() && resolved.field.together.is_some() {
+            return self
+                .propose(id, values, allowed)
+                .into_iter()
+                .find(|p| p.field == field);
+        }
         if let Some(text) = typed {
             let length = text.chars().count();
             let held = attribute

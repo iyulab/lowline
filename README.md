@@ -52,6 +52,12 @@ it only reads as clues: unless the form says (a field's `role`, `decided` or `ob
 checkbox is never decided that way — it is often a consent, which must not be suggested however consistent the
 records are. Give `"inference": "declared-only"` beside `form` to have only the fields the form declares decided.
 
+Decided fields settled together — an industry and an occupation, a class and its detail — name one group (a field's
+`together`, or formdown's `suggest:together`). Where one open field of the group is shown no suggestion, the others
+are shown none either (`together`, with the fields that held them back in `with`): a person settling the unsure one is
+not led by the sure one. Once the person has filled the unsure one, it is no longer open, and asked again the others
+are shown. A group no other field shares is refused.
+
 The routes, under the prefix `MapLowline` was given:
 
 | Route | Takes | Answers |

@@ -199,6 +199,46 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void Fields_settled_together_are_held_back_together()
+    {
+        const string assign = """
+            {
+              "name": "assign",
+              "form": { "fields": [
+                { "name": "customer", "kind": "text" },
+                { "name": "site", "kind": "text" },
+                { "name": "owner", "kind": "choice", "choices": ["kim", "lee"], "evidence": false, "together": "g" },
+                { "name": "team", "kind": "choice", "choices": ["x", "y", "z"], "evidence": false, "together": "g" }
+              ] }
+            }
+            """;
+        using var engine = LowlineEngine.Create(assign);
+        // Acme's owner is always kim but its team goes either way; Beta's are always lee and z.
+        string[][] rows = [["Acme", "east", "kim", "x"], ["Beta", "west", "lee", "z"], ["Acme", "east", "kim", "y"],
+            ["Beta", "west", "lee", "z"]];
+        var stored = Enumerable.Range(0, 80).Select(i =>
+        {
+            var row = rows[i % 4];
+            return engine.Settle($"r{i}", new Dictionary<string, FieldValue>
+            {
+                ["customer"] = row[0], ["site"] = row[1], ["owner"] = row[2], ["team"] = row[3],
+            }, null, SettledBy.Person, Start.AddMinutes(i)).Json;
+        }).ToList();
+        engine.Tune(stored);
+
+        var shown = engine.Propose("a", new Dictionary<string, FieldValue> { ["customer"] = "Acme", ["site"] = "east" });
+        var owner = shown.Single(p => p.Field == "owner");
+        owner.Suggestion.Should().BeNull();
+        owner.Abstain.Should().Be(Abstain.Together);
+        owner.With.Should().Equal("team");
+
+        // A group only one field is in holds nothing back: the form is refused.
+        var lone = () => LowlineEngine.Create(assign.Replace(
+            "[\"x\", \"y\", \"z\"], \"evidence\": false, \"together\": \"g\"", "[\"x\", \"y\", \"z\"]"));
+        lone.Should().Throw<ArgumentException>().WithMessage("*no other field*");
+    }
+
+    [Fact]
     public void Refused_input_is_an_argument_exception_and_changes_nothing()
     {
         var act = () => LowlineEngine.Create("{");

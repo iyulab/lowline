@@ -176,6 +176,11 @@ public enum Abstain
     /// <summary>A value from the host's model that the field cannot hold: not a number, a date or a time as it takes
     /// them.</summary>
     [JsonStringEnumMemberName("malformed")] Malformed,
+
+    /// <summary>The records answer the field, but it is settled together with others (the form's
+    /// <c>suggest:together</c>) and one of them, still open, is shown no suggestion (<see cref="Proposal.With"/>):
+    /// shown alone, the sure answer would lead a person settling the unsure one.</summary>
+    [JsonStringEnumMemberName("together")] Together,
 }
 
 /// <summary>What kind of value a field takes.</summary>
@@ -256,6 +261,10 @@ public sealed record Proposal
     /// <summary>For <see cref="Lowline.Abstain.NeedsJudgement"/>: the fields and values a judgement from outside the
     /// records would read, each as a pair.</summary>
     [JsonPropertyName("asks")] public IReadOnlyList<IReadOnlyList<string>> Asks { get => field ?? []; init; } = [];
+
+    /// <summary>For <see cref="Lowline.Abstain.Together"/>: the fields of its group, still open, that are shown no
+    /// suggestion, in the form's order.</summary>
+    [JsonPropertyName("with")] public IReadOnlyList<string> With { get => field ?? []; init; } = [];
 
     /// <summary>How often an answer of this kind for this field has been right — the precision the replay expects of the
     /// next answers at the threshold the suggestion was held to (<see cref="ThresholdChoice.Promise"/> in the
