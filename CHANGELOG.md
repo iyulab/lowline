@@ -17,6 +17,7 @@ All notable changes to this project are written here. The format follows
 
 ### Changed
 
+- The web element takes `@formdown/ui` 0.26, which reads `suggest:together`.
 - A form the engine refuses is refused when it is defined — `LowlineOptions.Form` (so in `AddLowline`) and
   `LowlineForms.Define` throw `ArgumentException` naming the form — instead of every request for it answering 400 with
   the same message.
