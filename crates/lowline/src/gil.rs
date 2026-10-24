@@ -583,7 +583,8 @@ pub const SETTLED: &[gil::schema::SettlementKind] = &[
 /// One decision as Gil's [`gil::usage::usage`] counts it: the proposal shown for the field and how the field was
 /// settled, if it was. The answer is the decider's suggestion shown — a class counts as answered, and a value taken
 /// within it as accepted, as [`crate::Draft::settle`] settles it. A field settled with no proposal shown is a decision
-/// with no answer: pass [`Proposal::abstain`]. No promise is carried; the counts rest on the settlements alone.
+/// with no answer: pass [`Proposal::abstain`]. The answer's promise ([`Proposal::promise`]) is carried, so the
+/// counts set the precision the answers realized beside what they promised.
 pub fn decision<'a>(
     proposal: &'a Proposal,
     settlement: Option<&'a Settlement>,
@@ -598,7 +599,7 @@ pub fn decision<'a>(
         settled: settlement.and_then(|s| s.value.as_deref()),
         settlement: settlement.map(|s| s.kind.into()),
         probability: settlement.and_then(|s| s.probability).unwrap_or(1.0),
-        promise: None,
+        promise: proposal.promise,
     }
 }
 
@@ -892,7 +893,10 @@ mod tests {
 
     #[test]
     fn counts_what_the_answers_came_to() {
-        let kim = proposal(&owner(None), &answer(vec![candidate("kim", true)]), None);
+        let kim = Proposal {
+            promise: Some(0.9),
+            ..proposal(&owner(None), &answer(vec![candidate("kim", true)]), None)
+        };
         let none = Proposal::abstain("owner", Abstain::NoEvidence);
         let mut draft = Draft::new();
         draft.show("owner", kim.suggestion.clone().unwrap());
@@ -930,6 +934,8 @@ mod tests {
             (4, 3, 1, 1, 1)
         );
         assert_eq!(owner.entered_over_answer, 0);
+        // What the answers promised, beside what they came to: one right of two judged.
+        assert_eq!((owner.promise(), owner.realized()), (Some(0.9), Some(0.5)));
     }
 
     #[test]

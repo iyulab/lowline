@@ -18,6 +18,8 @@ All notable changes to this project are written here. The format follows
   answer of that kind for the field has been right — the replay's promise at the threshold it was held to: the key
   layer's, the threshold for the characters typed, the coarse level's for a class, or the similar records layer's. Left
   out for a judgement from outside the records, a value from elsewhere, and before thresholds are chosen.
+- `lowline::gil::decision` carries the proposal's promise, so Gil's `usage` counts set the precision the answers
+  realized beside what they promised (`AttributeUsage::promise`); it was always `None`.
 
 ### Changed
 
