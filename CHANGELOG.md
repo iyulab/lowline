@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-24
+
 ### Added
 
 - Fields settled together: a field's `together` (formdown's `suggest:together`) names a group of decided fields — an
