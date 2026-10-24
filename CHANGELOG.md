@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-24
+
 ### Added
 
 - Each proposal names its group of fields settled together (`together` — .NET `Proposal.Together`, web `together`),
