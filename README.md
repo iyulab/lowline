@@ -56,9 +56,12 @@ Decided fields settled together — an industry and an occupation, a class and i
 `together`, or formdown's `suggest:together`). Where one open field of the group is shown no suggestion, the others
 are shown none either (`together`, with the fields that held them back in `with`): a person settling the unsure one is
 not led by the sure one. Once the person has filled the unsure one, it is no longer open, and asked again the others
-are shown. A field the records would answer once the group's other fields took the values suggested for them — the occupation,
-while the industry it rests on is still empty — is waiting, not unsure, and holds nothing back: the industry is shown,
-and the occupation is asked again once the industry is settled. A group no other field shares is refused.
+are shown. A field the records would answer once the group's other fields took the values suggested for them — the
+occupation, while the industry it rests on is still empty — is waiting, not unsure, and holds nothing back: the
+industry is shown, and the occupation is asked again once the industry is settled. A group no other field shares is
+refused. A form the engine refuses — this, or one with no field to decide — is refused when it is defined (`Form` in
+`AddLowline`, or `LowlineForms.Define`), so the host fails as it starts rather than answering each request with the
+same 400.
 
 The routes, under the prefix `MapLowline` was given:
 
@@ -94,7 +97,10 @@ for the fields the engine decides, draws each suggestion in its field with what 
 what the person took, changed or turned down; `save()` sends it with the values, and the engine learns from it. The
 host decides, per request, the memory space a record belongs to (`Space` — a workplace, a team; records of one space
 never answer for another) and the choices its person may pick (`Allowed`) — a value outside them is never suggested.
-Authentication and authorization stay the host's.
+Authentication and authorization stay the host's. A host that draws its own form imports `Draft`, `Session` and
+`LowlineClient` from `@iyulab/lowline-form/headless` — no element, no Lit, no formdown — and does what the element does:
+`Session.apply` each round of proposals (it draws the checks and hides what they hold back), then
+`LowlineClient.settle(form, id, session.draft, values)` once the record is saved.
 
 What the engine learns is what a person confirmed, so `settle` takes the values it is sent as the save itself. A host
 that already stores its records through its own API — its permissions, validation and corrections — gives `Saved`,

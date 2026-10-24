@@ -199,6 +199,25 @@ public sealed class FormsTests
     }
 
     [Fact]
+    public void A_form_the_engine_refuses_is_refused_as_it_is_defined()
+    {
+        const string lone = """
+            { "form": { "fields": [
+              { "name": "company", "kind": "text" },
+              { "name": "industry", "kind": "choice", "choices": ["finance", "retail"], "together": "alone" }
+            ] } }
+            """;
+        using var forms = new LowlineForms(new InMemoryLowlineStore());
+        var define = () => forms.Define("lone", lone);
+        define.Should().Throw<ArgumentException>().WithMessage("Form 'lone' is refused: *no other field*");
+        // Through the options, too: a host whose forms do not resolve fails as it starts, not on each request.
+        var options = () => new LowlineOptions().Form("lone", lone);
+        options.Should().Throw<ArgumentException>().WithMessage("Form 'lone' is refused: *");
+        var notObject = () => forms.Define("x", "[]");
+        notObject.Should().Throw<ArgumentException>().WithMessage("A form's definition is a JSON object.*");
+    }
+
+    [Fact]
     public async Task An_undefined_form_is_refused()
     {
         using var forms = new LowlineForms(new InMemoryLowlineStore());

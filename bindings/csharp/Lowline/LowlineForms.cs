@@ -93,8 +93,20 @@ public sealed class LowlineForms : IDisposable
 
     /// <summary>Defines form <paramref name="form"/> by its definition (see <see cref="LowlineEngine.Create"/>; its
     /// <c>name</c> is set to the form's). Redefining a form starts its engines again on their next use.</summary>
-    /// <exception cref="ArgumentException">The definition is not a JSON object.</exception>
+    /// <exception cref="ArgumentException">The definition is not a JSON object, or the engine refuses it — a form that
+    /// does not resolve is refused here, not on each request.</exception>
     public void Define(string form, string definitionJson)
+    {
+        _definitions[form] = Checked(form, definitionJson);
+        foreach (var scope in _running.Keys.Where(s => s.Form == form).ToList())
+        {
+            Stop(scope);
+        }
+    }
+
+    /// <summary>The definition of form <paramref name="form"/>, named for it, once the engine takes it.</summary>
+    /// <exception cref="ArgumentException">The definition is not a JSON object, or the engine refuses it.</exception>
+    internal static string Checked(string form, string definitionJson)
     {
         ArgumentException.ThrowIfNullOrEmpty(form);
         if (JsonNode.Parse(definitionJson) is not JsonObject definition)
@@ -103,11 +115,17 @@ public sealed class LowlineForms : IDisposable
         }
 
         definition["name"] = form;
-        _definitions[form] = definition.ToJsonString();
-        foreach (var scope in _running.Keys.Where(s => s.Form == form).ToList())
+        var named = definition.ToJsonString();
+        try
         {
-            Stop(scope);
+            LowlineEngine.Create(named).Dispose();
         }
+        catch (ArgumentException refused)
+        {
+            throw new ArgumentException($"Form '{form}' is refused: {refused.Message}", nameof(definitionJson), refused);
+        }
+
+        return named;
     }
 
     /// <summary>What to show for each decided field of record <paramref name="id"/> that is still open, given its

@@ -30,12 +30,14 @@ public class LowlineOptions
         return this;
     }
 
-    /// <summary>Defines form <paramref name="name"/> — see <see cref="LowlineForms.Define"/>.</summary>
+    /// <summary>Defines form <paramref name="name"/> — see <see cref="LowlineForms.Define"/>. A definition the engine
+    /// refuses is refused here, so a host whose forms do not resolve fails as it starts.</summary>
+    /// <exception cref="ArgumentException">The definition is not a JSON object, or the engine refuses it.</exception>
     public LowlineOptions Form(string name, string definitionJson)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentException.ThrowIfNullOrEmpty(definitionJson);
-        _forms[name] = definitionJson;
+        _forms[name] = LowlineForms.Checked(name, definitionJson);
         return this;
     }
 

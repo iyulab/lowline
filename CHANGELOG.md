@@ -15,6 +15,12 @@ All notable changes to this project are written here. The format follows
   Rust `FieldReport::chosen_on`): records settled since are answered from but not yet in the replay. A tuning stored by
   an earlier version reports it from the tuning.
 
+### Changed
+
+- A form the engine refuses is refused when it is defined — `LowlineOptions.Form` (so in `AddLowline`) and
+  `LowlineForms.Define` throw `ArgumentException` naming the form — instead of every request for it answering 400 with
+  the same message.
+
 ### Fixed
 
 - Records saved while thresholds were being chosen again are no longer left out of the choice until the next save:
