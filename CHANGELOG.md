@@ -6,6 +6,14 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A group of fields settled together no longer hides a sure field behind one that only waits for it. Where the open
+  field without a suggestion would be answered once the group's other fields took the values suggested for them — an
+  occupation resting on the industry, both empty — the records are not unsure of it yet, so the industry is shown and
+  the occupation is asked again once the industry is settled. A field that stays unsure even then still holds the
+  group. Before, both stayed empty until a person filled the sure one with nothing in view.
+
 ## [0.6.0] - 2026-10-24
 
 ### Added

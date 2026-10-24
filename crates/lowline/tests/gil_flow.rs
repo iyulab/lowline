@@ -632,3 +632,73 @@ fn fields_settled_together_are_shown_together_or_not_at_all() {
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0].suggestion.as_ref().unwrap().value, "kim");
 }
+
+#[test]
+fn a_field_waiting_on_its_group_holds_nothing_back() {
+    let mut industry = Field::choice("industry", ["finance", "retail", "health"]);
+    industry.together = Some("coding".into());
+    let mut occupation = Field::choice("occupation", ["analyst", "clerk", "nurse", "teller"]);
+    occupation.together = Some("coding".into());
+    let form = Form {
+        fields: vec![Field::new("company", FieldKind::Text), industry, occupation],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut coding = Engine::new("coding", fields, engine::Tune::default()).unwrap();
+    // A company always has one industry; its occupation follows from the company within that industry, so the
+    // occupation is keyed by both and waits on the industry.
+    let history: Vec<_> = (0..150)
+        .map(|i| {
+            let (company, industry, occupation) = match i % 5 {
+                0 => ("bank", "finance", "analyst"),
+                1 => ("acme", "retail", "clerk"),
+                2 => ("clinic", "health", "nurse"),
+                3 => ("branch", "finance", "teller"),
+                _ => ("branch", "finance", "analyst"),
+            };
+            let values = saved(&[
+                ("company", company),
+                ("industry", industry),
+                ("occupation", occupation),
+            ]);
+            let settled =
+                Draft::new().settle(["industry", "occupation"], &values, SettledBy::Person);
+            engine::record(&format!("r{i}"), coding.fields(), &values, &settled, i)
+        })
+        .collect();
+    coding.tune(&history);
+    let none = BTreeMap::new();
+    // Every field it rests on keys the occupation, the industry with them.
+    let occupation_keys = coding
+        .report()
+        .unwrap()
+        .iter()
+        .find(|r| r.field == "occupation")
+        .unwrap();
+    assert_eq!(occupation_keys.key_fields, None);
+
+    // A new record of the bank: the occupation waits on the industry, still open, that keys it — so the sure industry
+    // is shown, not held back with it.
+    let bank = saved(&[("company", "bank")]);
+    let shown = coding.propose("n", &bank, &none);
+    let industry = shown.iter().find(|p| p.field == "industry").unwrap();
+    let occupation = shown.iter().find(|p| p.field == "occupation").unwrap();
+    assert!(occupation.suggestion.is_none());
+    assert_ne!(occupation.abstain, Some(lowline::Abstain::Together));
+    assert_eq!(industry.abstain, None);
+    assert_eq!(industry.suggestion.as_ref().unwrap().value, "finance");
+    assert!(industry.with.is_empty());
+    // Once the industry is settled the occupation is answered.
+    let next = coding.propose(
+        "n",
+        &saved(&[("company", "bank"), ("industry", "finance")]),
+        &none,
+    );
+    assert_eq!(next.len(), 1);
+    assert_eq!(next[0].suggestion.as_ref().unwrap().value, "analyst");
+
+    // A branch's occupation goes either way even in finance: unsure, not waiting — the sure industry is held with it.
+    let shown = coding.propose("m", &saved(&[("company", "branch")]), &none);
+    let industry = shown.iter().find(|p| p.field == "industry").unwrap();
+    assert_eq!(industry.abstain, Some(lowline::Abstain::Together));
+    assert_eq!(industry.with, ["occupation"]);
+}

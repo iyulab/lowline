@@ -207,14 +207,23 @@ impl Engine {
                 ))
             })
             .collect();
-        self.together(shown)
+        self.together(id, values, allowed, shown)
     }
 
     /// `shown` with each group of fields settled together ([`crate::Field::together`]) held back where one of its open
     /// fields has no suggestion: the group's other fields are shown none either ([`crate::Abstain::Together`], naming
     /// the fields without one). A field a person has filled is not open, so it is not counted; a field never suggested
-    /// ([`crate::Policy::Off`]) is no part of the group.
-    fn together(&self, mut shown: Vec<Proposal>) -> Vec<Proposal> {
+    /// ([`crate::Policy::Off`]) is no part of the group. Nor does a field without one hold the group when it is only
+    /// waiting on the group: given the values suggested for the group's other fields, it would be answered — an
+    /// occupation the records answer once the industry suggested is settled. The industry is shown, and the occupation
+    /// is asked again once a person has settled it.
+    fn together(
+        &self,
+        id: &str,
+        values: &BTreeMap<String, FieldValue>,
+        allowed: &BTreeMap<String, Vec<String>>,
+        mut shown: Vec<Proposal>,
+    ) -> Vec<Proposal> {
         let group_of = |name: &str| {
             self.fields
                 .iter()
@@ -222,11 +231,39 @@ impl Engine {
                 .and_then(|f| f.field.together.clone())
         };
         let groups: Vec<Option<String>> = shown.iter().map(|p| group_of(&p.field)).collect();
+        let waits_on_group = |field: &str, group: &str| {
+            let mut settled = values.clone();
+            for (q, g) in shown.iter().zip(&groups) {
+                let one = self
+                    .fields
+                    .iter()
+                    .any(|f| f.field.name == q.field && !f.field.multiple);
+                if let (Some(suggestion), true, true) =
+                    (&q.suggestion, g.as_deref() == Some(group), one)
+                {
+                    settled.insert(q.field.clone(), FieldValue::One(suggestion.value.clone()));
+                }
+            }
+            if settled.len() == values.len() {
+                return false;
+            }
+            let Some(resolved) = self.fields.iter().find(|f| f.field.name == field) else {
+                return false;
+            };
+            let known = record(id, &self.fields, &settled, &[], 0);
+            let answer =
+                self.decider
+                    .answer_one(&self.schema, id, field, &known.values, &known.sets, None);
+            proposal(resolved, &answer, allowed.get(field).map(Vec::as_slice))
+                .suggestion
+                .is_some()
+        };
         let unanswered: Vec<(String, String)> = shown
             .iter()
             .zip(&groups)
             .filter(|(p, _)| p.suggestion.is_none())
             .filter_map(|(p, g)| Some((g.clone()?, p.field.clone())))
+            .filter(|(g, field)| !waits_on_group(field, g))
             .collect();
         for (p, group) in shown.iter_mut().zip(&groups) {
             let Some(group) = group else { continue };

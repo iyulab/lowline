@@ -56,7 +56,9 @@ Decided fields settled together — an industry and an occupation, a class and i
 `together`, or formdown's `suggest:together`). Where one open field of the group is shown no suggestion, the others
 are shown none either (`together`, with the fields that held them back in `with`): a person settling the unsure one is
 not led by the sure one. Once the person has filled the unsure one, it is no longer open, and asked again the others
-are shown. A group no other field shares is refused.
+are shown. A field the records would answer once the group's other fields took the values suggested for them — the occupation,
+while the industry it rests on is still empty — is waiting, not unsure, and holds nothing back: the industry is shown,
+and the occupation is asked again once the industry is settled. A group no other field shares is refused.
 
 The routes, under the prefix `MapLowline` was given:
 

@@ -104,8 +104,9 @@ pub struct Field {
     pub must_catch: Vec<String>,
     /// The name of a group of decided fields settled together — an industry and an occupation, a class and its
     /// detail. Where one open field of the group is shown no suggestion, none of the others is shown one either
-    /// ([`crate::Abstain::Together`]), so a person settling the unsure one is not led by the sure one. Two or more
-    /// fields share a group.
+    /// ([`crate::Abstain::Together`]), so a person settling the unsure one is not led by the sure one. A field that only
+    /// waits on the group — answered once the others take the values suggested for them — holds nothing back: they are
+    /// shown, and the field is asked again once they are settled. Two or more fields share a group.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
