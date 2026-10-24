@@ -56,8 +56,9 @@ The same model judges what the records cannot answer yet — a decided field of 
 Such a field asks for a judgement and says which of the record's values to read; the element asks the host, the host
 puts it to the model (`ILowlineModel.JudgeAsync`), and the model's value is offered back to the engine, which shows it
 as its own answer when the model trusts it and it is one of the field's choices. A judgement is shown, never put in on
-its own; taken by a person, it counts as the engine's answer, so the engine learns how often its judgements hold. Where
-the records have evidence, a judgement changes nothing.
+its own; taken by a person, it counts as the engine's answer. Whether a judgement is trusted is the model's own measure:
+the engine does not yet choose a threshold for judgements from how often they held, and `Report` has no row for them.
+Where the records have evidence, a judgement changes nothing.
 
 A host whose records live somewhere of its own — files, an existing database — can keep that as the original and
 build the engine's store from it: `LowlineEngine.Record` makes the line to store for each record (its values, how each
