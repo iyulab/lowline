@@ -11,7 +11,7 @@ use gil::tuning::Tuning;
 use super::{FieldReport, Tune, Tuned, proposal, record, schema, tune};
 use crate::proposal::Proposal;
 use crate::provenance::{Draft, SettledBy, Settlement, SettlementKind};
-use crate::schema::{ResolvedField, Role};
+use crate::schema::{FieldKind, ResolvedField, Role};
 use crate::value::FieldValue;
 
 /// One form's round with the Gil decider, in one place: the records settled for it learned, its decided fields
@@ -47,7 +47,7 @@ use crate::value::FieldValue;
 ///     ("customer".to_owned(), FieldValue::from("Acme")),
 ///     ("owner".to_owned(), FieldValue::from("kim")),
 /// ]);
-/// let _to_store = engine.settle("new", &saved, &Draft::new(), SettledBy::Person, 0);
+/// let _to_store = engine.settle("new", &saved, &Draft::new(), SettledBy::Person, 0).unwrap();
 /// assert_eq!(engine.settled(), 1);
 /// ```
 pub struct Engine {
@@ -328,18 +328,7 @@ impl Engine {
         checks: &BTreeMap<String, f64>,
         settled_at: i64,
     ) -> Result<Record, String> {
-        for (name, value) in saved {
-            let Some(field) = self.fields.iter().find(|f| &f.field.name == name) else {
-                return Err(format!(
-                    "record '{id}' has a value for '{name}', which the form does not have"
-                ));
-            };
-            if matches!(value, FieldValue::Many(_)) && !field.field.multiple {
-                return Err(format!(
-                    "record '{id}' has several values for '{name}', which takes one"
-                ));
-            }
-        }
+        self.check_saved(id, saved, false)?;
         for (name, kind) in settled {
             if !self
                 .fields
@@ -406,7 +395,8 @@ impl Engine {
     /// Settles the record `id` as saved — its `saved` values, and the `draft` that kept what was shown for it and what
     /// happened to that — learns it, and gives back the record for the host to store. `settled_at` is in 100-nanosecond
     /// ticks since the Unix epoch, UTC. The thresholds are not chosen again here: [`Engine::stale`] says when they should
-    /// be.
+    /// be. A value the form does not hold is refused, and nothing is learned: a field it does not have, several values
+    /// for a field that takes one, or a value none of a choice field's choices (unless the field also takes others).
     pub fn settle(
         &mut self,
         id: &str,
@@ -414,7 +404,8 @@ impl Engine {
         draft: &Draft,
         by: SettledBy,
         settled_at: i64,
-    ) -> Record {
+    ) -> Result<Record, String> {
+        self.check_saved(id, saved, true)?;
         let decided = self
             .fields
             .iter()
@@ -423,6 +414,49 @@ impl Engine {
         let settlements = draft.settle(decided, saved, by);
         let settled = record(id, &self.fields, saved, &settlements, settled_at);
         self.learn(std::slice::from_ref(&settled));
-        settled
+        Ok(settled)
+    }
+
+    /// Refuses values the form cannot hold, before anything is learned: a field the form does not have, several values
+    /// for a field that takes one, and — with `choices`, for a save made now — a value of a choice field that is none of
+    /// its choices (unless the field also takes others). What a person confirmed is what the engine learns, so a value
+    /// outside the form must not be learned as one. A record settled earlier may hold a choice the form has dropped
+    /// since: that is its history, not an error, and the engine never suggests it.
+    fn check_saved(
+        &self,
+        id: &str,
+        saved: &BTreeMap<String, FieldValue>,
+        choices: bool,
+    ) -> Result<(), String> {
+        for (name, value) in saved {
+            let Some(field) = self.fields.iter().find(|f| &f.field.name == name) else {
+                return Err(format!(
+                    "record '{id}' has a value for '{name}', which the form does not have"
+                ));
+            };
+            let field = &field.field;
+            if matches!(value, FieldValue::Many(_)) && !field.multiple {
+                return Err(format!(
+                    "record '{id}' has several values for '{name}', which takes one"
+                ));
+            }
+            if !choices || field.kind != FieldKind::Choice || field.open || field.choices.is_empty()
+            {
+                continue;
+            }
+            let texts = match value {
+                FieldValue::One(one) => std::slice::from_ref(one),
+                FieldValue::Many(many) => many.as_slice(),
+            };
+            if let Some(outside) = texts
+                .iter()
+                .find(|t| !t.is_empty() && !field.choices.contains(t))
+            {
+                return Err(format!(
+                    "record '{id}' has '{outside}' for '{name}', which is none of its choices"
+                ));
+            }
+        }
+        Ok(())
     }
 }

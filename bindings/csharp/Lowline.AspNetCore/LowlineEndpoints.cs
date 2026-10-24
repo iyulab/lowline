@@ -145,10 +145,17 @@ public static class LowlineEndpoints
     private static async Task FillAsync(HttpContext context, string form)
     {
         var (forms, options) = Resolve(context);
-        if (!options.Forms.ContainsKey(form) || !forms.CanFill)
+        if (!options.Forms.ContainsKey(form))
         {
-            // Filling is on only when the host gave a model.
             context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        if (!forms.CanFill)
+        {
+            // Filling is on only when the host gave a model; saying so tells it apart from a form not defined.
+            await Results.Problem("No model is configured (UseModel).", statusCode: StatusCodes.Status404NotFound)
+                .ExecuteAsync(context).ConfigureAwait(false);
             return;
         }
 
@@ -173,10 +180,17 @@ public static class LowlineEndpoints
     private static async Task JudgeAsync(HttpContext context, string form)
     {
         var (forms, options) = Resolve(context);
-        if (!options.Forms.ContainsKey(form) || !forms.CanFill)
+        if (!options.Forms.ContainsKey(form))
         {
-            // Judging is on only when the host gave a model.
             context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        if (!forms.CanFill)
+        {
+            // Judging is on only when the host gave a model; saying so tells it apart from a form not defined.
+            await Results.Problem("No model is configured (UseModel).", statusCode: StatusCodes.Status404NotFound)
+                .ExecuteAsync(context).ConfigureAwait(false);
             return;
         }
 

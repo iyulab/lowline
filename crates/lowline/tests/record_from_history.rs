@@ -42,7 +42,9 @@ fn a_record_with_nothing_said_of_it_is_the_record_a_person_saved_with_nothing_in
         .record("r1", &saved(), &BTreeMap::new(), &BTreeMap::new(), 5)
         .unwrap();
     assert_eq!(engine.settled(), 0, "nothing is learned");
-    let settled = engine.settle("r1", &saved(), &Draft::new(), SettledBy::Person, 5);
+    let settled = engine
+        .settle("r1", &saved(), &Draft::new(), SettledBy::Person, 5)
+        .unwrap();
     assert_eq!(
         serde_json::to_value(&made).unwrap(),
         serde_json::to_value(&settled).unwrap()
@@ -90,7 +92,9 @@ fn a_field_held_back_for_a_check_is_settled_as_one_with_its_probability() {
     // The same line as a draft that held the field back makes.
     let mut draft = Draft::new();
     draft.hold("owner", 0.05);
-    let settled = engine.settle("r1", &saved(), &draft, SettledBy::Person, 5);
+    let settled = engine
+        .settle("r1", &saved(), &draft, SettledBy::Person, 5)
+        .unwrap();
     assert_eq!(
         serde_json::to_value(&made).unwrap(),
         serde_json::to_value(&settled).unwrap()

@@ -38,7 +38,9 @@ fn a_record_is_answered_shown_settled_and_learned_from() {
     let mut draft = Draft::new();
     draft.show("owner", suggestion);
     let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
-    let stored = intake.settle("new", &values, &draft, SettledBy::Person, 40);
+    let stored = intake
+        .settle("new", &values, &draft, SettledBy::Person, 40)
+        .unwrap();
     assert_eq!(
         stored.settlements["owner"],
         gil::schema::SettlementKind::Accept
@@ -134,13 +136,15 @@ fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
     assert_eq!(intake.settled(), 40);
     for i in 40..44 {
         let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
-        intake.settle(
-            &format!("r{i}"),
-            &values,
-            &Draft::new(),
-            SettledBy::Person,
-            i,
-        );
+        intake
+            .settle(
+                &format!("r{i}"),
+                &values,
+                &Draft::new(),
+                SettledBy::Person,
+                i,
+            )
+            .unwrap();
     }
     assert!(matches!(intake.stale(), Some(Stale::Tuning(_))));
 
@@ -371,7 +375,9 @@ fn a_judgement_the_records_asked_for_is_offered_back_and_settled_as_an_answer() 
     let mut draft = Draft::new();
     draft.show("owner", suggestion);
     let values = saved(&[("customer", "Gamma"), ("owner", "lee")]);
-    let stored = intake.settle("new", &values, &draft, SettledBy::Person, 0);
+    let stored = intake
+        .settle("new", &values, &draft, SettledBy::Person, 0)
+        .unwrap();
     assert_eq!(
         stored.settlements["owner"],
         gil::schema::SettlementKind::Accept
@@ -487,4 +493,65 @@ fn a_record_forgotten_answers_as_if_it_had_never_been_learned() {
         intake.propose("new", &acme, &BTreeMap::new()),
         never.propose("new", &acme, &BTreeMap::new())
     );
+}
+
+#[test]
+fn a_save_the_form_cannot_hold_is_refused_and_nothing_is_learned() {
+    let mut team = Field::choice("team", ["payments", "identity"]);
+    team.multiple = false;
+    let mut tags = Field::choice("tags", ["urgent", "billing"]);
+    tags.multiple = true;
+    let mut channel = Field::choice("channel", ["mail", "phone"]);
+    channel.open = true;
+    let form = Form {
+        fields: vec![Field::new("summary", FieldKind::Text), team, tags, channel],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut triage = Engine::new("triage", fields, engine::Tune::default()).unwrap();
+
+    let refused = [
+        (saved(&[("team", "nobody")]), "'nobody' for 'team'"),
+        (
+            saved(&[("teem", "payments")]),
+            "'teem', which the form does not have",
+        ),
+        (
+            BTreeMap::from([(
+                "tags".to_owned(),
+                FieldValue::Many(vec!["urgent".into(), "later".into()]),
+            )]),
+            "'later' for 'tags'",
+        ),
+    ];
+    for (values, says) in refused {
+        let error = triage
+            .settle("r", &values, &Draft::new(), SettledBy::Person, 0)
+            .unwrap_err();
+        assert!(error.contains(says), "{error}");
+    }
+    // A record settled elsewhere, earlier, may hold a choice the form has dropped since: it is history, taken as it is.
+    assert!(
+        triage
+            .record(
+                "old",
+                &saved(&[("team", "retired")]),
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                0
+            )
+            .is_ok()
+    );
+    assert_eq!(triage.settled(), 0);
+
+    // A field that also takes other values keeps them, and an empty choice is no value at all.
+    let kept = saved(&[
+        ("team", ""),
+        ("channel", "chat"),
+        ("summary", "card declined"),
+    ]);
+    let stored = triage
+        .settle("r", &kept, &Draft::new(), SettledBy::Person, 0)
+        .unwrap();
+    assert_eq!(stored.values["channel"], "chat");
+    assert_eq!(triage.settled(), 1);
 }

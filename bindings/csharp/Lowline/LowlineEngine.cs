@@ -332,7 +332,9 @@ public sealed unsafe class LowlineEngine : IDisposable
 
     /// <summary>Settles record <paramref name="id"/> as saved — its values, and <paramref name="draft"/>, the account
     /// kept while it was written (what was shown, taken, turned down; <c>null</c> for a record written with nothing
-    /// shown) — learns it, and gives back the record to store.</summary>
+    /// shown) — learns it, and gives back the record to store. A value the form does not hold (a field it does not have,
+    /// several values for one that takes one, a value none of a choice field's choices) is refused with
+    /// <see cref="ArgumentException"/>, and nothing is learned.</summary>
     public SettledRecord Settle(
         string id,
         IReadOnlyDictionary<string, FieldValue> saved,

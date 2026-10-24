@@ -19,6 +19,17 @@ All notable changes to this project are written here. The format follows
   dropped. The engine stays untuned and `Engine::stale` says so, where it used to set the old settings on the new form.
 - `Engine::forget` takes a record out of the decider's memories (Gil's `Decider::remove`) instead of learning an empty
   record in its place, so a forgotten record is never offered again as a similar record.
+- **Breaking: a save the form cannot hold is refused, and nothing is learned.** `Engine::settle` (Rust) now returns
+  `Result`; it refuses a value for a field the form does not have, several values for a field that takes one, and a
+  value of a choice field that is none of its choices (a field marked `open` keeps taking others) — the checks
+  `Engine::record` already made, plus the choices. `Engine::record` (a record settled elsewhere, earlier) still takes a
+  choice the form has dropped since — that is history, and is never suggested. Before, such a value was stored and learned as
+  a person's confirmation, and a misspelt field name was dropped without a word. Through the C ABI and .NET
+  (`LowlineEngine.Settle`, `LowlineForms.SettleAsync`) it is `INVALID_INPUT` / `ArgumentException`; `POST {form}/settle`
+  answers 400 with the message. To move: `engine.settle(…)?` in Rust; a host whose saves can hold values outside the
+  form marks those choice fields `open` or fixes the values before settling.
+- `POST {form}/fill` and `judge` without a model (`UseModel`) still answer 404, now with a problem body saying no
+  model is configured, so a host can tell it apart from a form that is not defined.
 
 ## [0.4.0] - 2026-10-23
 

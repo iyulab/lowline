@@ -117,6 +117,7 @@ public sealed class WebTests : IAsyncDisposable
         // No model given: no filling.
         using var unfilled = await client.SendAsync(Post("/lowline/intake/fill", new { values = new { }, text = "x" }), Ct);
         unfilled.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await unfilled.Content.ReadAsStringAsync(Ct)).Should().Contain("No model is configured");
         using var unjudged = await client.SendAsync(Post("/lowline/intake/judge", new { id = "r", values = new { } }), Ct);
         unjudged.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
@@ -128,6 +129,16 @@ public sealed class WebTests : IAsyncDisposable
             Post("/lowline/intake/settle", new { id = "r", saved = new { }, draft = new { opened = 3 } }), Ct);
         refused.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await refused.Content.ReadAsStringAsync(Ct)).Should().Contain("draft does not read");
+
+        // A value the form cannot hold is refused, and nothing is stored.
+        using var outside = await client.SendAsync(
+            Post("/lowline/intake/settle", new { id = "r", saved = new { customer = "Acme", owner = "nobody" } }), Ct);
+        outside.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await outside.Content.ReadAsStringAsync(Ct)).Should().Contain("none of its choices");
+        using var unknown = await client.SendAsync(
+            Post("/lowline/intake/settle", new { id = "r", saved = new { custmer = "Acme" } }), Ct);
+        unknown.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await _store.ReadRecordsAsync(new LowlineScope("intake", "default"), Ct)).Should().NotContain(r => r.Id == "r");
     }
 
     [Fact]

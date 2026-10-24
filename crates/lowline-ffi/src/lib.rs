@@ -556,7 +556,8 @@ pub unsafe extern "C" fn lowline_engine_offer(
 /// Settles record `id` as saved — its `saved` values (as [`lowline_engine_propose`] reads them) and `draft`, the JSON
 /// of the account kept while it was written (empty text for a record written with nothing shown) — `by` a person or
 /// the application (`LOWLINE_SETTLED_BY_…`) at `settled_at`, learns it, and gives back the record to store: one Gil
-/// record as JSON, the line [`lowline_engine_learn`] reads back.
+/// record as JSON, the line [`lowline_engine_learn`] reads back. Refused, with nothing learned, for a value the form does
+/// not hold: a field it does not have, several values for one that takes one, a value none of a choice field's choices.
 ///
 /// # Safety
 /// `engine` is a live handle used by nothing else during the call; the texts are valid for the call; `result_len`
@@ -594,7 +595,9 @@ pub unsafe extern "C" fn lowline_engine_settle(
             if result_len.is_null() {
                 return Err(argument("result_len is null"));
             }
-            let record = engine.settle(id, &saved, &draft, by, settled_at);
+            let record = engine
+                .settle(id, &saved, &draft, by, settled_at)
+                .map_err(input)?;
             set_result(written(&record), result_len)
         })
     }
