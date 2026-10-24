@@ -217,7 +217,7 @@ impl Draft {
     }
 
     /// The fields of `round` whose suggestion is not to be shown for a check: each field held back, and the other open
-    /// fields of its group ([`Proposal::together`]) — a person settling a field checked with nothing in view is not
+    /// fields of its group ([`crate::Proposal::together`]) — a person settling a field checked with nothing in view is not
     /// led by the value suggested for a field settled together with it. Only the held field is the check; the others
     /// are settled as values entered with nothing in view. In `round`'s order.
     pub fn hidden(&self, round: &[crate::Proposal]) -> Vec<String> {
