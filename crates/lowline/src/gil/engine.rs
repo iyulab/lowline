@@ -9,8 +9,8 @@ use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
 use super::{FieldReport, Tune, Tuned, proposal, record, schema, tune};
-use crate::proposal::Proposal;
-use crate::provenance::{Draft, SettledBy, Settlement, SettlementKind};
+use crate::proposal::{Layer, Proposal};
+use crate::provenance::{Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
 use crate::schema::{FieldKind, ResolvedField, Role};
 use crate::value::FieldValue;
 
@@ -196,13 +196,48 @@ impl Engine {
                     .fields
                     .iter()
                     .find(|f| f.field.name == answer.attribute)?;
-                Some(proposal(
-                    field,
-                    answer,
-                    allowed.get(&answer.attribute).map(Vec::as_slice),
+                Some(self.promised(
+                    proposal(
+                        field,
+                        answer,
+                        allowed.get(&answer.attribute).map(Vec::as_slice),
+                    ),
+                    None,
                 ))
             })
             .collect()
+    }
+
+    /// `shown` with the promise of the threshold its suggestion was held to, from the report of the thresholds chosen:
+    /// the key layer's — or, with `typed` characters typed, the threshold for that many — the coarse level's for a
+    /// class, the similar records layer's. Nothing for a judgement from outside the records, a value from elsewhere, or
+    /// an engine not tuned.
+    fn promised(&self, mut shown: Proposal, typed: Option<usize>) -> Proposal {
+        let Some(suggestion) = &shown.suggestion else {
+            return shown;
+        };
+        let Some(report) = self
+            .tuned
+            .as_ref()
+            .and_then(|t| t.report.iter().find(|r| r.field == shown.field))
+        else {
+            return shown;
+        };
+        let choice = match (suggestion.origin, suggestion.fit, shown.layer) {
+            (Origin::Decider, Fit::Prefix, _) => report.coarse.as_ref(),
+            (Origin::Decider, Fit::Exact, Some(Layer::Key)) => match typed {
+                Some(length) => report
+                    .typed
+                    .as_ref()
+                    .and_then(|t| t.get(length.checked_sub(1)?))
+                    .and_then(Option::as_ref),
+                None => report.key.as_ref(),
+            },
+            (Origin::Decider, Fit::Exact, Some(Layer::Similar)) => report.similar.as_ref(),
+            _ => None,
+        };
+        shown.promise = choice.map(|c| c.promise);
+        shown
     }
 
     /// What to show for the one decided field `field` of the record `id`, given its `values` so far and `typed`, the
@@ -244,10 +279,9 @@ impl Engine {
         let answer =
             self.decider
                 .answer_one(&self.schema, id, field, &known.values, &known.sets, typed);
-        Some(proposal(
-            resolved,
-            &answer,
-            allowed.get(field).map(Vec::as_slice),
+        Some(self.promised(
+            proposal(resolved, &answer, allowed.get(field).map(Vec::as_slice)),
+            typed.map(|t| t.chars().count()),
         ))
     }
 

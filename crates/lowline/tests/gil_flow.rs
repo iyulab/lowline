@@ -33,6 +33,9 @@ fn a_record_is_answered_shown_settled_and_learned_from() {
     let suggestion = shown[0].suggestion.clone().expect("the records back kim");
     assert_eq!(suggestion.value, "kim");
     assert!(shown[0].prefill);
+    // With it, how often such an answer has been right: the promise of the key threshold it was held to.
+    let key = intake.report().unwrap()[0].key.clone().unwrap();
+    assert_eq!(shown[0].promise, Some(key.promise));
 
     // The person takes it and saves: the record to store says so, and the engine has learned it.
     let mut draft = Draft::new();

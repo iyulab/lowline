@@ -91,6 +91,15 @@ pub struct Proposal {
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
     pub asks: Vec<(String, String)>,
+    /// How often an answer of this kind for this field has been right — the precision the replay expects of the next
+    /// answers at the threshold the suggestion was held to (the layer's `promise` in [`crate::gil::FieldReport`]).
+    /// `None` with no suggestion, for a judgement from outside the records or a value from elsewhere, and before the
+    /// thresholds were chosen.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub promise: Option<f64>,
 }
 
 impl Proposal {
@@ -104,6 +113,7 @@ impl Proposal {
             basis: Vec::new(),
             abstain: Some(why),
             asks: Vec::new(),
+            promise: None,
         }
     }
 
@@ -127,6 +137,7 @@ impl Proposal {
             basis,
             abstain: None,
             asks: Vec::new(),
+            promise: None,
         }
     }
 }

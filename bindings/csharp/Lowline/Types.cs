@@ -256,6 +256,12 @@ public sealed record Proposal
     /// <summary>For <see cref="Lowline.Abstain.NeedsJudgement"/>: the fields and values a judgement from outside the
     /// records would read, each as a pair.</summary>
     [JsonPropertyName("asks")] public IReadOnlyList<IReadOnlyList<string>> Asks { get => field ?? []; init; } = [];
+
+    /// <summary>How often an answer of this kind for this field has been right — the precision the replay expects of the
+    /// next answers at the threshold the suggestion was held to (<see cref="ThresholdChoice.Promise"/> in the
+    /// <see cref="LowlineEngine.Report"/>); <c>null</c> with no suggestion, for a judgement from outside the records or a
+    /// value from elsewhere, and before the thresholds were chosen.</summary>
+    [JsonPropertyName("promise")] public double? Promise { get; init; }
 }
 
 /// <summary>How often a decided field whose answer would be shown is drawn instead to be checked: its answer is held

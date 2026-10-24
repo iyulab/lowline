@@ -16,6 +16,12 @@ export interface Proposal {
   basis?: Basis[]
   abstain: Abstain | null
   asks?: [string, string][]
+  /**
+   * How often an answer of this kind for this field has been right — the replay's precision at the threshold the
+   * suggestion was held to. Absent with no suggestion, for a judgement or a value from elsewhere, and before thresholds
+   * were chosen.
+   */
+  promise?: number
 }
 
 /** What a field shows, as formdown's `fieldStates` takes it. */

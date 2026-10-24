@@ -14,6 +14,10 @@ All notable changes to this project are written here. The format follows
   client has `report(form)` with the `FieldReport` type. Counts and rates only, never a record's values. Before, only
   the low-level `LowlineEngine.Report` said it, and a host on the routes could not show its people whether a suggestion
   had earned trust.
+- A suggestion carries its promise: `Proposal.promise` (Rust, .NET `Proposal.Promise`, web `promise`) is how often an
+  answer of that kind for the field has been right — the replay's promise at the threshold it was held to: the key
+  layer's, the threshold for the characters typed, the coarse level's for a class, or the similar records layer's. Left
+  out for a judgement from outside the records, a value from elsewhere, and before thresholds are chosen.
 
 ### Changed
 

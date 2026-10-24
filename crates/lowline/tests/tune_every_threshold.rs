@@ -148,6 +148,15 @@ fn a_class_is_suggested_where_its_value_cannot_be() {
         (suggestion.value.as_str(), suggestion.fit),
         ("E", Fit::Prefix)
     );
+    let report = engine.report().unwrap();
+    let class = report
+        .iter()
+        .find(|r| r.field == "code")
+        .unwrap()
+        .coarse
+        .clone()
+        .unwrap();
+    assert_eq!(shown.promise, Some(class.promise));
 }
 
 #[test]
@@ -185,6 +194,18 @@ fn typing_narrows_a_field_to_the_values_that_begin_with_it() {
         .propose_field("new", &values, &BTreeMap::new(), "contact", Some("L"))
         .unwrap();
     assert_eq!(typed.suggestion.map(|s| s.value).as_deref(), Some("Lee"));
+    // Its promise is the one-character threshold's, not the key threshold's (there is none).
+    let report = engine.report().unwrap();
+    let one = report
+        .iter()
+        .find(|r| r.field == "contact")
+        .unwrap()
+        .typed
+        .as_ref()
+        .unwrap()[0]
+        .clone()
+        .unwrap();
+    assert_eq!(typed.promise, Some(one.promise));
     // Past the lengths chosen for, typing answers nothing.
     let long = engine
         .propose_field("new", &values, &BTreeMap::new(), "contact", Some("Leeds"))

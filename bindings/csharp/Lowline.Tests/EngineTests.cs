@@ -142,6 +142,7 @@ public sealed class EngineTests
         shown[0].Suggestion!.Value.Should().Be("lee");
         shown[0].Prefill.Should().BeTrue();
         shown[0].Layer.Should().Be(Layer.Key);
+        shown[0].Promise.Should().Be(report.Key.Promise, "the promise of the key threshold the answer was held to");
         // The key layer keeps values as it compares them — folded to lower case.
         shown[0].Basis.Should().Contain(new Basis("value", "customer", "beta"));
 
