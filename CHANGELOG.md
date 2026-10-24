@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-24
+
 ### Added
 
 - A host reads how far each form's records have come: `LowlineForms.ReportAsync(scope)` and `GET {form}/report`
