@@ -40,7 +40,7 @@
     "bundle": "vite build --config vite.bundle.config.ts"
   },
   "dependencies": {
-    "@formdown/ui": "^0.24.0",
+    "@formdown/ui": "^0.25.0",
     "lit": "^3.3.3"
   },
   "devDependencies": {
