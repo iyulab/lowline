@@ -35,6 +35,50 @@ app.MapLowline("/lowline");                    // POST /lowline/{form}/propose �
 <lowline-form src="/lowline" form="intake" record="r-17"></lowline-form>
 ```
 
+The form is its fields, given as JSON in the engine's own shape (`form`) or as what formdown's `getSchema()` gives
+(`formdown`):
+
+```json
+{ "form": { "fields": [
+  { "name": "customer", "kind": "text" },
+  { "name": "owner", "kind": "choice", "choices": ["kim", "lee"] }
+] } }
+```
+
+A field's `kind` is `text`, `number`, `date`, `choice`, `flag` or `reference`; a choice field may be `open` (it takes
+values outside its choices too) or `multiple`. Which fields the engine decides — suggests from the records — and which
+it only reads as clues: unless the form says (a field's `role`, `decided` or `observed`, or its `policy`, `offer`,
+`confirm` or `off`), every closed choice field with two choices or more is decided and the rest are clues. A single
+checkbox is never decided that way — it is often a consent, which must not be suggested however consistent the
+records are. Give `"inference": "declared-only"` beside `form` to have only the fields the form declares decided.
+
+The routes, under the prefix `MapLowline` was given:
+
+| Route | Takes | Answers |
+|---|---|---|
+| `POST {form}/propose` | `{ "id", "values" }` — the record so far | per open decided field: the suggestion, what it rests on, its `promise`, or why there is none |
+| `POST {form}/settle` | `{ "id", "saved", "draft" }` — no `saved` with `Saved` | `{ "id", "settledAt" }`; 400 for a value the form cannot hold, and nothing is learned |
+| `GET {form}/report` | — | per decided field: the thresholds chosen and what the replay of the records saw at them |
+| `POST {form}/fill` | `{ "values", "text" }` | the model's values as suggestions; 404 saying so without a model |
+| `POST {form}/judge` | `{ "id", "values" }` | the model's judgements for the fields the records could not answer; 404 saying so without a model |
+
+A form not defined is 404. Each request's memory space and allowed choices come from the host (below), never from the
+request body.
+
+Suggestions start once the records can back them. The engine replays the confirmed records to choose, per decided
+field, the threshold at which its answers have been right at least 80% of the time, over ten answers or more (thirty
+for the similar records layer); until a field reaches that, it is shown nothing, with the reason. `report` says how
+close each field has come. A suggestion's `promise` is the precision its threshold's replay expects of the next
+answers — a figure to read, not a level of confidence: every suggestion shown has already met the target.
+
+One answer in twenty is held back to check it (the element's `rate`): the field shows no suggestion, the person types
+the value, and the value counts toward the field's precision as one written with nothing in view. Without such checks,
+a field suggested well would be settled mostly by taking its suggestions, and its precision would come to rest on the
+suggestions themselves.
+
+Before putting the engine in front of people, a host can see how it would have done on the records it already has:
+make the lines with `LowlineEngine.Record`, choose thresholds on them with `Choose`, and read `Report`.
+
 Set the element's `content` to the form's formdown text. While a record is written, the element asks what to show
 for the fields the engine decides, draws each suggestion in its field with what it rests on, and keeps the account of
 what the person took, changed or turned down; `save()` sends it with the values, and the engine learns from it. The
