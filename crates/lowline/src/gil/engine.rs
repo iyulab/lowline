@@ -135,9 +135,13 @@ impl Engine {
     /// back: the engine stays untuned, and [`Engine::stale`] says so.
     pub fn restore(&mut self, tuned: Option<Tuned>) {
         self.tuned = match tuned {
-            Some(tuned) => match tuned.tuning.apply(&self.schema) {
+            Some(mut tuned) => match tuned.tuning.apply(&self.schema) {
                 Ok(schema) => {
                     self.schema = schema;
+                    // A tuning stored before reports said what they were chosen on says it in the tuning.
+                    for field in &mut tuned.report {
+                        field.chosen_on = tuned.tuning.settled;
+                    }
                     Some(tuned)
                 }
                 Err(_) => None,

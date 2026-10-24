@@ -333,20 +333,57 @@ public sealed class LowlineForms : IDisposable
 
         public SemaphoreSlim Saving { get; } = new(1, 1);
 
-        /// <summary>The last choice of thresholds started after a save.</summary>
+        private bool _tuning;
+        private bool _again;
+
+        /// <summary>The choice of thresholds running after a save, with any it has to run again.</summary>
         public Task Tuned { get; private set; } = Task.CompletedTask;
 
-        /// <summary>Starts <paramref name="retune"/> on a worker unless one is still running.</summary>
+        /// <summary>Starts <paramref name="retune"/> on a worker. Asked while one runs, it runs once more after that one
+        /// if the thresholds then still do not stand — the records saved meanwhile were not in the one running.</summary>
         public void Retune(Func<Task> retune)
         {
             lock (_gate)
             {
-                if (!Tuned.IsCompleted)
+                if (_tuning)
                 {
+                    _again = true;
                     return;
                 }
 
-                Tuned = Task.Run(retune);
+                _tuning = true;
+                Tuned = Task.Run(() => Run(retune));
+            }
+        }
+
+        private async Task Run(Func<Task> retune)
+        {
+            try
+            {
+                while (true)
+                {
+                    await retune().ConfigureAwait(false);
+                    lock (_gate)
+                    {
+                        var again = _again && Engine.Stale is not null;
+                        _again = false;
+                        if (!again)
+                        {
+                            _tuning = false;
+                            return;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                lock (_gate)
+                {
+                    _tuning = false;
+                    _again = false;
+                }
+
+                throw;
             }
         }
 

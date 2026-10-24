@@ -81,6 +81,89 @@ public sealed class FormsTests
     }
 
     [Fact]
+    public async Task Saves_while_thresholds_are_chosen_have_them_chosen_again_after()
+    {
+        var store = new SlowChoice(await StoreWith(Seoul, EngineTests.Alternating(10)));
+        var clock = new Clock(EngineTests.Start.AddHours(1));
+        using var forms = new LowlineForms(store, clock);
+        forms.Define("intake", EngineTests.Intake);
+        await forms.ProposeAsync(Seoul, "first", Customer("Acme"), cancellationToken: Ct);
+
+        // The first save starts a choice that reads the store and is slow to finish; thirty more saves land meanwhile.
+        store.Slow = new TaskCompletionSource();
+        for (var i = 0; i < 31; i++)
+        {
+            await forms.SettleAsync(
+                Seoul, $"n{i}", new Dictionary<string, FieldValue> { ["customer"] = "Acme", ["owner"] = "kim" }, null,
+                cancellationToken: Ct);
+        }
+
+        store.Slow.SetResult();
+        await forms.WhenTunedAsync(Seoul);
+        (await store.ReadTuningAsync(Seoul, Ct)).Should().Contain("\"settled\":41");
+        (await forms.ReportAsync(Seoul, Ct)).Single().ChosenOn.Should().Be(41);
+    }
+
+    [Fact]
+    public async Task A_tuning_the_stored_records_outgrew_is_chosen_again_at_start_up()
+    {
+        var store = await StoreWith(Seoul, EngineTests.Alternating(10));
+        using (var forms = new LowlineForms(store))
+        {
+            forms.Define("intake", EngineTests.Intake);
+            await forms.ProposeAsync(Seoul, "first", Customer("Acme"), cancellationToken: Ct);
+        }
+
+        (await store.ReadTuningAsync(Seoul, Ct)).Should().Contain("\"settled\":10");
+        foreach (var record in EngineTests.Alternating(40).Skip(10))
+        {
+            await store.AddRecordAsync(Seoul, record, Ct);
+        }
+
+        using var again = new LowlineForms(store);
+        again.Define("intake", EngineTests.Intake);
+        var report = (await again.ReportAsync(Seoul, Ct)).Single();
+        report.Lookups.Should().Be(39);
+        report.ChosenOn.Should().Be(40);
+        (await store.ReadTuningAsync(Seoul, Ct)).Should().Contain("\"settled\":40");
+    }
+
+    /// <summary>A store whose reads of the records, once <see cref="Slow"/> is set, answer only when it completes —
+    /// with the records as they were when asked, as a long choice of thresholds would see them.</summary>
+    private sealed class SlowChoice(InMemoryLowlineStore inner) : ILowlineStore
+    {
+        public TaskCompletionSource? Slow { get; set; }
+
+        public async Task<IReadOnlyList<SettledRecord>> ReadRecordsAsync(
+            LowlineScope scope, CancellationToken cancellationToken = default)
+        {
+            var records = await inner.ReadRecordsAsync(scope, cancellationToken);
+            if (Slow is { } slow)
+            {
+                await slow.Task;
+            }
+
+            return records;
+        }
+
+        public Task AddRecordAsync(LowlineScope scope, SettledRecord record, CancellationToken cancellationToken = default) =>
+            inner.AddRecordAsync(scope, record, cancellationToken);
+
+        public Task<string?> ReadTuningAsync(LowlineScope scope, CancellationToken cancellationToken = default) =>
+            inner.ReadTuningAsync(scope, cancellationToken);
+
+        public Task WriteTuningAsync(LowlineScope scope, string tuning, CancellationToken cancellationToken = default) =>
+            inner.WriteTuningAsync(scope, tuning, cancellationToken);
+
+        public Task<IReadOnlyList<string>> ForgetBeforeAsync(
+            LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default) =>
+            inner.ForgetBeforeAsync(scope, before, cancellationToken);
+
+        public Task<bool> ForgetAsync(LowlineScope scope, string id, CancellationToken cancellationToken = default) =>
+            inner.ForgetAsync(scope, id, cancellationToken);
+    }
+
+    [Fact]
     public async Task Forgotten_records_no_longer_answer()
     {
         var store = await StoreWith(Seoul, EngineTests.Alternating(40));

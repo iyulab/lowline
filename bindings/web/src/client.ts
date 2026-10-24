@@ -32,6 +32,11 @@ export interface ThresholdChoice {
  */
 export interface FieldReport {
   field: string
+  /**
+   * How many settled records the thresholds were chosen on — the records the report speaks for. Records settled since
+   * are answered from, but not in the replay until the thresholds are chosen again.
+   */
+  chosenOn: number
   lookups: number
   /** The threshold at which values settled alongside answer; absent while none was right often enough. */
   key?: ThresholdChoice

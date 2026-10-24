@@ -127,6 +127,7 @@ fn thresholds_are_chosen_on_the_records_and_chosen_again_when_they_grow() {
     assert_eq!(report.field, "owner");
     assert!(report.key.as_ref().is_some_and(|k| k.precision >= 0.8));
     assert_eq!(report.lookups, 39);
+    assert_eq!(report.chosen_on, 40);
     assert_eq!(intake.stale(), None);
     let shown = intake.propose("new", &typed, &BTreeMap::new());
     assert_eq!(

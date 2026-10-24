@@ -335,6 +335,11 @@ public sealed record FieldReport
     /// <summary>The decided field.</summary>
     [JsonPropertyName("field")] public required string Field { get; init; }
 
+    /// <summary>How many settled records the thresholds were chosen on — the records the report speaks for. Records
+    /// settled since are learned and answered from, but not in the replay until the thresholds are chosen again.
+    /// </summary>
+    [JsonPropertyName("chosenOn")] public int ChosenOn { get; init; }
+
     /// <summary>How many lookups the replay of values settled alongside made.</summary>
     [JsonPropertyName("lookups")] public int Lookups { get; init; }
 

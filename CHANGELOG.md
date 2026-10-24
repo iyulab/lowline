@@ -11,9 +11,15 @@ All notable changes to this project are written here. The format follows
 - Each proposal names its group of fields settled together (`together` — .NET `Proposal.Together`, web `together`),
   and `Draft::hidden` (.NET `Recheck.Hidden`) answers the fields of a round to hide for a check: each field held back
   and the open fields of its group. The web element hides them the same way.
+- A report says how many settled records its thresholds were chosen on (`chosenOn` — .NET `FieldReport.ChosenOn`,
+  Rust `FieldReport::chosen_on`): records settled since are answered from but not yet in the replay. A tuning stored by
+  an earlier version reports it from the tuning.
 
 ### Fixed
 
+- Records saved while thresholds were being chosen again are no longer left out of the choice until the next save:
+  asked again while a choice runs, `LowlineForms` chooses once more after it if the thresholds still do not stand
+  (before, the request was dropped, and a burst of saves could leave thresholds chosen on its first few records).
 - A field held back for a check no longer leaves the fields settled together with it showing their suggestions. The
   value checked is counted as one written with nothing in view, which the suggestion beside it made untrue.
 
