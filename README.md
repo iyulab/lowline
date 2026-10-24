@@ -28,7 +28,7 @@ A web host writes two pieces on the server and one on the page.
 builder.Services.AddLowline(o => o
     .UseSqlite("Data Source=lowline.db")       // where the confirmed records are kept
     .Form("intake", intakeDefinition));        // the form: its fields, as JSON or as formdown's getSchema()
-app.MapLowline("/lowline");                    // POST /lowline/{form}/propose · settle · fill · judge
+app.MapLowline("/lowline");                    // POST /lowline/{form}/propose · settle · fill · judge · GET report
 ```
 
 ```html

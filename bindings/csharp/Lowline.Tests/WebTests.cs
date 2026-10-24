@@ -109,6 +109,33 @@ public sealed class WebTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task The_report_says_per_decided_field_what_the_replay_saw_in_the_requests_memory_space()
+    {
+        await Seed("seoul");
+        using var client = await StartAsync();
+
+        using var seoul = new HttpRequestMessage(HttpMethod.Get, "/lowline/intake/report");
+        seoul.Headers.Add("X-Space", "seoul");
+        using var reported = await client.SendAsync(seoul, Ct);
+        reported.StatusCode.Should().Be(HttpStatusCode.OK);
+        var fields = JsonNode.Parse(await reported.Content.ReadAsStringAsync(Ct))!.AsArray();
+        fields.Should().ContainSingle();
+        fields[0]!["field"]!.GetValue<string>().Should().Be("owner");
+        var key = fields[0]!["key"]!;
+        key["precision"]!.GetValue<double>().Should().BeGreaterThanOrEqualTo(0.8);
+        key["answered"]!.GetValue<int>().Should().BePositive();
+
+        // An empty space has nothing to choose on: the field is reported, with no threshold.
+        using var empty = await client.GetAsync(new Uri("/lowline/intake/report", UriKind.Relative), Ct);
+        var none = JsonNode.Parse(await empty.Content.ReadAsStringAsync(Ct))!.AsArray();
+        none.Should().ContainSingle();
+        none[0]!["key"].Should().BeNull("an empty space earns no threshold, and the part is left out");
+
+        using var missing = await client.GetAsync(new Uri("/lowline/other/report", UriKind.Relative), Ct);
+        missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task A_form_not_defined_is_not_found_and_a_body_that_does_not_read_is_refused()
     {
         using var client = await StartAsync();

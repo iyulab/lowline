@@ -53,7 +53,9 @@ public static class LowlineEndpoints
     /// <c>{ "id", "settledAt" }</c> once the save is stored and learned; <c>POST {prefix}/{form}/fill</c>, when
     /// the host gave a model (<c>UseModel</c>), takes <c>{ "values", "text" }</c> and answers the model's values as
     /// suggestions from elsewhere; <c>POST {prefix}/{form}/judge</c>, with a model too, takes <c>{ "id", "values" }</c>
-    /// and answers, for the decided fields the records could not, what the model judged. A form not defined is 404; input the
+    /// and answers, for the decided fields the records could not, what the model judged; <c>GET {prefix}/{form}/report</c>
+    /// answers, per decided field of the request's memory space, the thresholds chosen and what the replay saw at them
+    /// (<see cref="LowlineForms.ReportAsync"/>) — counts and rates, no record's values. A form not defined is 404; input the
     /// engine refuses is 400 with its message. Authorize the returned group as the host requires.</summary>
     public static RouteGroupBuilder MapLowline(this IEndpointRouteBuilder endpoints, string prefix = "/lowline")
     {
@@ -63,7 +65,25 @@ public static class LowlineEndpoints
         group.MapPost("{form}/settle", context => SettleAsync(context, Form(context)));
         group.MapPost("{form}/fill", context => FillAsync(context, Form(context)));
         group.MapPost("{form}/judge", context => JudgeAsync(context, Form(context)));
+        group.MapGet("{form}/report", context => ReportAsync(context, Form(context)));
         return group;
+    }
+
+    private static async Task ReportAsync(HttpContext context, string form)
+    {
+        var (forms, options) = Resolve(context);
+        if (!options.Forms.ContainsKey(form))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var report = await forms.ReportAsync(new LowlineScope(form, options.Space(context)), context.RequestAborted)
+            .ConfigureAwait(false);
+        await context.Response.WriteAsJsonAsync(
+                new List<FieldReport>(report), LowlineJson.Default.ListFieldReport,
+                cancellationToken: context.RequestAborted)
+            .ConfigureAwait(false);
     }
 
     private static async Task ProposeAsync(HttpContext context, string form)

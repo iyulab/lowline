@@ -6,6 +6,15 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A host reads how far each form's records have come: `LowlineForms.ReportAsync(scope)` and `GET {form}/report`
+  (`MapLowline`) answer, per decided field of the memory space, the thresholds chosen and what the replay saw at them —
+  precision, the share answered, the promise over the latest records, how many checks — or how close it came; the web
+  client has `report(form)` with the `FieldReport` type. Counts and rates only, never a record's values. Before, only
+  the low-level `LowlineEngine.Report` said it, and a host on the routes could not show its people whether a suggestion
+  had earned trust.
+
 ### Changed
 
 - **Breaking (Rust, feature `gil`): the decider is `iyulab-gil` 0.8.** The Gil schema an engine hands out

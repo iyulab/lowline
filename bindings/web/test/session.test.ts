@@ -236,6 +236,17 @@ describe('LowlineClient', () => {
     expect(calls).toEqual([{ url: '/lowline/intake/judge', body: { id: 'r', values: { customer: 'Gamma' } } }])
   })
 
+  it('gets the form’s report without a body', async () => {
+    const calls: { url: string; method?: string; body: unknown }[] = []
+    const owner = { field: 'owner', lookups: 40, similarOffered: false, promiseOver: 0, checks: 0, counting: 'unprompted' }
+    const client = new LowlineClient('/lowline', async (url, init) => {
+      calls.push({ url: String(url), method: init?.method, body: init?.body })
+      return new Response(JSON.stringify([owner]))
+    })
+    expect(await client.report('intake')).toEqual([owner])
+    expect(calls).toEqual([{ url: '/lowline/intake/report', method: 'GET', body: undefined }])
+  })
+
   it('says what a route refused', async () => {
     const client = new LowlineClient('/lowline', async () =>
       new Response(JSON.stringify({ detail: 'draft does not read' }), { status: 400 }),

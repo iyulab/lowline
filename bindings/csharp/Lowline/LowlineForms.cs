@@ -169,6 +169,17 @@ public sealed class LowlineForms : IDisposable
         }
     }
 
+    /// <summary>How far the scope's records have come, per decided field in the form's order — the thresholds chosen and
+    /// what the replay saw at them, or how close it came — see <see cref="LowlineEngine.Report"/>. Starts the scope's
+    /// engine from storage when it is not running, choosing its thresholds if none stand; empty for a form that decides
+    /// nothing.</summary>
+    public async Task<IReadOnlyList<FieldReport>> ReportAsync(
+        LowlineScope scope, CancellationToken cancellationToken = default)
+    {
+        var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
+        return running.Engine.Report ?? [];
+    }
+
     /// <summary>Completes when the scope's thresholds, if being chosen again after a save, are chosen and stored — and
     /// fails as that did. Completes at once when nothing is being chosen.</summary>
     public async Task WhenTunedAsync(LowlineScope scope)
