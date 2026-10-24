@@ -49,8 +49,11 @@ A field's `kind` is `text`, `number`, `date`, `choice`, `flag` or `reference`; a
 values outside its choices too) or `multiple`. Which fields the engine decides — suggests from the records — and which
 it only reads as clues: unless the form says (a field's `role`, `decided` or `observed`, or its `policy`, `offer`,
 `confirm` or `off`), every closed choice field with two choices or more is decided and the rest are clues. A single
-checkbox is never decided that way — it is often a consent, which must not be suggested however consistent the
-records are. Give `"inference": "declared-only"` beside `form` to have only the fields the form declares decided.
+checkbox is never decided that way — it is often a consent, which must not be suggested however consistent the records
+are. A form that declares any field's role is taken at its word: the fields it leaves undeclared are clues, so marking
+one field never quietly turns others on. `"inference": "declared-only"` beside `form` goes one step further, for a
+host whose forms must never have a field decided by inference (an assessment of a person, say): a form that declares
+no role decides nothing, and is refused as having no field to decide.
 
 Decided fields settled together — an industry and an occupation, a class and its detail — name one group (a field's
 `together`, or formdown's `suggest:together`). Where one open field of the group is shown no suggestion, the others

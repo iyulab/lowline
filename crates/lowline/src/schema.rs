@@ -177,7 +177,9 @@ pub enum Inference {
     #[default]
     ClosedChoices,
     /// Only the fields the form declares decided are decided — for a host whose forms hold closed fields that
-    /// must not be suggested however consistent the records are, such as an assessment of a person.
+    /// must not be suggested however consistent the records are, such as an assessment of a person. A form that
+    /// declares any role is read the same either way ([`Form::declares_roles`]); this differs for one that declares
+    /// none, which decides nothing rather than its closed choices.
     DeclaredOnly,
 }
 
