@@ -6,7 +6,16 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Each proposal names its group of fields settled together (`together` — .NET `Proposal.Together`, web `together`),
+  and `Draft::hidden` (.NET `Recheck.Hidden`) answers the fields of a round to hide for a check: each field held back
+  and the open fields of its group. The web element hides them the same way.
+
 ### Fixed
+
+- A field held back for a check no longer leaves the fields settled together with it showing their suggestions. The
+  value checked is counted as one written with nothing in view, which the suggestion beside it made untrue.
 
 - A group of fields settled together no longer hides a sure field behind one that only waits for it. Where the open
   field without a suggestion would be answered once the group's other fields took the values suggested for them — an

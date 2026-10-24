@@ -102,6 +102,13 @@ pub struct Proposal {
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
     pub with: Vec<String>,
+    /// The group of fields settled together the field is in ([`crate::Field::together`]), if any — so a host holding
+    /// a field's answer back for a check holds back its group's too ([`crate::Draft::hidden`]).
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub together: Option<String>,
     /// How often an answer of this kind for this field has been right — the precision the replay expects of the next
     /// answers at the threshold the suggestion was held to (the layer's `promise` in [`crate::gil::FieldReport`]).
     /// `None` with no suggestion, for a judgement from outside the records or a value from elsewhere, and before the
@@ -125,6 +132,7 @@ impl Proposal {
             abstain: Some(why),
             asks: Vec::new(),
             with: Vec::new(),
+            together: None,
             promise: None,
         }
     }
@@ -150,6 +158,7 @@ impl Proposal {
             abstain: None,
             asks: Vec::new(),
             with: Vec::new(),
+            together: None,
             promise: None,
         }
     }

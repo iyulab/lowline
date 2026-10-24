@@ -278,6 +278,7 @@ impl Engine {
             if !with.is_empty() {
                 *p = Proposal {
                     with,
+                    together: p.together.clone(),
                     ..Proposal::abstain(p.field.clone(), crate::Abstain::Together)
                 };
             }

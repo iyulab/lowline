@@ -26,6 +26,8 @@ export interface Proposal {
   asks?: [string, string][]
   /** For `together`: the fields of its group, still open, that are shown no suggestion. */
   with?: string[]
+  /** The group of fields settled together the field is in, if any: a field held back for a check holds its group's back. */
+  together?: string | null
   /**
    * How often an answer of this kind for this field has been right — the replay's precision at the threshold the
    * suggestion was held to. Absent with no suggestion, for a judgement or a value from elsewhere, and before thresholds
@@ -101,11 +103,17 @@ export class Session {
    */
   apply(proposals: Proposal[], values: Values): Round {
     const round: Round = { fieldStates: Object.fromEntries(this.written), prefill: {} }
+    for (const { field, suggestion } of proposals) {
+      if (suggestion && !this.written.has(field)) this.draw(field, suggestion)
+    }
+    // A field held back for a check holds back the open fields of its group: the person settling it with nothing in view
+    // is not shown what is suggested alongside it. Only the held field is the check.
+    const held = proposals.filter((p) => this.draft.held(p.field) !== undefined)
+    const hidden = (p: Proposal) => held.some((h) => h.field === p.field || (h.together != null && h.together === p.together))
     for (const proposal of proposals) {
       const { field, suggestion } = proposal
       if (!suggestion || this.written.has(field)) continue
-      if (this.draw(field, suggestion)) continue
-      if (this.draft.held(field) !== undefined) continue
+      if (hidden(proposal)) continue
       // Turned down, it stays down for this record: neither shown again nor put back in.
       if (this.draft.declined(field, suggestion)) continue
       this.draft.show(field, suggestion)

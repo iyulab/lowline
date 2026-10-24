@@ -85,6 +85,20 @@ describe('Session', () => {
     expect(session.draft.held('owner')).toBe(0.05)
   })
 
+  it('holds back the open fields of a checked field’s group, checking only the field drawn', () => {
+    const industry: Proposal = { ...lee, field: 'industry', suggestion: { value: 'health', origin: 'decider', fit: 'exact' }, together: 'coding' }
+    const occupation: Proposal = { ...lee, field: 'occupation', suggestion: { value: 'nurse', origin: 'decider', fit: 'exact' }, together: 'coding' }
+    const rolls = [0, 0.99, 0.99]
+    const session = new Session('r', {}, 0.05, () => rolls.shift() ?? 1)
+    const round = session.apply([industry, occupation, lee], {})
+    expect(session.draft.held('industry')).toBe(0.05)
+    expect(session.draft.held('occupation')).toBeUndefined()
+    expect(Object.keys(round.fieldStates)).toEqual(['owner'])
+    expect(round.prefill).toEqual({ owner: 'lee' })
+    // Once the checked field is settled it is no longer proposed, and its group is shown again.
+    expect(Object.keys(session.apply([occupation], { industry: 'health' }).fieldStates)).toEqual(['occupation'])
+  })
+
   it('draws a field once: not drawn, it is shown from then on', () => {
     let rolled = 0
     const session = new Session('r', {}, 0.05, () => (rolled++, 0.9))

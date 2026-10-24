@@ -608,6 +608,14 @@ fn fields_settled_together_are_shown_together_or_not_at_all() {
         &none,
     );
     assert_eq!(beta.iter().filter(|p| p.suggestion.is_some()).count(), 2);
+    assert!(beta.iter().all(|p| p.together.as_deref() == Some("assign")));
+    // Drawn to be checked, the owner's answer is held back, and the team's with it: a person settling the owner with
+    // nothing in view is not shown the team suggested alongside it. Only the owner is the check.
+    let mut draft = Draft::new();
+    draft.hold("owner", 0.05);
+    assert_eq!(draft.hidden(&beta), ["owner", "team"]);
+    assert_eq!(draft.held("team"), None);
+    assert!(Draft::new().hidden(&beta).is_empty());
 
     // The team unsure: the sure owner is held back with it, naming the field that held it.
     let acme = saved(&[("customer", "Acme"), ("site", "east")]);

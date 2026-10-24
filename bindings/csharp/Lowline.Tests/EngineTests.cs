@@ -232,6 +232,12 @@ public sealed class EngineTests
         owner.Abstain.Should().Be(Abstain.Together);
         owner.With.Should().Equal("team");
 
+        // Both sure for Beta: drawn to be checked, the owner holds back the team suggested alongside it.
+        var beta = engine.Propose("b", new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["site"] = "west" });
+        beta.Should().OnlyContain(p => p.Together == "g" && p.Suggestion != null);
+        Recheck.Hidden(beta, ["owner"]).Should().Equal("owner", "team");
+        Recheck.Hidden(beta, []).Should().BeEmpty();
+
         // A group only one field is in holds nothing back: the form is refused.
         var lone = () => LowlineEngine.Create(assign.Replace(
             "[\"x\", \"y\", \"z\"], \"evidence\": false, \"together\": \"g\"", "[\"x\", \"y\", \"z\"]"));

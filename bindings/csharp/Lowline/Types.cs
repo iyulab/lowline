@@ -266,6 +266,11 @@ public sealed record Proposal
     /// suggestion, in the form's order.</summary>
     [JsonPropertyName("with")] public IReadOnlyList<string> With { get => field ?? []; init; } = [];
 
+    /// <summary>The group of fields settled together the field is in (the form's <c>suggest:together</c>), if any — so
+    /// a host holding a field's answer back for a check holds back its group's too
+    /// (<see cref="Recheck.Hidden"/>).</summary>
+    [JsonPropertyName("together")] public string? Together { get; init; }
+
     /// <summary>How often an answer of this kind for this field has been right — the precision the replay expects of the
     /// next answers at the threshold the suggestion was held to (<see cref="ThresholdChoice.Promise"/> in the
     /// <see cref="LowlineEngine.Report"/>); <c>null</c> with no suggestion, for a judgement from outside the records or a
@@ -291,6 +296,22 @@ public sealed record Recheck(double Rate = 0.05)
         ArgumentNullException.ThrowIfNull(proposal);
         var checkable = proposal.Suggestion is { Origin: "decider", Fit: "exact" };
         return checkable && Rate > 0 && Rate <= 1 && roll < Rate ? Rate : null;
+    }
+
+    /// <summary>The fields of <paramref name="round"/> whose suggestion is not to be shown for a check: each field in
+    /// <paramref name="held"/>, and the other open fields of its group (<see cref="Proposal.Together"/>) — a person
+    /// settling a field checked with nothing in view is not led by the value suggested for a field settled together
+    /// with it. Only the held field is the check; the others are settled as values entered with nothing in view. In
+    /// <paramref name="round"/>'s order.</summary>
+    public static IReadOnlyList<string> Hidden(IReadOnlyList<Proposal> round, IReadOnlyCollection<string> held)
+    {
+        ArgumentNullException.ThrowIfNull(round);
+        ArgumentNullException.ThrowIfNull(held);
+        var drawn = round.Where(p => held.Contains(p.Field)).ToList();
+        return round
+            .Where(p => drawn.Any(h => h.Field == p.Field || (h.Together is not null && h.Together == p.Together)))
+            .Select(p => p.Field)
+            .ToList();
     }
 }
 

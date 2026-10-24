@@ -82,7 +82,9 @@ answers — a figure to read, not a level of confidence: every suggestion shown 
 One answer in twenty is held back to check it (the element's `rate`): the field shows no suggestion, the person types
 the value, and the value counts toward the field's precision as one written with nothing in view. Without such checks,
 a field suggested well would be settled mostly by taking its suggestions, and its precision would come to rest on the
-suggestions themselves.
+suggestions themselves. A field held back holds back the open fields settled together with it (each proposal names its
+`together` group): the checked value is written with nothing of its group in view. Only the field drawn is the check. A
+host drawing its own checks finds the fields to hide with `Draft::hidden` (Rust) or `Recheck.Hidden` (.NET).
 
 Before putting the engine in front of people, a host can see how it would have done on the records it already has:
 make the lines with `LowlineEngine.Record`, choose thresholds on them with `Choose`, and read `Report`.

@@ -486,6 +486,20 @@ pub fn proposal(
     answer: &gil::decider::Answer,
     allowed: Option<&[String]>,
 ) -> Proposal {
+    let together = (field.policy != Policy::Off)
+        .then(|| field.field.together.clone())
+        .flatten();
+    Proposal {
+        together,
+        ..answered(field, answer, allowed)
+    }
+}
+
+fn answered(
+    field: &ResolvedField,
+    answer: &gil::decider::Answer,
+    allowed: Option<&[String]>,
+) -> Proposal {
     let name = field.field.name.as_str();
     if field.policy == Policy::Off || answer.policy == gil::schema::AttributePolicy::Off {
         return Proposal::abstain(name, Abstain::Off);

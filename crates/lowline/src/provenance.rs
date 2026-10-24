@@ -216,6 +216,26 @@ impl Draft {
         self.fields.get(field).and_then(|track| track.held)
     }
 
+    /// The fields of `round` whose suggestion is not to be shown for a check: each field held back, and the other open
+    /// fields of its group ([`Proposal::together`]) — a person settling a field checked with nothing in view is not
+    /// led by the value suggested for a field settled together with it. Only the held field is the check; the others
+    /// are settled as values entered with nothing in view. In `round`'s order.
+    pub fn hidden(&self, round: &[crate::Proposal]) -> Vec<String> {
+        let held: Vec<&crate::Proposal> = round
+            .iter()
+            .filter(|p| self.held(&p.field).is_some())
+            .collect();
+        round
+            .iter()
+            .filter(|p| {
+                held.iter().any(|h| {
+                    h.field == p.field || (h.together.is_some() && h.together == p.together)
+                })
+            })
+            .map(|p| p.field.clone())
+            .collect()
+    }
+
     /// The person turned down the suggestion in view for the field. Returns false, changing nothing, when no
     /// suggestion has been shown for it.
     pub fn decline(&mut self, field: &str) -> bool {
