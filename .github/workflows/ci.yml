@@ -49,6 +49,12 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo clippy --workspace --all-targets --all-features -- -D warnings
 
+      # The API docs are the reference a host reads: a link that does not resolve fails here.
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --all-features --no-deps
+
       - name: Test
         run: |
           cargo test --workspace
