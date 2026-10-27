@@ -463,6 +463,13 @@ impl Engine {
     /// since the Unix epoch, UTC. Nothing is learned: hand the records to [`Engine::learn`] together, in settlement
     /// order. A field with no value saved is not settled.
     ///
+    /// `draft`, when the host has an account of what was shown, is read as [`Engine::settle`] reads it, for a record a
+    /// person settled: the answer in view for each field, the layer and promise reported for it, the time to settle it,
+    /// the order values arrived in, who settled it and the batch. Whatever it does not report is left out of the record;
+    /// `settled` and `checks` stay the account of how each field was settled. The record is not
+    /// stamped with the form's version: the engine knows the version it holds now, not the one the record was settled
+    /// under.
+    ///
     /// The error names the first thing the form does not hold: a value for a field it does not have, several values
     /// for a field that takes one, a settlement or check for a field it does not decide, a check drawn with a
     /// probability outside (0, 1], a field both settled and checked, or a check said in `settled` — it carries the
@@ -473,6 +480,7 @@ impl Engine {
         saved: &BTreeMap<String, FieldValue>,
         settled: &BTreeMap<String, SettlementKind>,
         checks: &BTreeMap<String, f64>,
+        draft: Option<&Draft>,
         settled_at: i64,
     ) -> Result<Record, String> {
         self.check_saved(id, saved, false)?;
@@ -536,7 +544,11 @@ impl Engine {
                 }
             })
             .collect();
-        Ok(record(id, &self.fields, saved, &settlements, settled_at))
+        let mut made = record(id, &self.fields, saved, &settlements, settled_at);
+        if let Some(draft) = draft {
+            annotate(&mut made, draft, &settlements, SettledBy::Person);
+        }
+        Ok(made)
     }
 
     /// Settles the record `id` as saved — its `saved` values, and the `draft` that kept what was shown for it and what

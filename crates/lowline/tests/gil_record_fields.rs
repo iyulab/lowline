@@ -258,3 +258,53 @@ fn a_record_drawn_for_audit_is_settled_again_by_another_person_as_checks() {
     let owner = &gil::usage::usage(&[first, second])["owner"];
     assert_eq!((owner.checked, owner.checked_right), (1, 1));
 }
+
+#[test]
+fn a_record_made_elsewhere_carries_what_the_draft_reported_without_the_form_version() {
+    let mut intake = intake();
+    let typed = saved(&[("customer", "Acme")]);
+    let shown = intake.propose("elsewhere", &typed, &BTreeMap::new());
+    let proposal = &shown[0];
+
+    let mut draft = Draft::new();
+    draft.reach("owner", 4_000);
+    assert!(draft.show_proposed(proposal));
+    draft.save_at(6_500);
+
+    let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
+    let settled = BTreeMap::from([("owner".to_owned(), lowline::SettlementKind::Accept)]);
+    let made = intake
+        .record(
+            "elsewhere",
+            &values,
+            &settled,
+            &BTreeMap::new(),
+            Some(&draft),
+            40,
+        )
+        .unwrap();
+    assert_eq!(intake.settled(), 40, "nothing is learned");
+
+    assert_eq!(made.suggested["owner"], "kim");
+    assert_eq!(made.sources["owner"], gil::decider::Source::KeyMemory);
+    assert_eq!(made.promises.get("owner"), proposal.promise.as_ref());
+    assert_eq!(made.settle_ms["owner"], 2_500);
+    assert_eq!(made.form_version, None);
+
+    // The same draft settled by the engine gives the same line, but for the version.
+    let settled_here = intake
+        .settle("elsewhere", &values, &draft, SettledBy::Person, 40)
+        .unwrap();
+    let mut without_version = settled_here.clone();
+    without_version.form_version = None;
+    assert_eq!(
+        serde_json::to_value(&made).unwrap(),
+        serde_json::to_value(&without_version).unwrap()
+    );
+
+    // Without a draft the line is what it was.
+    let plain = intake
+        .record("plain", &values, &settled, &BTreeMap::new(), None, 41)
+        .unwrap();
+    assert!(plain.suggested.is_empty() && plain.sources.is_empty() && plain.promises.is_empty());
+}

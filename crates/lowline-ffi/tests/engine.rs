@@ -454,6 +454,7 @@ fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
             s(&saved),
             s(r#"{"owner":"Accept"}"#),
             s(""),
+            s(""),
             7,
             &mut len,
         )
@@ -474,6 +475,7 @@ fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
             s(&saved),
             s(r#"{"customer":"Enter"}"#),
             s(""),
+            s(""),
             8,
             &mut len,
         )
@@ -489,6 +491,7 @@ fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
             s(&saved),
             s(""),
             s(r#"{"owner":0.05}"#),
+            s(""),
             9,
             &mut len,
         )

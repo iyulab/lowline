@@ -72,6 +72,35 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void A_record_settled_elsewhere_says_what_its_draft_reports_but_not_the_form_version()
+    {
+        var definition = JsonNode.Parse(Intake)!.AsObject();
+        definition["formVersion"] = "owners-2";
+        using var engine = LowlineEngine.Create(definition.ToJsonString());
+        const string draft = """
+            {
+              "opened": {},
+              "fields": { "owner": { "shown": { "value": "lee" }, "declined": false, "layer": "key", "promise": 0.9, "at": 2001 } },
+              "saved_at": 4000
+            }
+            """;
+        var made = engine.Record(
+            "elsewhere",
+            new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" },
+            new Dictionary<string, SettlementKind> { ["owner"] = SettlementKind.Accept },
+            Start,
+            draft: draft);
+
+        engine.Settled.Should().Be(0);
+        var record = JsonNode.Parse(made.Json)!;
+        record["suggested"]!["owner"]!.GetValue<string>().Should().Be("lee");
+        record["sources"]!["owner"]!.GetValue<string>().Should().Be("KeyMemory");
+        record["promises"]!["owner"]!.GetValue<double>().Should().Be(0.9);
+        record["settle_ms"]!["owner"]!.GetValue<long>().Should().Be(1999);
+        record["form_version"].Should().BeNull("the engine knows the version it holds now, not the one the record was settled under");
+    }
+
+    [Fact]
     public void One_field_is_asked_for_alone_and_while_typed_into()
     {
         var stored = Alternating(40);

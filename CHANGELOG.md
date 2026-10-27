@@ -6,6 +6,16 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `Engine::record` takes the account of what was shown, `draft: Option<&Draft>`, after `checks`, so a host that
+  keeps its records somewhere of its own can give a record the same detail `Engine::settle` writes: the answer in view,
+  its layer and promise, the time to settle, the order values arrived in, who settled it and the batch. What the draft
+  does not report is left out. Unlike `settle`, `record` does not stamp the form's version — the engine knows the one it
+  holds now, not the one the record was settled under. Pass `None` for the record it gave before. The C ABI is version 5
+  (`lowline_engine_record` takes `draft` after `checks`; empty text for none), and .NET `LowlineEngine.Record` takes an
+  optional `draft` JSON text last, as `Settle` does.
+
 ## [0.8.0] - 2026-10-27
 
 ### Added

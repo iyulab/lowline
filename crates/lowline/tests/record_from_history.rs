@@ -39,7 +39,7 @@ fn saved() -> BTreeMap<String, FieldValue> {
 fn a_record_with_nothing_said_of_it_is_the_record_a_person_saved_with_nothing_in_view() {
     let mut engine = engine();
     let made = engine
-        .record("r1", &saved(), &BTreeMap::new(), &BTreeMap::new(), 5)
+        .record("r1", &saved(), &BTreeMap::new(), &BTreeMap::new(), None, 5)
         .unwrap();
     assert_eq!(engine.settled(), 0, "nothing is learned");
     let settled = engine
@@ -61,7 +61,7 @@ fn how_a_field_was_settled_is_kept() {
     let engine = engine();
     let settled = BTreeMap::from([("owner".to_owned(), SettlementKind::Accept)]);
     let made = engine
-        .record("r1", &saved(), &settled, &BTreeMap::new(), 5)
+        .record("r1", &saved(), &settled, &BTreeMap::new(), None, 5)
         .unwrap();
     assert_eq!(
         made.settlements["owner"],
@@ -72,7 +72,7 @@ fn how_a_field_was_settled_is_kept() {
     let mut empty = saved();
     empty.remove("owner");
     let made = engine
-        .record("r2", &empty, &settled, &BTreeMap::new(), 6)
+        .record("r2", &empty, &settled, &BTreeMap::new(), None, 6)
         .unwrap();
     assert!(!made.settlements.contains_key("owner"));
 }
@@ -82,7 +82,7 @@ fn a_field_held_back_for_a_check_is_settled_as_one_with_its_probability() {
     let mut engine = engine();
     let checks = BTreeMap::from([("owner".to_owned(), 0.05)]);
     let made = engine
-        .record("r1", &saved(), &BTreeMap::new(), &checks, 5)
+        .record("r1", &saved(), &BTreeMap::new(), &checks, None, 5)
         .unwrap();
     assert_eq!(
         made.settlements["owner"],
@@ -108,7 +108,7 @@ fn what_the_form_does_not_hold_is_refused() {
     stray.insert("note".to_owned(), FieldValue::from("x"));
     assert!(
         engine
-            .record("r1", &stray, &BTreeMap::new(), &BTreeMap::new(), 1)
+            .record("r1", &stray, &BTreeMap::new(), &BTreeMap::new(), None, 1)
             .unwrap_err()
             .contains("'note'")
     );
@@ -120,7 +120,7 @@ fn what_the_form_does_not_hold_is_refused() {
     );
     assert!(
         engine
-            .record("r1", &several, &BTreeMap::new(), &BTreeMap::new(), 1)
+            .record("r1", &several, &BTreeMap::new(), &BTreeMap::new(), None, 1)
             .unwrap_err()
             .contains("takes one")
     );
@@ -128,7 +128,7 @@ fn what_the_form_does_not_hold_is_refused() {
     let observed = BTreeMap::from([("customer".to_owned(), SettlementKind::Enter)]);
     assert!(
         engine
-            .record("r1", &saved(), &observed, &BTreeMap::new(), 1)
+            .record("r1", &saved(), &observed, &BTreeMap::new(), None, 1)
             .unwrap_err()
             .contains("does not decide")
     );
@@ -136,7 +136,7 @@ fn what_the_form_does_not_hold_is_refused() {
     let check = BTreeMap::from([("owner".to_owned(), SettlementKind::Check)]);
     assert!(
         engine
-            .record("r1", &saved(), &check, &BTreeMap::new(), 1)
+            .record("r1", &saved(), &check, &BTreeMap::new(), None, 1)
             .unwrap_err()
             .contains("give it in the checks")
     );
@@ -144,7 +144,7 @@ fn what_the_form_does_not_hold_is_refused() {
     let refused = |checks: &[(&str, f64)], settled: &BTreeMap<String, SettlementKind>| {
         let checks = checks.iter().map(|(f, p)| (f.to_string(), *p)).collect();
         engine
-            .record("r1", &saved(), settled, &checks, 1)
+            .record("r1", &saved(), settled, &checks, None, 1)
             .unwrap_err()
     };
     assert!(refused(&[("customer", 0.05)], &BTreeMap::new()).contains("does not decide"));

@@ -385,7 +385,10 @@ public sealed unsafe class LowlineEngine : IDisposable
     /// <paramref name="saved"/> values, how each decided field was settled (<paramref name="settled"/>; a decided field
     /// left out was settled by a person with nothing in view), the fields whose answer was held back for a check while
     /// it was written, each with the probability it was drawn with (<paramref name="checks"/> — settled as
-    /// <see cref="SettlementKind.Check"/>) and when. Nothing is learned: hand the records to <see cref="Learn"/>
+    /// <see cref="SettlementKind.Check"/>), when, and — as <see cref="Settle"/> reads it — the <paramref name="draft"/>
+    /// account of what was shown, which gives the record the answer in view, its layer and promise, the time to settle,
+    /// the order values arrived in and who settled it; what it does not report is left out, and the record is not
+    /// stamped with the form's version. Nothing is learned: hand the records to <see cref="Learn"/>
     /// together, in settlement order. A field with no value saved is not settled.</summary>
     /// <exception cref="ArgumentException">A value, settlement or check the form does not hold; a check said in
     /// <paramref name="settled"/>, which carries its probability in <paramref name="checks"/>.</exception>
@@ -394,7 +397,8 @@ public sealed unsafe class LowlineEngine : IDisposable
         IReadOnlyDictionary<string, FieldValue> saved,
         IReadOnlyDictionary<string, SettlementKind>? settled,
         DateTimeOffset settledAt,
-        IReadOnlyDictionary<string, double>? checks = null)
+        IReadOnlyDictionary<string, double>? checks = null,
+        string? draft = null)
     {
         var idText = new Utf8(id);
         var savedText = new Utf8(Values(saved));
@@ -405,14 +409,15 @@ public sealed unsafe class LowlineEngine : IDisposable
         var checksText = new Utf8(checks is null
             ? null
             : JsonSerializer.Serialize(new Dictionary<string, double>(checks), LowlineJson.Default.DictionaryStringDouble));
+        var draftText = new Utf8(draft);
         nuint length;
         string json;
         using (Read())
         {
-            fixed (byte* i = idText.Bytes, s = savedText.Bytes, k = settledText.Bytes, c = checksText.Bytes)
+            fixed (byte* i = idText.Bytes, s = savedText.Bytes, k = settledText.Bytes, c = checksText.Bytes, d = draftText.Bytes)
             {
                 Native.Check(Native.EngineRecord(
-                    _handle, idText.At(i), savedText.At(s), settledText.At(k), checksText.At(c), Ticks(settledAt),
+                    _handle, idText.At(i), savedText.At(s), settledText.At(k), checksText.At(c), draftText.At(d), Ticks(settledAt),
                     &length));
             }
 
