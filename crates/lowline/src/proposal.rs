@@ -118,6 +118,13 @@ pub struct Proposal {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub promise: Option<f64>,
+    /// Whether the field takes several values. Such a field is settled as a set, which cannot be a check — a check is
+    /// one value written with the answer held back — so it is never drawn for one ([`Recheck::draw`]).
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "std::ops::Not::not")
+    )]
+    pub several: bool,
 }
 
 impl Proposal {
@@ -134,6 +141,7 @@ impl Proposal {
             with: Vec::new(),
             together: None,
             promise: None,
+            several: false,
         }
     }
 
@@ -160,6 +168,7 @@ impl Proposal {
             with: Vec::new(),
             together: None,
             promise: None,
+            several: false,
         }
     }
 }
@@ -254,7 +263,8 @@ impl Recheck {
         let checkable = proposal.suggestion.as_ref().is_some_and(|s| {
             s.origin == crate::provenance::Origin::Decider && s.fit == crate::provenance::Fit::Exact
         });
-        (checkable && self.rate > 0.0 && self.rate <= 1.0 && roll < self.rate).then_some(self.rate)
+        (checkable && !proposal.several && self.rate > 0.0 && self.rate <= 1.0 && roll < self.rate)
+            .then_some(self.rate)
     }
 }
 
@@ -318,6 +328,11 @@ mod recheck_tests {
             recheck.draw(&Proposal::abstain("owner", Abstain::Unsure), 0.0),
             None
         );
+        let several = Proposal {
+            several: true,
+            ..kim()
+        };
+        assert_eq!(recheck.draw(&several, 0.0), None, "a set cannot be a check");
         assert_eq!(Recheck::default().rate, 0.05);
     }
 }

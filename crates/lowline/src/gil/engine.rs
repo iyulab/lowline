@@ -153,12 +153,27 @@ impl Engine {
         self.tuned = match tuned {
             Some(mut tuned) => match tuned.tuning.apply(&self.schema) {
                 Ok(schema) => {
-                    self.schema = schema;
-                    // A tuning stored before reports said what they were chosen on says it in the tuning.
-                    for field in &mut tuned.report {
-                        field.chosen_on = tuned.tuning.settled;
+                    // A tuning stored before a class could be promised by the similar records that back it trusts
+                    // them for a class without saying how often they are right: chosen again, as one never chosen.
+                    let unpromised = tuned.report.iter().any(|field| {
+                        field.coarse_similar.is_none()
+                            && schema.attributes().iter().any(|a| {
+                                a.name == field.field
+                                    && a.coarse
+                                        .as_ref()
+                                        .is_some_and(|c| c.memory_threshold.is_some())
+                            })
+                    });
+                    if unpromised {
+                        None
+                    } else {
+                        self.schema = schema;
+                        // A tuning stored before reports said what they were chosen on says it in the tuning.
+                        for field in &mut tuned.report {
+                            field.chosen_on = tuned.tuning.settled;
+                        }
+                        Some(tuned)
                     }
-                    Some(tuned)
                 }
                 Err(_) => None,
             },

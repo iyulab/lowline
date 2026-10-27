@@ -164,6 +164,7 @@ public sealed class EngineTests
 
         recheck.Draw(shown, 0.05).Should().Be(0.1);
         recheck.Draw(shown, 0.1).Should().BeNull();
+        recheck.Draw(shown with { Several = true }, 0).Should().BeNull();
         new Recheck().Rate.Should().Be(0.05);
         // A class, a value from elsewhere and a field shown nothing are left as they are.
         recheck.Draw(shown with { Suggestion = shown.Suggestion! with { Fit = "prefix" } }, 0).Should().BeNull();

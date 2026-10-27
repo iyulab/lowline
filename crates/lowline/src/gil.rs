@@ -559,6 +559,7 @@ pub fn proposal(
         .flatten();
     Proposal {
         together,
+        several: field.field.multiple,
         ..answered(field, answer, allowed)
     }
 }

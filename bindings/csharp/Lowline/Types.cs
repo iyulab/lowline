@@ -276,6 +276,10 @@ public sealed record Proposal
     /// <see cref="LowlineEngine.Report"/>); <c>null</c> with no suggestion, for a judgement from outside the records or a
     /// value from elsewhere, and before the thresholds were chosen.</summary>
     [JsonPropertyName("promise")] public double? Promise { get; init; }
+
+    /// <summary>Whether the field takes several values. Such a field is settled as a set, which cannot be a check, so
+    /// <see cref="Recheck.Draw(Proposal, double)"/> never draws it.</summary>
+    [JsonPropertyName("several")] public bool Several { get; init; }
 }
 
 /// <summary>How often a decided field whose answer would be shown is drawn instead to be checked: its answer is held
@@ -290,11 +294,12 @@ public sealed record Recheck(double Rate = 0.05)
     /// <summary>Whether to hold back the answer <paramref name="proposal"/> shows, given <paramref name="roll"/> — a
     /// number drawn uniformly from [0, 1) by the host, for this field of this record, before looking at the answer.
     /// Answers the probability the field was drawn with, or <c>null</c> when it is not drawn. Only a value the decider
-    /// suggests is drawn: a class, a suggestion from elsewhere and a field shown nothing are left as they are.</summary>
+    /// suggests is drawn: a class, a suggestion from elsewhere, a field shown nothing and a field that takes several values
+    /// (a set cannot be a check) are left as they are.</summary>
     public double? Draw(Proposal proposal, double roll)
     {
         ArgumentNullException.ThrowIfNull(proposal);
-        var checkable = proposal.Suggestion is { Origin: "decider", Fit: "exact" };
+        var checkable = proposal is { Several: false, Suggestion: { Origin: "decider", Fit: "exact" } };
         return checkable && Rate > 0 && Rate <= 1 && roll < Rate ? Rate : null;
     }
 

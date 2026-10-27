@@ -15,6 +15,12 @@ All notable changes to this project are written here. The format follows
 
 ### Fixed
 
+- A field that takes several values is never drawn for a check. It is settled as a set, which cannot be a check, so
+  the answer was held back from the person for nothing and the record said a suggestion was in view that was not.
+  `Proposal` gains `several` (`Several` in .NET and the web client); `Recheck::draw` and the element leave such a field
+  alone.
+- A tuning stored before a class could be promised by the similar records is chosen again when the engine restores it,
+  rather than trusted with a class that carries no promise.
 - A class suggested from the similar records layer (a field with a coarse level) now carries that layer's promise; it
   carried the key layer's, or none where the keys back no class. `FieldReport` gains `coarse_similar` (`coarseSimilar` in
   .NET and the web client) — the threshold at which the similar records layer is trusted for the class.

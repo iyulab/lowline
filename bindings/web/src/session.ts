@@ -34,6 +34,8 @@ export interface Proposal {
    * were chosen.
    */
   promise?: number
+  /** Whether the field takes several values: it is settled as a set, which cannot be a check, so none is drawn for it. */
+  several?: boolean
 }
 
 /** What a field shows, as formdown's `fieldStates` takes it. */
@@ -252,7 +254,8 @@ export class Session {
     const { field, suggestion } = proposal
     if (!suggestion) return false
     if (this.drawn.has(field)) return this.draft.held(field) !== undefined
-    const checkable = (suggestion.origin ?? 'decider') === 'decider' && (suggestion.fit ?? 'exact') === 'exact'
+    const checkable =
+      !proposal.several && (suggestion.origin ?? 'decider') === 'decider' && (suggestion.fit ?? 'exact') === 'exact'
     if (!checkable) return false
     this.drawn.add(field)
     if (this.rate > 0 && this.rate <= 1 && this.random() < this.rate) {

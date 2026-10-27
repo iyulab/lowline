@@ -115,6 +115,13 @@ describe('Session', () => {
     expect(session.draft.shown('owner')?.fit).toBe('prefix')
   })
 
+  it('never holds back a field that takes several values — a set cannot be a check', () => {
+    const session = new Session('r', {}, 1, () => 0)
+    session.apply([{ ...lee, several: true }], {})
+    expect(session.draft.held('owner')).toBeUndefined()
+    expect(session.draft.shown('owner')?.value).toBe('lee')
+  })
+
   it('starts the next record from the saved values', () => {
     const session = new Session('r', {}, 0.05, never, undefined, () => 40)
     session.apply([lee], {})

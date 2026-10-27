@@ -308,6 +308,16 @@ fn a_class_the_similar_records_back_carries_their_promise() {
         ("E", Fit::Prefix, Some(lowline::Layer::Similar))
     );
     assert_eq!(shown.promise, Some(class.promise));
+
+    // A tuning stored before the similar records could promise a class is chosen again, not trusted without a promise.
+    let mut stored = engine.choose(&records);
+    for field in &mut stored.report {
+        field.coarse_similar = None;
+    }
+    let mut again = Engine::new("faults", engine.fields().to_vec(), Tune::default()).unwrap();
+    again.learn(&records);
+    again.restore(Some(stored));
+    assert_eq!(again.stale(), Some(lowline::gil::Stale::Untuned));
 }
 
 #[test]
@@ -354,5 +364,6 @@ fn a_declared_field_taking_several_values_is_suggested_on_every_value_settled() 
     let shown = engine
         .propose_field("new", &values, &BTreeMap::new(), "tags", None)
         .unwrap();
+    assert!(shown.several, "a set cannot be drawn for a check");
     assert_eq!(shown.suggestion.map(|s| s.value).as_deref(), Some("a"));
 }
