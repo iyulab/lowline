@@ -29,7 +29,9 @@ use gil::decider::ExternalCandidate;
 use gil::schema::Record;
 use gil::tuning::Tuning;
 use lowline::gil::{Engine, Tune, Tuned};
-use lowline::{Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy, SettlementKind};
+use lowline::{
+    Attestation, Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy, SettlementKind,
+};
 use serde::Deserialize;
 
 pub use ffi_support::Utf8 as LowlineStr;
@@ -71,7 +73,7 @@ pub const LOWLINE_BROKEN: i32 = ffi_support::BROKEN;
 
 /// The version of this interface — its functions and statuses, and the JSON they read and write. It changes whenever
 /// a binding built for one version would misread the library of another.
-pub const LOWLINE_ABI_VERSION: u32 = 5;
+pub const LOWLINE_ABI_VERSION: u32 = 6;
 
 /// [`lowline_engine_settle`]: a person saved the record.
 pub const LOWLINE_SETTLED_BY_PERSON: u8 = 0;
@@ -603,7 +605,10 @@ pub unsafe extern "C" fn lowline_engine_offer(
 }
 
 /// Settles record `id` as saved — its `saved` values (as [`lowline_engine_propose`] reads them) and `draft`, the JSON
-/// of the account kept while it was written (empty text for a record written with nothing shown) — `by` a person or
+/// of the account kept while it was written (empty text for a record written with nothing shown) — and `attest`,
+/// what the host vouches for in place of the draft's own word on who settled it, its batch and which fields were drawn
+/// for a check (`{ "by", "batch", "held": { field: probability } }`; empty text leaves the draft's word standing, and
+/// given at all it replaces the draft's `by`, `batch` and checks even where it names none) — `by` a person or
 /// the application (`LOWLINE_SETTLED_BY_…`) at `settled_at`, learns it, and gives back the record to store: one Gil
 /// record as JSON, the line [`lowline_engine_learn`] reads back. Refused, with nothing learned, for a value the form does
 /// not hold: a field it does not have, several values for one that takes one, a value none of a choice field's choices.
@@ -617,6 +622,7 @@ pub unsafe extern "C" fn lowline_engine_settle(
     id: LowlineStr,
     saved: LowlineStr,
     draft: LowlineStr,
+    attest: LowlineStr,
     by: u8,
     settled_at: i64,
     result_len: *mut usize,
@@ -627,11 +633,16 @@ pub unsafe extern "C" fn lowline_engine_settle(
             let id = text(id, "id")?;
             let saved: BTreeMap<String, FieldValue> = json(text(saved, "saved")?, "saved")?;
             let draft = text(draft, "draft")?;
-            let draft: Draft = if draft.trim().is_empty() {
+            let mut draft: Draft = if draft.trim().is_empty() {
                 Draft::new()
             } else {
                 json(draft, "draft")?
             };
+            let attest = text(attest, "attest")?;
+            if !attest.trim().is_empty() {
+                let attestation: Attestation = json(attest, "attest")?;
+                draft.attest(&attestation).map_err(input)?;
+            }
             let by = match by {
                 LOWLINE_SETTLED_BY_PERSON => SettledBy::Person,
                 LOWLINE_SETTLED_BY_APPLICATION => SettledBy::Application,

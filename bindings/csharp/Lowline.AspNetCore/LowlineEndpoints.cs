@@ -28,6 +28,12 @@ public sealed class LowlineWebOptions : LowlineOptions
     /// learned. Left <c>null</c>, the request's <c>saved</c> is the save: the route stores and learns it.</summary>
     public Func<HttpContext, string, string, CancellationToken, ValueTask<IReadOnlyDictionary<string, FieldValue>?>>?
         Saved { get; set; }
+
+    /// <summary>What the host vouches for about the record a request settles — who settled it as the host knows them
+    /// (an opaque id, not a name), its batch, and the fields the host drew for a check with the probability each was
+    /// drawn with (<see cref="Attestation"/>). When given, it replaces the draft's own word on those, which the form
+    /// being measured wrote; left <c>null</c>, the draft's stands.</summary>
+    public Func<HttpContext, string, string, CancellationToken, ValueTask<Attestation?>>? Attest { get; set; }
 }
 
 /// <summary>Putting a host's forms behind two routes.</summary>
@@ -152,8 +158,11 @@ public static class LowlineEndpoints
             var draft = request.Draft is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } kept
                 ? kept.GetRawText()
                 : null;
+            var attestation = options.Attest is { } attest
+                ? await attest(context, form, request.Id, context.RequestAborted).ConfigureAwait(false)
+                : null;
             var settled = await forms.SettleAsync(
-                    scope, request.Id, saved, draft, SettledBy.Person, context.RequestAborted)
+                    scope, request.Id, saved, draft, SettledBy.Person, attestation, context.RequestAborted)
                 .ConfigureAwait(false);
             await context.Response.WriteAsJsonAsync(
                     new SettleResponse(settled.Id, settled.SettledAt), WebJson.Default.SettleResponse,

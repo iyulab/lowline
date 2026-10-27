@@ -72,6 +72,33 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void The_hosts_attestation_replaces_the_settler_batch_and_checks_the_draft_reports()
+    {
+        using var engine = LowlineEngine.Create(Intake);
+        var saved = new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" };
+        // What the screen says of itself: who settled and the batch, and nothing drawn for a check.
+        const string draft = """{ "opened": {}, "fields": {}, "by": "screen-1", "batch": "screen-batch" }""";
+
+        var stands = JsonNode.Parse(engine.Settle("a", saved, draft, SettledBy.Person, Start).Json)!;
+        stands["settled_by"]!["owner"]!.GetValue<string>().Should().Be("screen-1");
+
+        var attested = JsonNode.Parse(engine.Settle(
+            "b", saved, draft, SettledBy.Person, Start,
+            new Attestation { Settler = "server-9", Held = new Dictionary<string, double> { ["owner"] = 0.05 } }).Json)!;
+        attested["settled_by"]!["owner"]!.GetValue<string>().Should().Be("server-9");
+        attested["batch"].Should().BeNull("the host vouched for no batch, and the screen's is not kept");
+        attested["settlements"]!["owner"]!.GetValue<string>().Should().Be("Check");
+        attested["probabilities"]!["owner"]!.GetValue<double>().Should().Be(0.05);
+
+        var settled = engine.Settled;
+        var refused = () => engine.Settle(
+            "c", saved, draft, SettledBy.Person, Start,
+            new Attestation { Held = new Dictionary<string, double> { ["owner"] = 1.5 } });
+        refused.Should().Throw<ArgumentException>().WithMessage("*probability*");
+        engine.Settled.Should().Be(settled, "nothing is learned from a refused save");
+    }
+
+    [Fact]
     public void A_record_settled_elsewhere_says_what_its_draft_reports_but_not_the_form_version()
     {
         var definition = JsonNode.Parse(Intake)!.AsObject();

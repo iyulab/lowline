@@ -227,6 +227,35 @@ pub struct Draft {
     batch: Option<String>,
 }
 
+/// What the host vouches for about a record, apart from the account the form kept.
+///
+/// A draft is what the form being measured says it showed and did — and with it who settled the record, the batch, and
+/// which fields were drawn for a check. A host that takes settlements on a server and cannot take those from the
+/// screen says them itself: the person's id as the host knows them, the batch the host put the record in, the fields the
+/// host drew for a check with the probability each was drawn with ([`Draft::attest`]).
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Attestation {
+    /// Who settled the record, as an opaque id the host gives — one person, one id; not a name.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub by: Option<String>,
+    /// The batch the record was settled in.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub batch: Option<String>,
+    /// The fields drawn for a check, each with the probability it was drawn with — above 0 and at most 1.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "BTreeMap::is_empty")
+    )]
+    pub held: BTreeMap<String, f64>,
+}
+
 impl Draft {
     /// A new record, empty.
     pub fn new() -> Self {
@@ -344,6 +373,44 @@ impl Draft {
     /// The record is settled in the batch `id`, together with the records that came at once from the same source.
     pub fn in_batch(&mut self, id: impl Into<String>) {
         self.batch = Some(id.into());
+    }
+
+    /// Puts the host's word in place of the form's for who settled the record, its batch and which fields were
+    /// drawn for a check: the draft's own `by`, `batch` and every field's check are dropped — an attestation that
+    /// says none says none — and `attestation`'s stand. A field the host says was drawn for a check is held back
+    /// with its probability, the answer the form reported for it — held back, or shown, which the host's word makes
+    /// the one held back — kept as what the record says was not shown. A field the form held back that the host did
+    /// not draw is no check, and the answer it held back is dropped with it. The times, layers, promises and order the form
+    /// reported are left as they are.
+    ///
+    /// # Errors
+    /// When a probability is not above 0 and at most 1; the draft is left as it was.
+    pub fn attest(&mut self, attestation: &Attestation) -> Result<(), String> {
+        for (field, probability) in &attestation.held {
+            if !(*probability > 0.0 && *probability <= 1.0) {
+                return Err(format!(
+                    "'{field}' is attested as drawn for a check with {probability}, not a probability above 0 and at most 1"
+                ));
+            }
+        }
+        self.by.clone_from(&attestation.by);
+        self.batch.clone_from(&attestation.batch);
+        for (field, track) in &mut self.fields {
+            track.held = None;
+            if !attestation.held.contains_key(field) {
+                track.withheld = None;
+            }
+        }
+        for (field, probability) in &attestation.held {
+            let track = self.fields.entry(field.clone()).or_default();
+            if track.withheld.is_none() {
+                track.withheld = track.shown.take();
+            }
+            track.shown = None;
+            track.declined = false;
+            track.held = Some(*probability);
+        }
+        Ok(())
     }
 
     /// The answer in view for the field: the suggestion shown, or the one held back for a check.

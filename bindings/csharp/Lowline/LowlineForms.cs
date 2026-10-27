@@ -166,13 +166,14 @@ public sealed class LowlineForms : IDisposable
         IReadOnlyDictionary<string, FieldValue> saved,
         string? draft,
         SettledBy by = SettledBy.Person,
+        Attestation? attestation = null,
         CancellationToken cancellationToken = default)
     {
         var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
         await running.Saving.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var record = running.Engine.Settle(id, saved, draft, by, _time.GetUtcNow());
+            var record = running.Engine.Settle(id, saved, draft, by, _time.GetUtcNow(), attestation);
             await _store.AddRecordAsync(scope, record, cancellationToken).ConfigureAwait(false);
             if (running.Engine.Stale is not null)
             {

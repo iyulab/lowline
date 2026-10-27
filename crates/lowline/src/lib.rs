@@ -38,6 +38,8 @@ mod value;
 pub use formdown::{FormdownField, FormdownSchema};
 pub use policy::{ParsePolicyError, Policy};
 pub use proposal::{Abstain, Audit, Basis, Layer, Proposal, Recheck};
-pub use provenance::{Draft, Fit, Origin, SettledBy, Settlement, SettlementKind, Suggestion};
+pub use provenance::{
+    Attestation, Draft, Fit, Origin, SettledBy, Settlement, SettlementKind, Suggestion,
+};
 pub use schema::{Field, FieldKind, Form, Inference, ResolvedField, Role, SchemaError};
 pub use value::FieldValue;

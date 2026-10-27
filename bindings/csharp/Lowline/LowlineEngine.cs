@@ -350,28 +350,35 @@ public sealed unsafe class LowlineEngine : IDisposable
     /// kept while it was written (what was shown, taken, turned down; <c>null</c> for a record written with nothing
     /// shown) — learns it, and gives back the record to store. A value the form does not hold (a field it does not have,
     /// several values for one that takes one, a value none of a choice field's choices) is refused with
-    /// <see cref="ArgumentException"/>, and nothing is learned.</summary>
+    /// <see cref="ArgumentException"/>, and nothing is learned. <paramref name="attestation"/>, when the host
+    /// vouches for who settled the record, its batch or which fields were drawn for a check, replaces the draft's own
+    /// word on them — the draft is what the form says of itself, which a host that cannot trust the screen does not
+    /// take — and a probability that is none is refused as a value the form does not hold is.</summary>
     public SettledRecord Settle(
         string id,
         IReadOnlyDictionary<string, FieldValue> saved,
         string? draft,
         SettledBy by,
-        DateTimeOffset settledAt)
+        DateTimeOffset settledAt,
+        Attestation? attestation = null)
     {
         var idText = new Utf8(id);
         var savedText = new Utf8(JsonSerializer.Serialize(new Dictionary<string, FieldValue>(saved),
             LowlineJson.Default.DictionaryStringFieldValue));
         var draftText = new Utf8(draft);
+        var attestText = new Utf8(attestation is null
+            ? null
+            : JsonSerializer.Serialize(attestation, LowlineJson.Default.Attestation));
         var ticks = Ticks(settledAt);
         var party = by == SettledBy.Person ? Native.SettledByPerson : Native.SettledByApplication;
         nuint length;
         string json;
         using (Write())
         {
-            fixed (byte* i = idText.Bytes, s = savedText.Bytes, d = draftText.Bytes)
+            fixed (byte* i = idText.Bytes, s = savedText.Bytes, d = draftText.Bytes, a = attestText.Bytes)
             {
                 Native.Check(Native.EngineSettle(
-                    _handle, idText.At(i), savedText.At(s), draftText.At(d), party, ticks, &length));
+                    _handle, idText.At(i), savedText.At(s), draftText.At(d), attestText.At(a), party, ticks, &length));
             }
 
             json = Native.Result(length);

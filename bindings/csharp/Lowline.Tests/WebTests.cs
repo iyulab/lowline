@@ -212,6 +212,31 @@ public sealed class WebTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_host_that_vouches_for_the_settler_has_the_drafts_word_on_who_settled_replaced()
+    {
+        await Seed("seoul");
+        using var client = await StartAsync(o => o.Attest = (_, form, id, _) =>
+            ValueTask.FromResult<Attestation?>(new Attestation { Settler = $"{form}-person-1" }));
+
+        // The screen claims another settler; the record carries the one the host vouched for.
+        using var settled = await client.SendAsync(
+            Post(
+                "/lowline/intake/settle",
+                new
+                {
+                    id = "new",
+                    saved = new { customer = "Beta", owner = "lee" },
+                    draft = JsonNode.Parse("""{ "opened": {}, "fields": {}, "by": "screen-claim" }"""),
+                },
+                "seoul"),
+            Ct);
+        settled.StatusCode.Should().Be(HttpStatusCode.OK);
+        var stored = await _store.ReadRecordsAsync(new LowlineScope("intake", "seoul"), Ct);
+        var record = JsonNode.Parse(stored.Single(r => r.Id == "new").Json)!;
+        record["settled_by"]!["owner"]!.GetValue<string>().Should().Be("intake-person-1");
+    }
+
+    [Fact]
     public async Task A_host_that_reads_no_records_of_its_own_needs_the_saved_values_in_the_request()
     {
         using var client = await StartAsync();

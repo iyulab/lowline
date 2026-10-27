@@ -308,3 +308,55 @@ fn a_record_made_elsewhere_carries_what_the_draft_reported_without_the_form_vers
         .unwrap();
     assert!(plain.suggested.is_empty() && plain.sources.is_empty() && plain.promises.is_empty());
 }
+
+#[test]
+fn the_hosts_attestation_replaces_who_settled_the_batch_and_the_checks_a_draft_reports() {
+    let mut intake = intake();
+    let typed = saved(&[("customer", "Acme")]);
+    let shown = intake.propose("new", &typed, &BTreeMap::new());
+    let proposal = &shown[0];
+
+    // The form says it showed the answer, and who settled; the host says it drew the field for a check.
+    let mut draft = Draft::new();
+    assert!(draft.show_proposed(proposal));
+    draft.settled_by("screen-1");
+    draft.in_batch("screen-batch");
+    draft
+        .attest(&lowline::Attestation {
+            by: Some("server-9".to_owned()),
+            batch: None,
+            held: BTreeMap::from([("owner".to_owned(), 0.05)]),
+        })
+        .unwrap();
+
+    let values = saved(&[("customer", "Acme"), ("owner", "lee")]);
+    let stored = intake
+        .settle("new", &values, &draft, SettledBy::Person, 40)
+        .unwrap();
+    assert_eq!(
+        stored.settlements["owner"],
+        gil::schema::SettlementKind::Check
+    );
+    assert_eq!(stored.probabilities["owner"], 0.05);
+    // The answer the form reported is the one the host's draw held back.
+    assert_eq!(stored.suggested["owner"], "kim");
+    assert_eq!(stored.settled_by["owner"], "server-9");
+    assert_eq!(stored.batch, None);
+
+    // A check the form reported and the host did not draw is no check.
+    let mut held = Draft::new();
+    held.hold_proposed(proposal, 0.05);
+    held.attest(&lowline::Attestation::default()).unwrap();
+    assert_eq!(held.held("owner"), None);
+    assert_eq!(held.in_view("owner"), None);
+
+    // A draw that is no probability is refused and the draft is left as it was.
+    let mut kept = Draft::new();
+    kept.settled_by("screen-1");
+    let refused = kept.attest(&lowline::Attestation {
+        held: BTreeMap::from([("owner".to_owned(), 0.0)]),
+        ..Default::default()
+    });
+    assert!(refused.is_err());
+    assert_eq!(kept.by(), Some("screen-1"));
+}

@@ -462,6 +462,23 @@ public sealed record AttributeUsage
     [JsonIgnore] public double? Promise => Promised > 0 ? PromiseSum / Promised : null;
 }
 
+/// <summary>What the host vouches for about a record, in place of what the form being measured says of itself: who
+/// settled it (<see cref="Settler"/>, an opaque id the host gives — one person, one id; not a name), the
+/// <see cref="Batch"/> it was settled in, and the fields the host drew for a check, each with the probability it was
+/// drawn with (<see cref="Held"/>). Given to <see cref="LowlineEngine.Settle"/>, it replaces the draft's own
+/// settler, batch and checks — even where it names none, so a draft's word on them is never kept.</summary>
+public sealed record Attestation
+{
+    /// <summary>Who settled the record.</summary>
+    [JsonPropertyName("by")] public string? Settler { get; init; }
+
+    /// <summary>The batch the record was settled in.</summary>
+    [JsonPropertyName("batch")] public string? Batch { get; init; }
+
+    /// <summary>The fields drawn for a check with the probability each was drawn with — above 0 and at most 1.</summary>
+    [JsonPropertyName("held")] public IReadOnlyDictionary<string, double>? Held { get; init; }
+}
+
 /// <summary>Why an engine's thresholds should be chosen again.</summary>
 public sealed record Staleness(string Reason, JsonElement? Detail = null);
 
@@ -479,4 +496,5 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(List<FieldReport>))]
 [JsonSerializable(typeof(Dictionary<string, AttributeUsage>))]
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(Attestation))]
 internal sealed partial class LowlineJson : JsonSerializerContext;

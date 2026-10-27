@@ -77,6 +77,7 @@ fn stored(n: i64) -> String {
                 s(&format!("r{i}")),
                 s(&saved),
                 NONE,
+                NONE,
                 LOWLINE_SETTLED_BY_PERSON,
                 i,
                 &mut len,
@@ -197,6 +198,7 @@ fn a_host_round_through_the_abi() {
             s("new"),
             s(&saved),
             s(&draft),
+            NONE,
             LOWLINE_SETTLED_BY_PERSON,
             40,
             &mut len,
@@ -342,7 +344,7 @@ fn a_malformed_call_never_reaches_the_engine() {
     assert_eq!(last_error(), "records is not UTF-8");
     let mut len = 0;
     assert_eq!(
-        unsafe { lowline_engine_settle(engine, s("r"), s("{}"), NONE, 7, 0, &mut len) },
+        unsafe { lowline_engine_settle(engine, s("r"), s("{}"), NONE, NONE, 7, 0, &mut len) },
         LOWLINE_INVALID_ARGUMENT
     );
     assert_eq!(
@@ -499,5 +501,89 @@ fn a_record_settled_elsewhere_is_made_into_the_line_to_store() {
     let read: Value = serde_json::from_str(&copied(lowline_last_result)).unwrap();
     assert_eq!(read["settlements"]["owner"], "Check");
     assert_eq!(read["probabilities"]["owner"], 0.05);
+    unsafe { lowline_engine_free(engine) };
+}
+
+#[test]
+fn the_hosts_word_replaces_the_drafts_on_who_settled_and_what_was_checked() {
+    let engine = engine();
+    let saved = json!({ "customer": "Beta", "owner": "lee" }).to_string();
+    // What the screen says of itself: who settled, the batch, and no check at all.
+    let draft = json!({ "opened": {}, "fields": {}, "by": "screen-1", "batch": "screen-batch" })
+        .to_string();
+    let mut len = 0;
+
+    // Left empty, the draft stands.
+    ok(unsafe {
+        lowline_engine_settle(
+            engine,
+            s("a"),
+            s(&saved),
+            s(&draft),
+            NONE,
+            LOWLINE_SETTLED_BY_PERSON,
+            1,
+            &mut len,
+        )
+    });
+    let read: Value = serde_json::from_str(&copied(lowline_last_result)).unwrap();
+    assert_eq!(read["settled_by"]["owner"], "screen-1");
+    assert_eq!(read["batch"], "screen-batch");
+
+    // Given, the host's word replaces the draft's: its settler, no batch, and its draw as the check.
+    let attest = json!({ "by": "server-9", "held": { "owner": 0.05 } }).to_string();
+    ok(unsafe {
+        lowline_engine_settle(
+            engine,
+            s("b"),
+            s(&saved),
+            s(&draft),
+            s(&attest),
+            LOWLINE_SETTLED_BY_PERSON,
+            2,
+            &mut len,
+        )
+    });
+    let read: Value = serde_json::from_str(&copied(lowline_last_result)).unwrap();
+    assert_eq!(read["settled_by"]["owner"], "server-9");
+    assert_eq!(read["batch"], Value::Null);
+    assert_eq!(read["settlements"]["owner"], "Check");
+    assert_eq!(read["probabilities"]["owner"], 0.05);
+
+    // An attestation that names nothing says nothing: the draft's settler and batch are not kept.
+    ok(unsafe {
+        lowline_engine_settle(
+            engine,
+            s("c"),
+            s(&saved),
+            s(&draft),
+            s("{}"),
+            LOWLINE_SETTLED_BY_PERSON,
+            3,
+            &mut len,
+        )
+    });
+    let read: Value = serde_json::from_str(&copied(lowline_last_result)).unwrap();
+    assert_eq!(read["settled_by"], Value::Null);
+    assert_eq!(read["batch"], Value::Null);
+
+    // A draw that is no probability is refused, and nothing is learned.
+    let learned = unsafe { lowline_engine_settled(engine) };
+    let bad = json!({ "held": { "owner": 1.5 } }).to_string();
+    let status = unsafe {
+        lowline_engine_settle(
+            engine,
+            s("d"),
+            s(&saved),
+            s(&draft),
+            s(&bad),
+            LOWLINE_SETTLED_BY_PERSON,
+            4,
+            &mut len,
+        )
+    };
+    assert_ne!(status, LOWLINE_OK);
+    assert!(last_error().contains("probability"), "{}", last_error());
+    assert_eq!(unsafe { lowline_engine_settled(engine) }, learned);
     unsafe { lowline_engine_free(engine) };
 }
