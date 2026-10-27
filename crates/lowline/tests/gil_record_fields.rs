@@ -81,6 +81,17 @@ fn a_person_taking_an_answer_leaves_what_was_in_view_and_what_the_draft_reported
     assert_eq!(stored.batch.as_deref(), Some("import-3"));
     assert_eq!(stored.form_version.as_deref(), Some("owners-2"));
 
+    // The engine counts what the stored lines say, without their content.
+    let counted = intake.usage(std::slice::from_ref(&stored));
+    assert_eq!(
+        (
+            counted["owner"].decisions,
+            counted["owner"].answered,
+            counted["owner"].accepted
+        ),
+        (1, 1, 1)
+    );
+
     // Gil counts the line it is handed back the same as the decision the engine would have built.
     let from_line = gil::usage::usage(std::slice::from_ref(&stored));
     let settlements = draft.settle(["owner"], &values, SettledBy::Person);

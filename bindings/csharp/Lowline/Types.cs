@@ -399,6 +399,69 @@ public sealed record FieldReport
 /// record itself as one line of JSON — what <see cref="LowlineEngine.Learn"/> reads back.</summary>
 public sealed record SettledRecord(string Id, DateTimeOffset SettledAt, string Json);
 
+/// <summary>One decided field's counts of what its answers came to (<see cref="LowlineEngine.Usage"/>), without content.
+/// A check counts as one ÷ the probability it was drawn with in the precision; a fill and a reject say nothing about
+/// whether the answer was right.</summary>
+public sealed record AttributeUsage
+{
+    /// <summary>Decisions settled, or turned down with an answer in view.</summary>
+    [JsonPropertyName("decisions")] public int Decisions { get; init; }
+
+    /// <summary>Of them, answered (a trusted answer shown).</summary>
+    [JsonPropertyName("answered")] public int Answered { get; init; }
+
+    /// <summary>Answered and accepted as shown.</summary>
+    [JsonPropertyName("accepted")] public int Accepted { get; init; }
+
+    /// <summary>Answered and settled as another value.</summary>
+    [JsonPropertyName("corrected")] public int Corrected { get; init; }
+
+    /// <summary>Answered and turned down with no value settled.</summary>
+    [JsonPropertyName("rejected")] public int Rejected { get; init; }
+
+    /// <summary>Answered and settled by the application on its own.</summary>
+    [JsonPropertyName("filled")] public int Filled { get; init; }
+
+    /// <summary>Answered and checked by someone who did not see the answer.</summary>
+    [JsonPropertyName("checked")] public int Checked { get; init; }
+
+    /// <summary>Of the checks, those that agreed with the answer.</summary>
+    [JsonPropertyName("checked_right")] public int CheckedRight { get; init; }
+
+    /// <summary>Not answered, and entered by a person.</summary>
+    [JsonPropertyName("entered")] public int Entered { get; init; }
+
+    /// <summary>Answered, yet settled as entered with no answer in view — it should stay 0.</summary>
+    [JsonPropertyName("entered_over_answer")] public int EnteredOverAnswer { get; init; }
+
+    /// <summary>Kept a suggestion that was not the decider's, shown in place of an answer.</summary>
+    [JsonPropertyName("accepted_other")] public int AcceptedOther { get; init; }
+
+    /// <summary>Changed a suggestion that was not the decider's, shown in place of an answer.</summary>
+    [JsonPropertyName("corrected_other")] public int CorrectedOther { get; init; }
+
+    /// <summary>Answers made under a promise.</summary>
+    [JsonPropertyName("promised")] public int Promised { get; init; }
+
+    /// <summary>The sum of those promises.</summary>
+    [JsonPropertyName("promise_sum")] public double PromiseSum { get; init; }
+
+    /// <summary>The weighted count of answers that were right.</summary>
+    [JsonPropertyName("right_weight")] public double RightWeight { get; init; }
+
+    /// <summary>The weighted count of answers whose rightness is known.</summary>
+    [JsonPropertyName("judged_weight")] public double JudgedWeight { get; init; }
+
+    /// <summary>The share of decisions answered; <c>null</c> with no decisions.</summary>
+    [JsonIgnore] public double? AnswerRate => Decisions > 0 ? (double)Answered / Decisions : null;
+
+    /// <summary>The precision the answers realized, among those whose rightness is known; <c>null</c> when none is.</summary>
+    [JsonIgnore] public double? Realized => JudgedWeight > 0 ? RightWeight / JudgedWeight : null;
+
+    /// <summary>The mean promise of the answers made under one; <c>null</c> when none was.</summary>
+    [JsonIgnore] public double? Promise => Promised > 0 ? PromiseSum / Promised : null;
+}
+
 /// <summary>Why an engine's thresholds should be chosen again.</summary>
 public sealed record Staleness(string Reason, JsonElement? Detail = null);
 
@@ -414,5 +477,6 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(Dictionary<string, SettlementKind>))]
 [JsonSerializable(typeof(Dictionary<string, double>))]
 [JsonSerializable(typeof(List<FieldReport>))]
+[JsonSerializable(typeof(Dictionary<string, AttributeUsage>))]
 [JsonSerializable(typeof(JsonElement))]
 internal sealed partial class LowlineJson : JsonSerializerContext;

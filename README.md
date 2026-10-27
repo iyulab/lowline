@@ -104,6 +104,10 @@ gives the record it always did. In Rust the draft's `show_proposed`, `hold_propo
 `arrived`, `settled_by` and `in_batch` take the same reports, and `gil::annotate` writes them into a record built with
 `gil::record`.
 
+What the answers came to is read from those lines: `Engine::usage` (`LowlineEngine.Usage` in .NET) counts, by field and
+without any content, how often an answer was offered, how people settled it (taken, changed, turned down, checked), and
+the precision it realized beside the one it promised.
+
 A form several people settle can also audit them: `Audit` (off until given a rate) draws a settled record, and the host
 has a second person settle it again with every decided field held back and nothing of the first settlement in view; the
 record keeps its id, comes back with the second person's `settled_by`, and its values are checks. How well each person

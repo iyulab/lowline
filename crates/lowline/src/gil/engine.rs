@@ -197,6 +197,14 @@ impl Engine {
         tune(&mut schema, &self.fields, records, &self.tune)
     }
 
+    /// What the answers came to on `records`, counted without content, by decided field: how often an answer was
+    /// offered, how people settled it, and how the precision it realized compares with the one it promised
+    /// ([`gil::usage::AttributeUsage`]). The records are the settled lines the host stores, each saying what was in
+    /// view and what the person did — [`Engine::settle`] writes that. Nothing about the engine changes.
+    pub fn usage(&self, records: &[Record]) -> BTreeMap<String, gil::usage::AttributeUsage> {
+        gil::usage::usage(records)
+    }
+
     /// What to show for each decided field of the record `id` that is still open, given its `values` so far — in the
     /// form's order. A decided field that takes one value and already has one is not answered. `allowed` holds, by
     /// field, the choices this person may pick now (the host's permissions and active filters); a field it leaves out

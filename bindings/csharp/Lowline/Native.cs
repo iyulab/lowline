@@ -18,7 +18,7 @@ internal static unsafe partial class Native
     internal const byte SettledByApplication = 1;
 
     /// <summary>The version of the C ABI this binding was built for (<c>LOWLINE_ABI_VERSION</c>).</summary>
-    internal const uint AbiVersion = 3;
+    internal const uint AbiVersion = 4;
 
     private static volatile bool _compatible;
 
@@ -64,6 +64,9 @@ internal static unsafe partial class Native
 
     [LibraryImport(Library, EntryPoint = "lowline_engine_choose")]
     internal static partial int EngineChoose(nint engine, Str records, nuint* resultLen);
+
+    [LibraryImport(Library, EntryPoint = "lowline_engine_usage")]
+    internal static partial int EngineUsage(nint engine, Str records, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "lowline_engine_propose")]
     internal static partial int EnginePropose(nint engine, Str id, Str values, Str allowed, nuint* resultLen);

@@ -218,6 +218,13 @@ public sealed class EngineTests
         record["batch"]!.GetValue<string>().Should().Be("import-3");
         record["form_version"]!.GetValue<string>().Should().Be("owners-2");
 
+        // The records the host stores are the ledger of what the answers came to.
+        var usage = engine.Usage([saved.Json])["owner"];
+        (usage.Decisions, usage.Answered, usage.Accepted, usage.Promised).Should().Be((1, 1, 1, 1));
+        usage.Promise.Should().Be(0.9);
+        usage.Realized.Should().Be(1);
+        usage.AnswerRate.Should().Be(1);
+
         // A draft that reports nothing more gives the record it always did.
         var plain = JsonNode.Parse(engine.Settle(
             "plain",

@@ -165,6 +165,22 @@ public sealed unsafe class LowlineEngine : IDisposable
         return Native.Result(length);
     }
 
+    /// <summary>What the answers came to on <paramref name="records"/> — the settled records as the host stores them —
+    /// counted without content, by decided field: how often an answer was offered, how people settled it, and how the
+    /// precision it realized compares with the one it promised. Nothing is learned or changed.</summary>
+    public IReadOnlyDictionary<string, AttributeUsage> Usage(IEnumerable<string> records)
+    {
+        var lines = new Utf8(Lines(records));
+        nuint length;
+        using var _ = Read();
+        fixed (byte* p = lines.Bytes)
+        {
+            Native.Check(Native.EngineUsage(_handle, lines.At(p), &length));
+        }
+
+        return JsonSerializer.Deserialize(Native.Result(length), LowlineJson.Default.DictionaryStringAttributeUsage)!;
+    }
+
     /// <summary>What to show for each decided field of record <paramref name="id"/> that is still open, given its
     /// values so far, in the form's order. <paramref name="allowed"/> holds, by field, the choices this person may pick
     /// now; a field it leaves out may take any value. The record's own saved version is not evidence for itself.

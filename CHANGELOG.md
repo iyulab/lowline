@@ -25,6 +25,10 @@ All notable changes to this project are written here. The format follows
   record's decided fields back with (`Draft::hold_proposed`, then `settled_by` for the second person); the record is
   settled again under its id as checks, which is how well each person settles can be told from the answers alone.
 
+- `Engine::usage(records)` (C ABI `lowline_engine_usage`, .NET `LowlineEngine.Usage` returning `AttributeUsage` per field)
+  counts what the answers came to on the stored record lines, without content: how often an answer was offered, how
+  people settled it, and the precision it realized beside the one it promised. The C ABI version is 4.
+
 ### Changed
 
 - The `gil` feature takes `iyulab-gil` 0.9. `gil::decision` now builds the record line Gil counts usage from

@@ -71,7 +71,7 @@ pub const LOWLINE_BROKEN: i32 = ffi_support::BROKEN;
 
 /// The version of this interface — its functions and statuses, and the JSON they read and write. It changes whenever
 /// a binding built for one version would misread the library of another.
-pub const LOWLINE_ABI_VERSION: u32 = 3;
+pub const LOWLINE_ABI_VERSION: u32 = 4;
 
 /// [`lowline_engine_settle`]: a person saved the record.
 pub const LOWLINE_SETTLED_BY_PERSON: u8 = 0;
@@ -392,6 +392,27 @@ pub unsafe extern "C" fn lowline_engine_stale(
         let engine = &unsafe { live(engine) }?.engine;
         // SAFETY: forwarded from the caller.
         unsafe { set_result(written(&engine.stale()), result_len) }
+    })
+}
+
+/// What the answers came to on `records` — the settled records as the host stores them, JSON lines as
+/// [`lowline_engine_learn`] reads — counted without content, by decided field, as JSON: `{ field: { decisions, answered,
+/// accepted, corrected, rejected, filled, checked, checked_right, entered, entered_over_answer, accepted_other,
+/// corrected_other, promised, promise_sum, right_weight, judged_weight } }`. Nothing is learned or changed.
+///
+/// # Safety
+/// `engine` is a live handle; `records` is valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_usage(
+    engine: *const LowlineEngine,
+    records: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let read = self::records(engine, unsafe { text(records, "records") }?)?;
+        unsafe { set_result(written(&engine.usage(&read)), result_len) }
     })
 }
 
