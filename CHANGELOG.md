@@ -8,6 +8,8 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- **Breaking (source):** `LowlineForms.SettleAsync` takes `attestation` before `cancellationToken`; a call that passes the token
+  by position must name it (`cancellationToken: ct`) or pass `null` first.
 - `Attestation` (`Draft::attest`, C ABI `lowline_engine_settle`'s new `attest` text, .NET `LowlineEngine.Settle`'s `attestation`,
   `LowlineForms.SettleAsync`'s `attestation`, `LowlineWebOptions.Attest`): what a host vouches for about a record in place
   of what the form being measured says of itself — who settled it (an opaque id), its batch, and the fields the host
