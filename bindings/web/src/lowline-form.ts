@@ -50,6 +50,12 @@ export class LowlineForm extends LitElement {
   /** The words the form shows, in the host's language. */
   @property({ attribute: false }) strings: Strings = englishStrings
 
+  /** Who is writing, as an opaque id the host gives — one person, one id; not a name. Sent with the save when set. */
+  @property({ attribute: 'settled-by' }) settledBy = ''
+
+  /** The batch the record is written in, when several come at once from one source. Sent with the save when set. */
+  @property() batch = ''
+
   @query('formdown-ui') private formdown?: FormdownUi
 
   private session?: Session
@@ -111,6 +117,8 @@ export class LowlineForm extends LitElement {
   private async settleWith(sendValues: boolean): Promise<{ id: string; settledAt: string }> {
     if (!this.session || !this.form || !this.record) throw new Error('lowline-form needs a form and a record to save')
     const values = this.values()
+    this.session.took(values)
+    this.session.beforeSave(this.settledBy || undefined, this.batch || undefined)
     const saved = await this.client.settle(this.form, this.record, this.session.draft, sendValues ? values : undefined)
     this.session.saved(values)
     this.dispatchEvent(new CustomEvent('lowline-saved', { detail: { ...saved, values }, bubbles: true, composed: true }))
@@ -149,7 +157,10 @@ export class LowlineForm extends LitElement {
     this.fieldStates = round.fieldStates
     const formdown = this.formdown
     if (!formdown) return
-    if (Object.keys(round.prefill).length > 0) formdown.updateData({ ...formdown.data, ...round.prefill })
+    if (Object.keys(round.prefill).length > 0) {
+      formdown.updateData({ ...formdown.data, ...round.prefill })
+      session.took(this.values())
+    }
     formdown.fieldStates = this.fieldStates
     if (this.canJudge) void this.judge(session, values, shown)
   }
@@ -176,6 +187,7 @@ export class LowlineForm extends LitElement {
   }
 
   private changed = () => {
+    this.session?.took(this.values())
     clearTimeout(this.asking)
     this.asking = setTimeout(() => void this.ask(), ASK_DELAY_MS)
   }

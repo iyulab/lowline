@@ -173,6 +173,53 @@ public sealed class EngineTests
             .Should().BeEquivalentTo(shown);
     }
 
+    [Fact]
+    public void A_draft_that_reports_more_gives_a_record_that_says_more()
+    {
+        var definition = JsonNode.Parse(Intake)!.AsObject();
+        definition["formVersion"] = "owners-2";
+        using var engine = LowlineEngine.Create(definition.ToJsonString());
+
+        // The draft the form element keeps, as it sends it: what was shown with its layer and promise, the times on
+        // the page's clock, the order values arrived in, who saved and the batch.
+        const string draft = """
+            {
+              "opened": {},
+              "fields": { "owner": { "shown": { "value": "lee" }, "declined": false, "layer": "key", "promise": 0.9, "at": 2001 } },
+              "opened_at": 1000, "saved_at": 4000, "arrival": ["customer", "owner"], "by": "person-7", "batch": "import-3"
+            }
+            """;
+        var saved = engine.Settle(
+            "new",
+            new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" },
+            draft,
+            SettledBy.Person,
+            Start);
+
+        var record = JsonNode.Parse(saved.Json)!;
+        record["settlements"]!["owner"]!.GetValue<string>().Should().Be("Accept");
+        record["suggested"]!["owner"]!.GetValue<string>().Should().Be("lee");
+        record["sources"]!["owner"]!.GetValue<string>().Should().Be("KeyMemory");
+        record["promises"]!["owner"]!.GetValue<double>().Should().Be(0.9);
+        record["settle_ms"]!["owner"]!.GetValue<long>().Should().Be(1999);
+        record["open_ms"]!.GetValue<long>().Should().Be(3000);
+        record["settled_by"]!["owner"]!.GetValue<string>().Should().Be("person-7");
+        record["arrival"]!.AsArray().Select(a => a!.GetValue<string>()).Should().Equal("customer", "owner");
+        record["batch"]!.GetValue<string>().Should().Be("import-3");
+        record["form_version"]!.GetValue<string>().Should().Be("owners-2");
+
+        // A draft that reports nothing more gives the record it always did.
+        var plain = JsonNode.Parse(engine.Settle(
+            "plain",
+            new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" },
+            null,
+            SettledBy.Person,
+            Start).Json)!.AsObject();
+        plain.ContainsKey("suggested").Should().BeFalse();
+        plain.ContainsKey("settled_by").Should().BeFalse();
+        plain["form_version"]!.GetValue<string>().Should().Be("owners-2");
+    }
+
     private static readonly string[] Labels = ["b", "a"];
 
     [Fact]

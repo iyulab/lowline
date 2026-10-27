@@ -87,14 +87,42 @@ export class Session {
   /** The judgement asked for each field, by what it reads; `null` while the host is still judging. */
   private judgements = new Map<string, { reads: string; proposal: Proposal | null }>()
 
+  /** The values the form held when it was last looked at, to tell which fields' values arrived since. */
+  private seen: Values
+
   constructor(
     readonly id: string,
     opened: Values,
     readonly rate = 0.05,
     private readonly random: () => number = Math.random,
     private readonly strings: Strings = englishStrings,
+    /** A steady clock in milliseconds (`performance.now()` by default): the record's times are read from it. */
+    private readonly clock: () => number = () => performance.now(),
   ) {
     this.draft = new Draft(opened)
+    this.draft.openAt(this.clock())
+    this.seen = { ...this.draft.opened }
+  }
+
+  /**
+   * The form's values are `values` now: each field whose value is new since the last look arrived, and the person has
+   * reached it. A value the form put in unasked arrives too — it is when the record came to hold it.
+   */
+  took(values: Values): void {
+    const now = this.clock()
+    for (const [field, value] of Object.entries(values)) {
+      if (isEmpty(value) || sameValue(this.seen[field], value)) continue
+      this.draft.arrived(field)
+      this.draft.reach(field, now)
+    }
+    this.seen = { ...values }
+  }
+
+  /** The record is about to be saved by `by`, in `batch`: the draft says so, with the time. */
+  beforeSave(by?: string, batch?: string): void {
+    this.draft.saveAt(this.clock())
+    if (by) this.draft.settledBy(by)
+    if (batch) this.draft.inBatch(batch)
   }
 
   /**
@@ -103,8 +131,8 @@ export class Session {
    */
   apply(proposals: Proposal[], values: Values): Round {
     const round: Round = { fieldStates: Object.fromEntries(this.written), prefill: {} }
-    for (const { field, suggestion } of proposals) {
-      if (suggestion && !this.written.has(field)) this.draw(field, suggestion)
+    for (const proposal of proposals) {
+      if (proposal.suggestion && !this.written.has(proposal.field)) this.draw(proposal)
     }
     // A field held back for a check holds back the open fields of its group: the person settling it with nothing in view
     // is not shown what is suggested alongside it. Only the held field is the check.
@@ -116,7 +144,8 @@ export class Session {
       if (hidden(proposal)) continue
       // Turned down, it stays down for this record: neither shown again nor put back in.
       if (this.draft.declined(field, suggestion)) continue
-      this.draft.show(field, suggestion)
+      this.draft.show(field, suggestion, proposal)
+      this.draft.reach(field, this.clock())
       if (proposal.prefill && isEmpty(values[field])) {
         round.prefill[field] = suggestion.value
         this.filled.add(field)
@@ -210,6 +239,8 @@ export class Session {
   /** The record was saved holding `values`: what is written next starts from them. */
   saved(values: Values): void {
     this.draft = new Draft(values)
+    this.draft.openAt(this.clock())
+    this.seen = { ...this.draft.opened }
     this.drawn.clear()
     this.filled.clear()
     this.written.clear()
@@ -217,13 +248,15 @@ export class Session {
   }
 
   /** Whether the field's answer is held back now — drawn the first time a checkable value is proposed for it. */
-  private draw(field: string, suggestion: Suggestion): boolean {
+  private draw(proposal: Proposal): boolean {
+    const { field, suggestion } = proposal
+    if (!suggestion) return false
     if (this.drawn.has(field)) return this.draft.held(field) !== undefined
     const checkable = (suggestion.origin ?? 'decider') === 'decider' && (suggestion.fit ?? 'exact') === 'exact'
     if (!checkable) return false
     this.drawn.add(field)
     if (this.rate > 0 && this.rate <= 1 && this.random() < this.rate) {
-      this.draft.hold(field, this.rate)
+      this.draft.hold(field, this.rate, { ...proposal, suggestion })
       return true
     }
     return false
@@ -241,6 +274,10 @@ export class Session {
     if (proposal.layer === 'judgement') return this.strings.fromJudgement
     return undefined
   }
+}
+
+function sameValue(a: Values[string] | undefined, b: Values[string]): boolean {
+  return JSON.stringify(a ?? '') === JSON.stringify(b)
 }
 
 /** What a proposal asking for a judgement reads, as one text. */

@@ -16,6 +16,10 @@ All notable changes to this project are written here. The format follows
   `Engine::with_form_version` names the version of the form's code lists (`form_version`). `gil::annotate` does the
   same for a host that builds its records with `gil::record`. A draft that reports none of it gives the record it
   gave before, and the draft's JSON gains only the keys that were reported.
+- The `lowline-form` element reports them: the layer and promise of what it shows, when a field was reached or its
+  suggestion came into view, the order values arrived in, and the save. Its new `settled-by` and `batch` attributes
+  (`Session.beforeSave` in the headless build) name who saved and the batch. A definition may carry `formVersion`
+  (.NET `LowlineEngine.Create`, the C ABI) so every settled record names the version of the form's code lists.
 
 ### Changed
 

@@ -105,6 +105,9 @@ struct Definition {
     inference: Inference,
     #[serde(default)]
     tune: Tune,
+    /// The version of the form's code lists the records it settles are written under.
+    #[serde(default)]
+    form_version: Option<String>,
 }
 
 /// The engine behind a handle, refused when null or broken.
@@ -238,7 +241,9 @@ pub unsafe extern "C" fn lowline_last_result(buffer: *mut u8, capacity: usize) -
 /// decider's memories are kept under — two forms of one host take different names), the form as `form` (the engine's
 /// `Form`) or as `formdown` (what formdown's `getSchema()` gives), and optionally `inference` (`"closed-choices"`, the
 /// default, or `"declared-only"`) and `tune` (`targetPrecision`, `minimumAnswered`, `similarMinimumAnswered`, `rule`;
-/// each left out takes its default). It answers nothing until records are learned and its thresholds chosen.
+/// each left out takes its default) and `formVersion` (the version of the form's code lists, which every record it
+/// settles carries — it changes when a value comes to mean something else, not when a label does). It answers nothing
+/// until records are learned and its thresholds chosen.
 ///
 /// # Safety
 /// `definition` is valid for the call; `out` points to one writable pointer.
@@ -266,7 +271,10 @@ pub unsafe extern "C" fn lowline_engine_new(
         let fields = form
             .resolve(definition.inference)
             .map_err(|e| input(format!("the form does not resolve: {e}")))?;
-        let engine = Engine::new(&definition.name, fields, definition.tune).map_err(input)?;
+        let mut engine = Engine::new(&definition.name, fields, definition.tune).map_err(input)?;
+        if let Some(version) = definition.form_version {
+            engine = engine.with_form_version(version);
+        }
         // SAFETY: forwarded from the caller.
         unsafe {
             hand_out(

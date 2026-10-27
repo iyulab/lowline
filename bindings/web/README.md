@@ -21,6 +21,8 @@ routes (`MapLowline` in .NET).
 | `data` | The record's values when it was opened. |
 | `rate` | How often a field's answer is held back to check it, from 0 to 1 (one in twenty by default). |
 | `strings` | The words the form shows, in the host's language. |
+| `settled-by` | Who is writing, as an opaque id the host gives — one person, one id, never a name. Sent with the save when set. |
+| `batch` | The batch the record is written in, when several come at once from one source. Sent with the save when set. |
 
 `save()` sends the values with the account of what was shown, taken and turned down, and fires `lowline-saved`; a
 host that stores the record through its own API calls `settle()` after its save instead, which sends only the account

@@ -92,6 +92,18 @@ suggestions themselves. A field held back holds back the open fields settled tog
 `together` group): the checked value is written with nothing of its group in view. Only the field drawn is the check. A
 host drawing its own checks finds the fields to hide with `Draft::hidden` (Rust) or `Recheck.Hidden` (.NET).
 
+The record the engine hands back to store is a Gil record line, and it says more than how each field was settled when
+the draft reports more. The element reports it all: the answer in view with its layer and promise (`suggested`,
+`sources`, `promises` — the answer held back for a check counts as in view), how long each field took from the person
+reaching it or its suggestion coming into view (`settle_ms`), how long the record was open (`open_ms`), the order values
+arrived in (`arrival`), who settled it (`settled_by` — the element's `settled-by`, an opaque id the host gives, never a
+name) and the batch (`batch`). Times are read from one steady clock, in milliseconds: only differences count. A host
+that gives its form a `formVersion` in the definition has every record carry it (`form_version`): the edition of the
+code lists, changed when a value comes to mean something else, not when a label does. A draft that reports none of it
+gives the record it always did. In Rust the draft's `show_proposed`, `hold_proposed`, `open_at`, `save_at`, `reach`,
+`arrived`, `settled_by` and `in_batch` take the same reports, and `gil::annotate` writes them into a record built with
+`gil::record`.
+
 Before putting the engine in front of people, a host can see how it would have done on the records it already has:
 make the lines with `LowlineEngine.Record`, choose thresholds on them with `Choose`, and read `Report`.
 

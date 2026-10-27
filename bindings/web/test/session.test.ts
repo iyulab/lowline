@@ -116,11 +116,48 @@ describe('Session', () => {
   })
 
   it('starts the next record from the saved values', () => {
-    const session = new Session('r', {}, 0.05, never)
+    const session = new Session('r', {}, 0.05, never, undefined, () => 40)
     session.apply([lee], {})
     session.decline('owner', { owner: 'lee' })
     session.saved({ customer: 'Beta', owner: 'kim' })
-    expect(JSON.parse(JSON.stringify(session.draft))).toEqual({ opened: { customer: 'Beta', owner: 'kim' }, fields: {} })
+    expect(JSON.parse(JSON.stringify(session.draft))).toEqual({ opened: { customer: 'Beta', owner: 'kim' }, fields: {}, opened_at: 40 })
+  })
+
+  it('reports to the draft what the engine writes into the record: layer, promise, times, arrival, who and batch', () => {
+    let now = 1000.4
+    const session = new Session('r', {}, 0.05, never, undefined, () => now)
+    now = 1500
+    session.took({ customer: 'Beta' })
+    now = 2000.6
+    session.apply([{ ...lee, promise: 0.9 }], { customer: 'Beta' })
+    now = 2600
+    session.took({ customer: 'Beta', owner: 'lee' })
+    session.took({ customer: 'Beta', owner: 'lee' }) // nothing new: nothing arrives again
+    now = 4000
+    session.beforeSave('person-7', 'import-3')
+    expect(JSON.parse(JSON.stringify(session.draft))).toEqual({
+      opened: {},
+      fields: {
+        customer: { at: 1500 },
+        owner: { shown: lee.suggestion, declined: false, layer: 'key', promise: 0.9, at: 2001 },
+      },
+      opened_at: 1000,
+      saved_at: 4000,
+      arrival: ['customer', 'owner'],
+      by: 'person-7',
+      batch: 'import-3',
+    })
+  })
+
+  it('keeps the answer held back for a check, with its layer and promise', () => {
+    const session = new Session('r', {}, 0.05, () => 0, undefined, () => 10)
+    session.apply([{ ...lee, promise: 0.8 }], {})
+    expect(JSON.parse(JSON.stringify(session.draft.fields.owner))).toEqual({
+      held: 0.05,
+      withheld: lee.suggestion,
+      layer: 'key',
+      promise: 0.8,
+    })
   })
 
   it('empties a field it filled when its suggestion is turned down, and not one the person filled', () => {
