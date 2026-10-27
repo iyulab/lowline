@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-28
+
 ### Changed
 
 - **Behaviour change:** a field that takes several values is no longer decided by inference — only where the form declares
