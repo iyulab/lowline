@@ -483,6 +483,50 @@ pub fn record(
     record
 }
 
+/// Writes into `record` what `draft` knows of how the settlements in it came about, beyond their kinds — the optional
+/// fields of Gil's record line: for each field a person settled, the answer in view (`suggested`, its layer in
+/// `sources` when the host reported it, its promise in `promises` — the answer held back for a check counts as in view) and the time to settle
+/// it (`settle_ms`), who settled it (`settled_by`); for the record, how long it was open (`open_ms`), the order its
+/// values arrived in (`arrival`) and its batch. Whatever the host did not report is left out. A record the application
+/// settled on its own has nobody to name and nothing in view, so only its record-level fields are written.
+pub fn annotate(
+    record: &mut gil::schema::Record,
+    draft: &crate::Draft,
+    settlements: &[Settlement],
+    by: crate::SettledBy,
+) {
+    let person = by == crate::SettledBy::Person;
+    for settlement in settlements {
+        let field = &settlement.field;
+        if person {
+            if let Some(shown) = draft.in_view(field) {
+                record.suggested.insert(field.clone(), shown.value.clone());
+                if shown.origin == crate::provenance::Origin::Decider {
+                    // A host that reported no layer gets none written: a layer is a claim about where the answer
+                    // came from, and the record does not make it up.
+                    if let Some(layer) = draft.layer(field) {
+                        record.sources.insert(field.clone(), source(layer));
+                    }
+                    if let Some(promise) = draft.promise(field) {
+                        record.promises.insert(field.clone(), promise);
+                    }
+                }
+            }
+            if let Some(id) = draft.by() {
+                record.settled_by.insert(field.clone(), id.to_owned());
+            }
+        }
+        if let Some(ms) = draft.settle_ms(field) {
+            record.settle_ms.insert(field.clone(), ms);
+        }
+    }
+    record.open_ms = draft.open_ms();
+    if !draft.arrival().is_empty() {
+        record.arrival = Some(draft.arrival().to_vec());
+    }
+    record.batch = draft.batch().map(str::to_owned);
+}
+
 /// What to show for a decided field, from Gil's answer for its attribute.
 ///
 /// The first candidate, when Gil trusts it; else the class Gil trusts, as a class suggestion; else nothing, and why —

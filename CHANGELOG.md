@@ -6,6 +6,17 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A settled record carries what Gil's record line can hold beyond how each field was settled, from what the draft
+  reports. New on `Draft`: `show_proposed` and `hold_proposed` (the layer and promise of the answer in view, or held
+  back for a check), `open_at`, `save_at` and `reach` (times on the host's own steady clock, in milliseconds),
+  `arrived` (the order values arrived in), `settled_by` (an opaque id, no name) and `in_batch`. `Engine::settle` writes
+  them as `suggested`, `sources`, `promises`, `settle_ms`, `open_ms`, `settled_by`, `arrival` and `batch`, and
+  `Engine::with_form_version` names the version of the form's code lists (`form_version`). `gil::annotate` does the
+  same for a host that builds its records with `gil::record`. A draft that reports none of it gives the record it
+  gave before, and the draft's JSON gains only the keys that were reported.
+
 ### Changed
 
 - The `gil` feature takes `iyulab-gil` 0.9. `gil::decision` now builds the record line Gil counts usage from

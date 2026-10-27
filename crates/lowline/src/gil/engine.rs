@@ -8,7 +8,7 @@ use gil::lexical_memory::LexicalMemory;
 use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
-use super::{FieldReport, Tune, Tuned, proposal, record, schema, tune};
+use super::{FieldReport, Tune, Tuned, annotate, proposal, record, schema, tune};
 use crate::proposal::{Layer, Proposal};
 use crate::provenance::{Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
 use crate::schema::{FieldKind, ResolvedField, Role};
@@ -57,6 +57,7 @@ pub struct Engine {
     tune: Tune,
     tuned: Option<Tuned>,
     learned: BTreeSet<String>,
+    form_version: Option<String>,
 }
 
 /// Why an engine's thresholds should be chosen again ([`Engine::stale`]).
@@ -83,6 +84,7 @@ impl Engine {
             tune,
             tuned: None,
             learned: BTreeSet::new(),
+            form_version: None,
         })
     }
 
@@ -105,6 +107,20 @@ impl Engine {
     /// restored from storage says the same; `None` while none were chosen or restored.
     pub fn report(&self) -> Option<&[FieldReport]> {
         self.tuned.as_ref().map(|t| t.report.as_slice())
+    }
+
+    /// The version of the form's code lists the records it settles are written under: it changes when a value comes to
+    /// mean something else (a code renumbered, merged or split), not when only a label or the layout changes. A record
+    /// settled by [`Engine::settle`] carries it, so a replay can tell the stretches apart. None by default.
+    #[must_use]
+    pub fn with_form_version(mut self, version: impl Into<String>) -> Self {
+        self.form_version = Some(version.into());
+        self
+    }
+
+    /// The version of the form's code lists, when the host gave one.
+    pub fn form_version(&self) -> Option<&str> {
+        self.form_version.as_deref()
     }
 
     /// How many records the engine has learned: one per record id, a record learned again replacing the earlier one.
@@ -535,7 +551,9 @@ impl Engine {
             .filter(|f| f.role == Role::Decided)
             .map(|f| f.field.name.as_str());
         let settlements = draft.settle(decided, saved, by);
-        let settled = record(id, &self.fields, saved, &settlements, settled_at);
+        let mut settled = record(id, &self.fields, saved, &settlements, settled_at);
+        annotate(&mut settled, draft, &settlements, by);
+        settled.form_version.clone_from(&self.form_version);
         self.learn(std::slice::from_ref(&settled));
         Ok(settled)
     }

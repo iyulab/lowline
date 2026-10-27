@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::proposal::{Layer, Proposal};
 use crate::value::FieldValue;
 
 /// What made a suggestion.
@@ -145,6 +146,31 @@ struct Track {
     /// The probability the field was drawn to be checked with, while its answer is held back.
     #[cfg_attr(feature = "serde", serde(default))]
     held: Option<f64>,
+    /// The answer held back for a check, kept so the record can say what the person was not shown.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    withheld: Option<Suggestion>,
+    /// The layer that gave the suggestion shown (or held back), when the host reported it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    layer: Option<Layer>,
+    /// The precision promised for the suggestion shown (or held back), when the host reported it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    promise: Option<f64>,
+    /// When the person reached the field, or its suggestion came into view — the first of the two — on the host's
+    /// clock, in milliseconds.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    at: Option<u64>,
 }
 
 /// The account of one record while it is being written: what it held when opened, and for each field the
@@ -153,9 +179,15 @@ struct Track {
 /// The host reports what the person sees and does — [`Draft::show`], [`Draft::decline`], [`Draft::hold`] — and hands
 /// the saved values to [`Draft::settle`]. Typing needs no report: the saved value says what was typed.
 ///
+/// A host that wants the record to say more reports more, all of it optional: the layer and promise of a suggestion
+/// ([`Draft::show_proposed`], [`Draft::hold_proposed`]), when the record was opened and saved and when a field was
+/// reached ([`Draft::open_at`], [`Draft::save_at`], [`Draft::reach`] — one steady clock, in milliseconds), the order
+/// values arrived in ([`Draft::arrived`]), who settled ([`Draft::settled_by`]) and the batch ([`Draft::in_batch`]).
+///
 /// With `serde` it reads and writes as `{ "opened": { field: value }, "fields": { field: { "shown": suggestion,
 /// "declined": bool, "held": probability } } }`, each part optional — what a form drawn in a browser keeps and sends
-/// with the save.
+/// with the save — plus, when reported, `"opened_at"`, `"saved_at"` (milliseconds), `"arrival"` (field names), `"by"`
+/// and `"batch"` beside them, and `"layer"`, `"promise"`, `"at"` and `"withheld"` in a field.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Draft {
@@ -163,6 +195,36 @@ pub struct Draft {
     opened: BTreeMap<String, FieldValue>,
     #[cfg_attr(feature = "serde", serde(default))]
     fields: BTreeMap<String, Track>,
+    /// When the record was opened and when it was saved, on the host's clock, in milliseconds. Only their
+    /// difference, and the field times' difference to the save, are read.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    opened_at: Option<u64>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    saved_at: Option<u64>,
+    /// The fields in the order their current values arrived, oldest first.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    arrival: Vec<String>,
+    /// Who settled the record, as an opaque id the host gives — one person, one id; not a name.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    by: Option<String>,
+    /// The batch the record was settled in, when several came at once from one source.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    batch: Option<String>,
 }
 
 impl Draft {
@@ -179,7 +241,7 @@ impl Draft {
                 .map(|(field, value)| (field.into(), value))
                 .filter(|(_, value)| !value.is_empty())
                 .collect(),
-            fields: BTreeMap::new(),
+            ..Self::default()
         }
     }
 
@@ -192,6 +254,22 @@ impl Draft {
         }
         track.shown = Some(suggestion);
         track.held = None;
+        track.withheld = None;
+        track.layer = None;
+        track.promise = None;
+    }
+
+    /// The suggestion of `proposal` came into view, with the layer that gave it and the precision it promised, so
+    /// that the record can say both. Returns false, changing nothing, for a proposal with no suggestion.
+    pub fn show_proposed(&mut self, proposal: &Proposal) -> bool {
+        let Some(suggestion) = proposal.suggestion.clone() else {
+            return false;
+        };
+        self.show(&proposal.field, suggestion);
+        let track = self.fields.entry(proposal.field.clone()).or_default();
+        track.layer = proposal.layer;
+        track.promise = proposal.promise;
+        true
     }
 
     /// The field was drawn to be checked, with `probability` fixed before the draw ([`crate::Recheck`]): its answer is
@@ -209,6 +287,105 @@ impl Draft {
         track.shown = None;
         track.declined = false;
         track.held = Some(probability);
+        track.withheld = None;
+        track.layer = None;
+        track.promise = None;
+    }
+
+    /// As [`Draft::hold`] for the field of `proposal`, which also keeps the answer held back with its layer and
+    /// promise, so that the record of the check says what the person was not shown. Returns false, changing nothing,
+    /// for a proposal with no suggestion.
+    ///
+    /// # Panics
+    /// When `probability` is not above 0 and at most 1.
+    pub fn hold_proposed(&mut self, proposal: &Proposal, probability: f64) -> bool {
+        let Some(suggestion) = proposal.suggestion.clone() else {
+            return false;
+        };
+        self.hold(&proposal.field, probability);
+        let track = self.fields.entry(proposal.field.clone()).or_default();
+        track.withheld = Some(suggestion);
+        track.layer = proposal.layer;
+        track.promise = proposal.promise;
+        true
+    }
+
+    /// The record was opened at `ms` on the host's clock (any steady clock in milliseconds: only differences are read).
+    pub fn open_at(&mut self, ms: u64) {
+        self.opened_at = Some(ms);
+    }
+
+    /// The record was saved at `ms` on the same clock; report it just before handing the draft to [`Draft::settle`].
+    pub fn save_at(&mut self, ms: u64) {
+        self.saved_at = Some(ms);
+    }
+
+    /// The person reached the field, or its suggestion came into view, at `ms` on the same clock. Only the first
+    /// report for a field counts: the time to settle it runs from there.
+    pub fn reach(&mut self, field: &str, ms: u64) {
+        self.fields
+            .entry(field.to_owned())
+            .or_default()
+            .at
+            .get_or_insert(ms);
+    }
+
+    /// The field's current value arrived now: it moves to the end of the order values arrived in.
+    pub fn arrived(&mut self, field: &str) {
+        self.arrival.retain(|f| f != field);
+        self.arrival.push(field.to_owned());
+    }
+
+    /// The record is settled by the person `id`, an opaque id the host gives — one person, one id; not a name.
+    pub fn settled_by(&mut self, id: impl Into<String>) {
+        self.by = Some(id.into());
+    }
+
+    /// The record is settled in the batch `id`, together with the records that came at once from the same source.
+    pub fn in_batch(&mut self, id: impl Into<String>) {
+        self.batch = Some(id.into());
+    }
+
+    /// The answer in view for the field: the suggestion shown, or the one held back for a check.
+    pub fn in_view(&self, field: &str) -> Option<&Suggestion> {
+        let track = self.fields.get(field)?;
+        track.shown.as_ref().or(track.withheld.as_ref())
+    }
+
+    /// The layer reported for the answer in view for the field.
+    pub fn layer(&self, field: &str) -> Option<Layer> {
+        self.fields.get(field).and_then(|track| track.layer)
+    }
+
+    /// The precision reported as promised for the answer in view for the field.
+    pub fn promise(&self, field: &str) -> Option<f64> {
+        self.fields.get(field).and_then(|track| track.promise)
+    }
+
+    /// Milliseconds from when the person reached the field to the save, when both were reported.
+    pub fn settle_ms(&self, field: &str) -> Option<u64> {
+        let reached = self.fields.get(field)?.at?;
+        Some(self.saved_at?.saturating_sub(reached))
+    }
+
+    /// Milliseconds the record was open, when both its opening and its save were reported.
+    pub fn open_ms(&self) -> Option<u64> {
+        Some(self.saved_at?.saturating_sub(self.opened_at?))
+    }
+
+    /// The fields in the order their current values arrived, oldest first.
+    pub fn arrival(&self) -> &[String] {
+        &self.arrival
+    }
+
+    /// Who settled the record, when reported.
+    pub fn by(&self) -> Option<&str> {
+        self.by.as_deref()
+    }
+
+    /// The batch the record was settled in, when reported.
+    pub fn batch(&self) -> Option<&str> {
+        self.batch.as_deref()
     }
 
     /// The probability the field was drawn to be checked with, while its answer is held back.
