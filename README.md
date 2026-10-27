@@ -104,6 +104,11 @@ gives the record it always did. In Rust the draft's `show_proposed`, `hold_propo
 `arrived`, `settled_by` and `in_batch` take the same reports, and `gil::annotate` writes them into a record built with
 `gil::record`.
 
+A form several people settle can also audit them: `Audit` (off until given a rate) draws a settled record, and the host
+has a second person settle it again with every decided field held back and nothing of the first settlement in view; the
+record keeps its id, comes back with the second person's `settled_by`, and its values are checks. How well each person
+settles is then readable from the answers alone. Which second person to ask is the host's.
+
 Before putting the engine in front of people, a host can see how it would have done on the records it already has:
 make the lines with `LowlineEngine.Record`, choose thresholds on them with `Choose`, and read `Report`.
 

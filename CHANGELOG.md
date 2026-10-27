@@ -20,6 +20,10 @@ All notable changes to this project are written here. The format follows
   suggestion came into view, the order values arrived in, and the save. Its new `settled-by` and `batch` attributes
   (`Session.beforeSave` in the headless build) name who saved and the batch. A definition may carry `formVersion`
   (.NET `LowlineEngine.Create`, the C ABI) so every settled record names the version of the form's code lists.
+- `Audit` (Rust, .NET): a settled record drawn at a rate, off by default, to be settled once more by another person who
+  sees neither the first settler's values nor the decider's answer. Its `draw(roll)` answers the probability to hold the
+  record's decided fields back with (`Draft::hold_proposed`, then `settled_by` for the second person); the record is
+  settled again under its id as checks, which is how well each person settles can be told from the answers alone.
 
 ### Changed
 

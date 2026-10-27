@@ -5,7 +5,9 @@
 use std::collections::BTreeMap;
 
 use lowline::gil::Engine;
-use lowline::{Draft, Field, FieldKind, FieldValue, Form, Inference, SettledBy, gil as engine};
+use lowline::{
+    Audit, Draft, Field, FieldKind, FieldValue, Form, Inference, SettledBy, gil as engine,
+};
 
 fn saved(pairs: &[(&str, &str)]) -> BTreeMap<String, FieldValue> {
     pairs
@@ -195,4 +197,53 @@ fn the_draft_reads_and_writes_the_new_parts_and_leaves_them_out_when_empty() {
     );
     let back: Draft = serde_json::from_value(json).unwrap();
     assert_eq!(back, draft);
+}
+
+#[test]
+fn a_record_drawn_for_audit_is_settled_again_by_another_person_as_checks() {
+    let audit = Audit { rate: 0.1 };
+    assert_eq!(audit.draw(0.05), Some(0.1));
+    assert_eq!(audit.draw(0.1), None);
+    assert_eq!(Audit::default().draw(0.0), None);
+
+    let mut intake = intake();
+    let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
+    let first = intake
+        .settle(
+            "a-1",
+            &values,
+            &{
+                let mut d = Draft::new();
+                d.settled_by("person-1");
+                d
+            },
+            SettledBy::Person,
+            50,
+        )
+        .unwrap();
+    assert_eq!(first.settled_by["owner"], "person-1");
+
+    // Drawn: the record is opened with nothing, the decider's answer held back, and a second person settles it.
+    let q = audit.draw(0.01).unwrap();
+    let proposal = intake
+        .propose("a-1", &saved(&[("customer", "Acme")]), &BTreeMap::new())
+        .remove(0);
+    let mut again = Draft::new();
+    assert!(again.hold_proposed(&proposal, q));
+    again.settled_by("person-2");
+    let second = intake
+        .settle("a-1", &values, &again, SettledBy::Person, 99)
+        .unwrap();
+
+    assert_eq!(second.id, first.id);
+    assert!(second.settled_at > first.settled_at);
+    assert_eq!(
+        second.settlements["owner"],
+        gil::schema::SettlementKind::Check
+    );
+    assert_eq!(second.probabilities["owner"], 0.1);
+    assert_eq!(second.settled_by["owner"], "person-2");
+    assert_eq!(second.suggested["owner"], "kim");
+    let owner = &gil::usage::usage(&[first, second])["owner"];
+    assert_eq!((owner.checked, owner.checked_right), (1, 1));
 }

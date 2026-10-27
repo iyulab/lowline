@@ -315,6 +315,21 @@ public sealed record Recheck(double Rate = 0.05)
     }
 }
 
+/// <summary>How often a record already settled is drawn to be settled once more by another person, who is shown none of
+/// what the first settler or the decider said: its decided fields are held back (the probability <see cref="Draw"/>
+/// answered, as checks) and the values the second person settles tell how well each person settles, from the answers
+/// alone. The record keeps its id and is settled again later, the draft naming the second person (<c>by</c>). Off by
+/// default; which second person to ask, and when, is the host's.</summary>
+/// <param name="Rate">The probability a settled record is drawn, fixed before the draw: above 0 and at most 1 to be on;
+/// 0 is off.</param>
+public sealed record Audit(double Rate = 0)
+{
+    /// <summary>Whether to draw the record just settled for audit, given <paramref name="roll"/> — a number drawn
+    /// uniformly from [0, 1) by the host for this record. Answers the probability to hold its decided fields back with
+    /// when it is drawn, or <c>null</c> when it is not.</summary>
+    public double? Draw(double roll) => Rate > 0 && Rate <= 1 && roll < Rate ? Rate : null;
+}
+
 /// <summary>A threshold chosen on a replay of the settled records, and what the replay saw at it: the share of answers
 /// that matched (<see cref="Precision"/>), the share of lookups answered (<see cref="AnswerRate"/>), the answers and
 /// lookups, and the precision to expect of the next answers (<see cref="Promise"/>, resting on

@@ -174,6 +174,16 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void An_audit_draws_a_settled_record_at_its_rate_and_is_off_by_default()
+    {
+        var audit = new Audit(0.1);
+        audit.Draw(0.05).Should().Be(0.1);
+        audit.Draw(0.1).Should().BeNull();
+        new Audit().Draw(0).Should().BeNull();
+        new Audit(1).Draw(0.99).Should().Be(1);
+    }
+
+    [Fact]
     public void A_draft_that_reports_more_gives_a_record_that_says_more()
     {
         var definition = JsonNode.Parse(Intake)!.AsObject();

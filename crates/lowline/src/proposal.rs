@@ -258,6 +258,27 @@ impl Recheck {
     }
 }
 
+/// How often a record already settled is drawn to be settled once more by another person, who is shown none of what
+/// the first settler or the decider said: its decided fields are held back ([`crate::Draft::hold_proposed`], the
+/// probability `draw` answered) and the values the second person settles are checks, so that how well each person
+/// settles can be told from the answers alone. The record keeps its id and is settled again later, naming the second
+/// person ([`crate::Draft::settled_by`]). Off by default — a form with one person settling it has no one to audit
+/// with; which second person to ask, and when, is the host's.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Audit {
+    /// The probability a settled record is drawn, fixed before the draw: above 0 and at most 1 to be on; 0 is off.
+    pub rate: f64,
+}
+
+impl Audit {
+    /// Whether to draw the record just settled for audit, given `roll` — a number drawn uniformly from [0, 1) by the
+    /// host for this record. Answers the probability to hold its decided fields back with when it is drawn.
+    pub fn draw(&self, roll: f64) -> Option<f64> {
+        (self.rate > 0.0 && self.rate <= 1.0 && roll < self.rate).then_some(self.rate)
+    }
+}
+
 #[cfg(test)]
 mod recheck_tests {
     use super::*;
