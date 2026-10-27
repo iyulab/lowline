@@ -309,3 +309,50 @@ fn a_class_the_similar_records_back_carries_their_promise() {
     );
     assert_eq!(shown.promise, Some(class.promise));
 }
+
+#[test]
+fn a_declared_field_taking_several_values_is_suggested_on_every_value_settled() {
+    // A person settles a set whether or not a suggestion was in view, so nothing is left to count on but every value
+    // settled: the default count would never see it, and the field would show nothing however regular the records.
+    let mut tags = decided(Field::choice("tags", ["a", "b"]));
+    tags.multiple = true;
+    let form = Form {
+        fields: vec![Field::new("customer", FieldKind::Text), tags],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut engine = Engine::new("tagged", fields, Tune::default()).unwrap();
+    let decided_fields = ["tags"];
+    let records: Vec<_> = (0..60)
+        .map(|i| {
+            let saved: BTreeMap<String, FieldValue> = [
+                (
+                    "customer".to_owned(),
+                    FieldValue::from(format!("c{}", i % 6).as_str()),
+                ),
+                (
+                    "tags".to_owned(),
+                    FieldValue::Many(vec![if i % 6 < 3 { "a" } else { "b" }.to_owned()]),
+                ),
+            ]
+            .into();
+            let settled = Draft::new().settle(decided_fields, &saved, SettledBy::Person);
+            engine::record(
+                &format!("r{i}"),
+                engine.fields(),
+                &saved,
+                &settled,
+                i as i64,
+            )
+        })
+        .collect();
+    engine.tune(&records);
+
+    let report = &engine.report().unwrap()[0];
+    assert_eq!(report.counting, lowline::gil::Counting::Settled);
+    assert!(report.key.is_some());
+    let values = saved(&[("customer", "c1".to_owned())]);
+    let shown = engine
+        .propose_field("new", &values, &BTreeMap::new(), "tags", None)
+        .unwrap();
+    assert_eq!(shown.suggestion.map(|s| s.value).as_deref(), Some("a"));
+}

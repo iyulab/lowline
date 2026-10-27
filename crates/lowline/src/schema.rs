@@ -171,7 +171,10 @@ impl Field {
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum Inference {
     /// In a form that declares no role at all, every closed choice field — two or more choices, nothing outside
-    /// them, not worked out — is decided and the rest observed. A single checkbox or switch is never decided this
+    /// them, not worked out, taking one value — is decided and the rest observed. A field that takes several is
+    /// decided only where the form says so: its settlements cannot tell a value taken from a suggestion from one
+    /// entered, so its precision is counted on every value a person settled (`Counting::Settled` in
+    /// the `gil` feature), which lets its suggestions vouch for themselves. A single checkbox or switch is never decided this
     /// way: such a field is often a consent or an attestation, which the records would back with full confidence
     /// and which must still never be suggested.
     #[default]
@@ -318,7 +321,11 @@ impl Form {
                 }
                 let (role, declared) = match field.declared_role() {
                     Some(role) => (role, true),
-                    None if infer && field.is_closed_choice() && !field.computed => {
+                    None if infer
+                        && field.is_closed_choice()
+                        && !field.multiple
+                        && !field.computed =>
+                    {
                         (Role::Decided, false)
                     }
                     None => (Role::Observed, false),
@@ -394,11 +401,29 @@ mod tests {
             .filter(|(_, r, _)| *r == Decided)
             .map(|(n, _, _)| n.as_str())
             .collect();
-        assert_eq!(decided, ["handler", "tags"]);
+        assert_eq!(decided, ["handler"]);
         assert!(
             got.iter()
                 .all(|(_, r, p)| (*r == Decided) == (*p == Policy::Offer))
         );
+    }
+
+    #[test]
+    fn a_field_taking_several_values_is_decided_only_where_the_form_says_so() {
+        let got = roles(&sample(), Inference::ClosedChoices);
+        assert!(
+            got.iter()
+                .any(|(n, r, _)| n == "tags" && *r == Role::Observed)
+        );
+
+        let mut form = sample();
+        form.fields[3].role = Some(Role::Decided);
+        let decided: Vec<_> = roles(&form, Inference::ClosedChoices)
+            .into_iter()
+            .filter(|(_, r, _)| *r == Role::Decided)
+            .map(|(n, _, _)| n)
+            .collect();
+        assert_eq!(decided, ["tags"]);
     }
 
     #[test]

@@ -303,7 +303,7 @@ public sealed class EngineTests
               "name": "tags",
               "form": { "fields": [
                 { "name": "customer", "kind": "text" },
-                { "name": "labels", "kind": "choice", "choices": ["a", "b", "c"], "multiple": true }
+                { "name": "labels", "kind": "choice", "choices": ["a", "b", "c"], "multiple": true, "role": "decided" }
               ] }
             }
             """;

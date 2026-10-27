@@ -48,7 +48,7 @@ The form is its fields, given as JSON in the engine's own shape (`form`) or as w
 A field's `kind` is `text`, `number`, `date`, `choice`, `flag` or `reference`; a choice field may be `open` (it takes
 values outside its choices too) or `multiple`. Which fields the engine decides — suggests from the records — and which
 it only reads as clues: unless the form says (a field's `role`, `decided` or `observed`, or its `policy`, `offer`,
-`confirm` or `off`), every closed choice field with two choices or more is decided and the rest are clues. A single
+`confirm` or `off`), every closed choice field that takes one value, with two choices or more, is decided and the rest are clues (a field that takes several is decided only where the form says so — its precision is then counted on every value a person settled, since a set settled with a suggestion in view looks the same as one entered). A single
 checkbox is never decided that way — it is often a consent, which must not be suggested however consistent the records
 are. A form that declares any field's role is taken at its word: the fields it leaves undeclared are clues, so marking
 one field never quietly turns others on. `"inference": "declared-only"` beside `form` goes one step further, for a

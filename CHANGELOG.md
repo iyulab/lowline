@@ -6,6 +6,13 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Behaviour change:** a field that takes several values is no longer decided by inference — only where the form declares
+  it. Its settlements are `Set` whether or not a suggestion was in view, so the default count (values entered with nothing
+  in view, and checks) never saw one and its thresholds were never chosen: it showed nothing, however regular the records.
+  A declared field of this kind is counted on every value a person settled (`Counting::Settled`, reported as `counting`).
+
 ### Fixed
 
 - A class suggested from the similar records layer (a field with a coarse level) now carries that layer's promise; it

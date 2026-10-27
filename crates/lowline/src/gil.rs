@@ -98,6 +98,9 @@ pub struct Tune {
 /// without checks ([`crate::Recheck`]) it never meets its own misses: where people take or correct what it offers, it
 /// can promise more than it keeps, and the values left to count run out on the fields it answers best. Counting every
 /// value a person settled sees those misses, at the cost that a wrong suggestion a person takes counts as right.
+///
+/// A field that takes several values is always counted on every value a person settled: it is settled as a set
+/// whether or not a suggestion was in view, so the settlements say nothing of what was entered unprompted.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
@@ -272,7 +275,13 @@ pub fn tune(
             .iter()
             .filter(|r| r.settlements.get(&name) == Some(&gil::schema::SettlementKind::Check))
             .count();
-        let counting = tune.counting.resolve(checks);
+        // A field that takes several is settled as a set whether or not a suggestion was in view, so nothing is left
+        // to count on but every value a person settled.
+        let counting = if multiple {
+            Counting::Settled
+        } else {
+            tune.counting.resolve(checks)
+        };
         let choice = gil::replay::Choice {
             target_precision: tune.target_precision,
             minimum_answered: tune.minimum_answered,
