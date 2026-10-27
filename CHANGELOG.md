@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-27
+
 ### Changed
 
 - **Breaking:** `Engine::record` takes the account of what was shown, `draft: Option<&Draft>`, after `checks`, so a host that

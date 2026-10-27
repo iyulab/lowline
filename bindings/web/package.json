@@ -1,6 +1,6 @@
 {
   "name": "@iyulab/lowline-form",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "The Lowline form element: a formdown form whose decided fields are suggested from the records people confirmed, talking to a Lowline host's routes.",
   "license": "MIT",
   "repository": {
