@@ -248,3 +248,64 @@ fn a_field_picked_from_choices_is_answered_nothing_while_typed_into() {
             .is_none()
     );
 }
+
+#[test]
+fn a_class_the_similar_records_back_carries_their_promise() {
+    // Every fault code is new and the notes are never the same twice, so no key backs the chapter; the notes are
+    // alike within a chapter, so the similar records do.
+    let mut code = decided(Field::new("code", FieldKind::Text));
+    code.coarse = Some(1);
+    let form = Form {
+        fields: vec![Field::new("note", FieldKind::Text), code],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut engine = Engine::new("faults", fields, Tune::default()).unwrap();
+    let engines = [
+        "hydraulic pump pressure low",
+        "engine oil leak near gasket",
+        "turbine blade vibration high",
+    ];
+    let cabin = [
+        "seat belt buckle torn",
+        "cabin lamp flickering overhead",
+        "galley oven door latch stuck",
+    ];
+    let records = history(&engine, 400, |i| {
+        let (note, chapter) = if i % 2 == 0 {
+            (engines[(i / 2) % 3], "E")
+        } else {
+            (cabin[(i / 2) % 3], "C")
+        };
+        vec![
+            ("note", format!("{note} ref {i:03}")),
+            ("code", format!("{chapter}{i:03}")),
+        ]
+    });
+    engine.tune(&records);
+
+    let report = engine
+        .report()
+        .unwrap()
+        .iter()
+        .find(|r| r.field == "code")
+        .unwrap()
+        .clone();
+    let class = report
+        .coarse_similar
+        .expect("the similar records are trusted for the class");
+    assert!(
+        report.coarse.is_none(),
+        "no key backs the class, so the key layer promises none"
+    );
+
+    let values = saved(&[("note", "hydraulic pump pressure low ref 242".to_owned())]);
+    let shown = engine
+        .propose_field("new", &values, &BTreeMap::new(), "code", None)
+        .unwrap();
+    let suggestion = shown.suggestion.as_ref().expect("the chapter is backed");
+    assert_eq!(
+        (suggestion.value.as_str(), suggestion.fit, shown.layer),
+        ("E", Fit::Prefix, Some(lowline::Layer::Similar))
+    );
+    assert_eq!(shown.promise, Some(class.promise));
+}

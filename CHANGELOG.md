@@ -6,6 +6,12 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A class suggested from the similar records layer (a field with a coarse level) now carries that layer's promise; it
+  carried the key layer's, or none where the keys back no class. `FieldReport` gains `coarse_similar` (`coarseSimilar` in
+  .NET and the web client) — the threshold at which the similar records layer is trusted for the class.
+
 ### Added
 
 - **Breaking (source):** `LowlineForms.SettleAsync` takes `attestation` before `cancellationToken`; a call that passes the token

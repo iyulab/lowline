@@ -185,6 +185,11 @@ pub struct FieldReport {
     pub typed: Option<Vec<Option<gil::replay::ThresholdChoice>>>,
     /// For a field with a coarse level, the threshold at which its class is suggested where its value is not.
     pub coarse: Option<gil::replay::ThresholdChoice>,
+    /// For a field with a coarse level, the threshold at which its class is suggested from the similar records layer —
+    /// only where that layer is trusted for it ([`Tune::similar_minimum_answered`]); `None` for any other field. A class
+    /// is promised by the layer that backs it: `coarse` for one the keys back, this for one the similar records do.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub coarse_similar: Option<gil::replay::ThresholdChoice>,
     /// The threshold at which the similar records layer answers the lookups values settled alongside leave, whether
     /// trusted or not; see `similar_offered`.
     pub similar: Option<gil::replay::ThresholdChoice>,
@@ -293,6 +298,7 @@ pub fn tune(
             key_fields: keyed.key_fields.clone(),
             typed: None,
             coarse: None,
+            coarse_similar: None,
             similar: None,
             similar_offered: false,
             promise_over: gil::replay::RECENT_RECORDS,
@@ -365,6 +371,7 @@ pub fn tune(
                 coarse.memory_floor = similar.and_then(|c| c.similarity_floor);
             });
             field.coarse = classed.key.chosen.clone();
+            field.coarse_similar = similar.cloned();
         }
         report.push(field);
         promises.push((name, layers));

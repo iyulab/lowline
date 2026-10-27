@@ -47,6 +47,8 @@ export interface FieldReport {
   /** For a free text field, the threshold for one, two, … characters typed (`null` where none was right often enough). */
   typed?: (ThresholdChoice | null)[]
   coarse?: ThresholdChoice
+  /** For a field with a coarse level, the threshold at which its class is suggested from the similar records layer. */
+  coarseSimilar?: ThresholdChoice
   similar?: ThresholdChoice
   similarOffered: boolean
   promiseOver: number

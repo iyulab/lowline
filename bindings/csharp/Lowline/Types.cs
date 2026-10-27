@@ -376,6 +376,10 @@ public sealed record FieldReport
     /// <summary>For a field with a coarse level, the threshold at which its class is suggested.</summary>
     [JsonPropertyName("coarse")] public ThresholdChoice? Coarse { get; init; }
 
+    /// <summary>For a field with a coarse level, the threshold at which its class is suggested from the similar records
+    /// layer — set only where that layer is trusted for it.</summary>
+    [JsonPropertyName("coarseSimilar")] public ThresholdChoice? CoarseSimilar { get; init; }
+
     /// <summary>The threshold at which the similar records layer answers, trusted or not.</summary>
     [JsonPropertyName("similar")] public ThresholdChoice? Similar { get; init; }
 

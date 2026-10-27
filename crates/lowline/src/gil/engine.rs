@@ -316,7 +316,7 @@ impl Engine {
 
     /// `shown` with the promise of the threshold its suggestion was held to, from the report of the thresholds chosen:
     /// the key layer's — or, with `typed` characters typed, the threshold for that many — the coarse level's for a
-    /// class, the similar records layer's. Nothing for a judgement from outside the records, a value from elsewhere, or
+    /// class (the key layer's or the similar records', whichever backs it), the similar records layer's. Nothing for a judgement from outside the records, a value from elsewhere, or
     /// an engine not tuned.
     fn promised(&self, mut shown: Proposal, typed: Option<usize>) -> Proposal {
         let Some(suggestion) = &shown.suggestion else {
@@ -330,7 +330,9 @@ impl Engine {
             return shown;
         };
         let choice = match (suggestion.origin, suggestion.fit, shown.layer) {
-            (Origin::Decider, Fit::Prefix, _) => report.coarse.as_ref(),
+            // A class is promised by the layer that backs it.
+            (Origin::Decider, Fit::Prefix, Some(Layer::Key)) => report.coarse.as_ref(),
+            (Origin::Decider, Fit::Prefix, Some(Layer::Similar)) => report.coarse_similar.as_ref(),
             (Origin::Decider, Fit::Exact, Some(Layer::Key)) => match typed {
                 Some(length) => report
                     .typed
