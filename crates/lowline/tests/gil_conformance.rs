@@ -125,7 +125,7 @@ fn every_settlement_case_settles_as_the_decider_expects() {
         assert_eq!(json!(record), case["gil"]["record"], "{id}: record line");
 
         // The usage counts of this one decision, compared with the answer in view or held back.
-        let counts = gil::usage::usage([engine::decision(&proposal, Some(settlement))]);
+        let counts = gil::usage::usage(&[engine::decision(&proposal, Some(settlement))]);
         let usage = serde_json::to_value(&counts["field"]).unwrap();
         assert_eq!(
             counted(&usage),

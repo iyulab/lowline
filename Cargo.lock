@@ -9,10 +9,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "iyulab-gil"
-version = "0.8.0"
+name = "iyulab-ffi-support"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7869ccac629a6123f83e01e1f3c68830669f7c5e79b804647d4888079ac8394"
+checksum = "5dfac9bfd94595b7c2d9195474c8b7cbf54fa47b92a11bd97c74fc3805137276"
+
+[[package]]
+name = "iyulab-gil"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50779cd16dd741967be9e5150cd4a407a0cce0e4960a04020f10b9ae33c109da"
 dependencies = [
  "serde",
  "unicode-normalization",
@@ -31,6 +37,7 @@ dependencies = [
 name = "lowline-ffi"
 version = "0.7.0"
 dependencies = [
+ "iyulab-ffi-support",
  "iyulab-gil",
  "lowline",
  "serde",

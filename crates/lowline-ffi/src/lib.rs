@@ -19,9 +19,8 @@
 //! [`LOWLINE_BROKEN`] until it is freed. [`lowline_abi_version`] says which version of this interface the library
 //! speaks.
 //!
-//! The statuses and the rules for text, buffers and handles are those of the Gil decider's C ABI.
-
-mod support;
+//! The statuses and the rules for text, buffers and handles are those of the Gil decider's C ABI; both libraries take
+//! them from the `iyulab-ffi-support` crate.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,21 +32,42 @@ use lowline::gil::{Engine, Tune, Tuned};
 use lowline::{Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy, SettlementKind};
 use serde::Deserialize;
 
-pub use support::LowlineStr;
-use support::{Failure, argument, call, hand_out, input, release, set_result, text};
+pub use ffi_support::Utf8 as LowlineStr;
+use ffi_support::{Failure, argument, call, input, release, text};
+
+/// Keeps `text` as this call's result and writes its length in bytes to `result_len` — the shape every function of this
+/// interface reports a text result in.
+///
+/// # Safety
+/// `result_len` is null or points to one writable `usize`.
+unsafe fn set_result(text: String, result_len: *mut usize) -> Result<(), Failure> {
+    // SAFETY: forwarded from the caller.
+    unsafe { ffi_support::write(result_len, text.len(), "result_len") }?;
+    ffi_support::set_result(text);
+    Ok(())
+}
+
+/// Hands `value` out as a new handle through `out`.
+///
+/// # Safety
+/// `out` is null or points to one writable pointer.
+unsafe fn hand_out<T>(out: *mut *mut T, value: T) -> Result<(), Failure> {
+    // SAFETY: forwarded from the caller.
+    unsafe { ffi_support::hand_out(out, value, "out") }
+}
 
 /// The call succeeded.
-pub const LOWLINE_OK: i32 = support::OK;
+pub const LOWLINE_OK: i32 = ffi_support::OK;
 /// The engine refused its input (a form it cannot resolve, a record that does not read); the message says what.
-pub const LOWLINE_INVALID_INPUT: i32 = support::INVALID_INPUT;
+pub const LOWLINE_INVALID_INPUT: i32 = ffi_support::INVALID_INPUT;
 /// The call itself was malformed: a null pointer, text that is not UTF-8.
-pub const LOWLINE_INVALID_ARGUMENT: i32 = support::INVALID_ARGUMENT;
+pub const LOWLINE_INVALID_ARGUMENT: i32 = ffi_support::INVALID_ARGUMENT;
 /// The engine panicked — a defect — reported instead of unwinding into the caller.
-pub const LOWLINE_PANIC: i32 = support::PANIC;
+pub const LOWLINE_PANIC: i32 = ffi_support::PANIC;
 /// Kept for the numbering shared with Gil's C ABI; no function here returns it.
-pub const LOWLINE_BUFFER_TOO_SMALL: i32 = support::BUFFER_TOO_SMALL;
+pub const LOWLINE_BUFFER_TOO_SMALL: i32 = ffi_support::BUFFER_TOO_SMALL;
 /// The engine is broken: an earlier call that changed it panicked partway. Free it and build it again.
-pub const LOWLINE_BROKEN: i32 = support::BROKEN;
+pub const LOWLINE_BROKEN: i32 = ffi_support::BROKEN;
 
 /// The version of this interface — its functions and statuses, and the JSON they read and write. It changes whenever
 /// a binding built for one version would misread the library of another.
@@ -199,7 +219,7 @@ pub extern "C" fn lowline_abi_version() -> u32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn lowline_last_error(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { support::copy_last_error(buffer, capacity) }
+    unsafe { ffi_support::copy_last_error(buffer, capacity) }
 }
 
 /// Copies the text result of the last call on this thread (the length that call wrote to its `result_len`) into
@@ -211,7 +231,7 @@ pub unsafe extern "C" fn lowline_last_error(buffer: *mut u8, capacity: usize) ->
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn lowline_last_result(buffer: *mut u8, capacity: usize) -> usize {
     // SAFETY: forwarded from the caller.
-    unsafe { support::copy_last_result(buffer, capacity) }
+    unsafe { ffi_support::copy_last_result(buffer, capacity) }
 }
 
 /// An engine for the form `definition` describes, handed out through `out`: a JSON object with `name` (what the

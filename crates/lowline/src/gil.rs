@@ -305,14 +305,17 @@ pub fn tune(
             continue;
         }
 
-        let layers = gil::replay::select_layers_by_rule(
+        let layers = gil::replay::select_layers(
             &mut gil::key_memory::KeyMemory::default(),
             &mut gil::lexical_memory::LexicalMemory::default(),
             schema,
             &name,
             &ordered,
             choice,
-            tune.rule,
+            gil::replay::LayerOptions {
+                rule: tune.rule,
+                ..Default::default()
+            },
         );
         let similar = trusted(&layers, tune);
         edit(schema, &name, |attribute| {
@@ -599,26 +602,54 @@ pub const SETTLED: &[gil::schema::SettlementKind] = &[
     gil::schema::SettlementKind::CorrectOther,
 ];
 
-/// One decision as Gil's [`gil::usage::usage`] counts it: the proposal shown for the field and how the field was
-/// settled, if it was. The answer is the decider's suggestion shown — a class counts as answered, and a value taken
-/// within it as accepted, as [`crate::Draft::settle`] settles it. A field settled with no proposal shown is a decision
-/// with no answer: pass [`Proposal::abstain`]. The answer's promise ([`Proposal::promise`]) is carried, so the
-/// counts set the precision the answers realized beside what they promised.
-pub fn decision<'a>(
-    proposal: &'a Proposal,
-    settlement: Option<&'a Settlement>,
-) -> gil::usage::Decision<'a> {
-    gil::usage::Decision {
-        attribute: &proposal.field,
-        answer: proposal
-            .suggestion
-            .as_ref()
-            .filter(|s| s.origin == crate::provenance::Origin::Decider)
-            .map(|s| s.value.as_str()),
-        settled: settlement.and_then(|s| s.value.as_deref()),
-        settlement: settlement.map(|s| s.kind.into()),
-        probability: settlement.and_then(|s| s.probability).unwrap_or(1.0),
-        promise: proposal.promise,
+/// One decision as Gil's [`gil::usage::usage`] counts it, written as the record line Gil keeps: the proposal shown for the
+/// field — the answer, the layer it came from and what it promised — and how the field was settled, if it was. The
+/// answer is the decider's suggestion shown — a class counts as answered, and a value taken within it as accepted, as
+/// [`crate::Draft::settle`] settles it. A field settled with no proposal shown is a decision with no answer: pass
+/// [`Proposal::abstain`]. A rejected suggestion is an answer shown and no settlement: Gil counts a turned-down answer
+/// that way, so a [`SettlementKind::Reject`] is left out of the record's settlements. The answer's promise
+/// ([`Proposal::promise`]) is carried, so the counts set the precision the answers realized beside what they promised.
+pub fn decision(proposal: &Proposal, settlement: Option<&Settlement>) -> gil::schema::Record {
+    let field = &proposal.field;
+    let mut record = gil::schema::Record::default();
+    if let Some(shown) = proposal
+        .suggestion
+        .as_ref()
+        .filter(|s| s.origin == crate::provenance::Origin::Decider)
+    {
+        record.suggested.insert(field.clone(), shown.value.clone());
+        // `usage` counts an answer by the record naming a layer, not by which; an answer whose layer is not known (a
+        // proposal built without one) is named as the similar-record layer, the one a host cannot tell from the rest.
+        record.sources.insert(
+            field.clone(),
+            proposal
+                .layer
+                .map_or(gil::decider::Source::SimilarRecord, source),
+        );
+        if let Some(promise) = proposal.promise {
+            record.promises.insert(field.clone(), promise);
+        }
+    }
+    if let Some(settlement) = settlement.filter(|s| s.kind != SettlementKind::Reject) {
+        record
+            .settlements
+            .insert(field.clone(), settlement.kind.into());
+        if let Some(value) = settlement.value.as_deref() {
+            record.values.insert(field.clone(), value.to_owned());
+        }
+        if let Some(probability) = settlement.probability {
+            record.probabilities.insert(field.clone(), probability);
+        }
+    }
+    record
+}
+
+/// The layer of Gil's decider an answer came from, as a record line names it.
+fn source(layer: Layer) -> gil::decider::Source {
+    match layer {
+        Layer::Key => gil::decider::Source::KeyMemory,
+        Layer::Similar => gil::decider::Source::SimilarRecord,
+        Layer::Judgement => gil::decider::Source::External,
     }
 }
 
@@ -935,7 +966,7 @@ mod tests {
             SettledBy::Person,
         );
 
-        let counts = gil::usage::usage([
+        let counts = gil::usage::usage(&[
             decision(&kim, taken.first()),
             decision(&kim, changed.first()),
             decision(&none, typed.first()),
@@ -973,7 +1004,7 @@ mod tests {
             gil::schema::Settlement::check("kim", 0.25)
         );
 
-        let counts = gil::usage::usage([decision(&kim, checked.first())]);
+        let counts = gil::usage::usage(&[decision(&kim, checked.first())]);
         let owner = &counts["owner"];
         assert_eq!((owner.checked, owner.checked_right), (1, 1));
         assert_eq!(owner.judged_weight, 4.0);

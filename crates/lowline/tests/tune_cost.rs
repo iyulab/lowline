@@ -97,14 +97,17 @@ fn measures_choosing_thresholds_on_ten_thousand_records() {
     let t2 = at.elapsed();
     schema = changed(&schema, |a| a.key_fields = keyed.key_fields.clone());
     let at = Instant::now();
-    let _layers = gil::replay::select_layers_by_rule(
+    let _layers = gil::replay::select_layers(
         &mut gil::key_memory::KeyMemory::default(),
         &mut gil::lexical_memory::LexicalMemory::default(),
         &schema,
         "owner",
         &records,
         choice,
-        gil::replay::ThresholdRule::EveryBand,
+        gil::replay::LayerOptions {
+            rule: gil::replay::ThresholdRule::EveryBand,
+            ..Default::default()
+        },
     );
     let t3 = at.elapsed();
     let at = Instant::now();

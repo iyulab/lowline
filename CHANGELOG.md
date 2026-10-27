@@ -6,6 +6,15 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The `gil` feature takes `iyulab-gil` 0.9. `gil::decision` now builds the record line Gil counts usage from
+  (`gil::schema::Record`) instead of the removed `usage::Decision`, so its result is passed to `gil::usage::usage`
+  by reference, and a rejected suggestion is an answer shown with no settlement. Rust callers of `decision` adjust.
+- The C ABI takes its status codes, buffer rules and handle rules from the `iyulab-ffi-support` crate instead of a copy
+  of its own; the exported functions and their numbers are unchanged. A panic inside a call stays quiet on the host's
+  stderr while a panic elsewhere in the process still reaches the panic hook that was set before.
+
 ## [0.7.0] - 2026-10-24
 
 ### Added

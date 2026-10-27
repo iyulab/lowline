@@ -12,7 +12,7 @@ categories = ["algorithms"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
-gil = { package = "iyulab-gil", version = "0.8", optional = true }
+gil = { package = "iyulab-gil", version = "0.9", optional = true }
 
 [features]
 # Serialize and Deserialize for what a host keeps or sends on: policies, suggestions, drafts, settlements.

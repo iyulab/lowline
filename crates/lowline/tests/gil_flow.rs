@@ -51,7 +51,7 @@ fn a_record_is_answered_shown_settled_and_learned_from() {
     assert_eq!(intake.settled(), 41);
 
     let settled = draft.settle(["owner"], &values, SettledBy::Person);
-    let counts = gil::usage::usage([engine::decision(&shown[0], settled.first())]);
+    let counts = gil::usage::usage(&[engine::decision(&shown[0], settled.first())]);
     assert_eq!((counts["owner"].answered, counts["owner"].accepted), (1, 1));
 }
 
