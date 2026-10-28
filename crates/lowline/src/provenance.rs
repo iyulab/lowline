@@ -383,6 +383,9 @@ impl Draft {
     /// not draw is no check, and the answer it held back is dropped with it. The times, layers, promises and order the form
     /// reported are left as they are.
     ///
+    /// A draft does not know the form, so this does not check that the fields in `held` are ones the form decides: a
+    /// host settling through [`crate::gil::Engine`] uses [`crate::gil::Engine::attest`], which does.
+    ///
     /// # Errors
     /// When a probability is not above 0 and at most 1; the draft is left as it was.
     pub fn attest(&mut self, attestation: &Attestation) -> Result<(), String> {

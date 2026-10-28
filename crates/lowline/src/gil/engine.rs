@@ -10,7 +10,7 @@ use gil::tuning::Tuning;
 
 use super::{FieldReport, Tune, Tuned, annotate, proposal, record, schema, tune};
 use crate::proposal::{Layer, Proposal};
-use crate::provenance::{Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
+use crate::provenance::{Attestation, Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
 use crate::schema::{FieldKind, ResolvedField, Role};
 use crate::value::FieldValue;
 
@@ -566,6 +566,29 @@ impl Engine {
             annotate(&mut made, draft, &settlements, SettledBy::Person);
         }
         Ok(made)
+    }
+
+    /// Puts the host's word in `draft` as [`Draft::attest`] does, after checking it against the form: a field the host
+    /// says it drew for a check must be one the form decides. A name the form does not decide — a typo, a field the
+    /// form does not have, an observed field — is refused, with the draft left as it was; accepted, it would be dropped
+    /// without a trace and the check the host believes it recorded would be lost. [`Draft::attest`] alone cannot tell,
+    /// since a draft does not know the form.
+    ///
+    /// # Errors
+    /// For a field the form does not decide, and for a probability that is not above 0 and at most 1.
+    pub fn attest(&self, draft: &mut Draft, attestation: &Attestation) -> Result<(), String> {
+        for name in attestation.held.keys() {
+            if !self
+                .fields
+                .iter()
+                .any(|f| &f.field.name == name && f.role == Role::Decided)
+            {
+                return Err(format!(
+                    "attestation says '{name}' was drawn for a check, which the form does not decide"
+                ));
+            }
+        }
+        draft.attest(attestation)
     }
 
     /// Settles the record `id` as saved — its `saved` values, and the `draft` that kept what was shown for it and what

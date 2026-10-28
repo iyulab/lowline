@@ -340,6 +340,26 @@ public sealed unsafe class LowlineEngine : IDisposable
     private static string Values(IReadOnlyDictionary<string, FieldValue> values) =>
         JsonSerializer.Serialize(new Dictionary<string, FieldValue>(values), LowlineJson.Default.DictionaryStringFieldValue);
 
+    /// <summary>Refuses a probability that is not a number before it is written as JSON, which cannot hold one: the
+    /// engine refuses a probability outside (0, 1] with its own words, and this makes NaN and infinity say the same
+    /// instead of the serializer's.</summary>
+    private static void NotNumbers(IReadOnlyDictionary<string, double>? probabilities, string what)
+    {
+        if (probabilities is null)
+        {
+            return;
+        }
+
+        foreach (var (field, probability) in probabilities)
+        {
+            if (!double.IsFinite(probability))
+            {
+                throw new ArgumentException(
+                    $"'{field}' is {what} with {probability}, not a probability above 0 and at most 1");
+            }
+        }
+    }
+
     private static string? Allowed(IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed) =>
         allowed is null
             ? null
@@ -353,7 +373,8 @@ public sealed unsafe class LowlineEngine : IDisposable
     /// <see cref="ArgumentException"/>, and nothing is learned. <paramref name="attestation"/>, when the host
     /// vouches for who settled the record, its batch or which fields were drawn for a check, replaces the draft's own
     /// word on them — the draft is what the form says of itself, which a host that cannot trust the screen does not
-    /// take — and a probability that is none is refused as a value the form does not hold is.</summary>
+    /// take — and a probability that is none, or a field it says was drawn for a check that the form does not decide, is refused as a
+    /// value the form does not hold is.</summary>
     public SettledRecord Settle(
         string id,
         IReadOnlyDictionary<string, FieldValue> saved,
@@ -366,6 +387,7 @@ public sealed unsafe class LowlineEngine : IDisposable
         var savedText = new Utf8(JsonSerializer.Serialize(new Dictionary<string, FieldValue>(saved),
             LowlineJson.Default.DictionaryStringFieldValue));
         var draftText = new Utf8(draft);
+        NotNumbers(attestation?.Held, "attested as drawn for a check");
         var attestText = new Utf8(attestation is null
             ? null
             : JsonSerializer.Serialize(attestation, LowlineJson.Default.Attestation));
@@ -407,6 +429,7 @@ public sealed unsafe class LowlineEngine : IDisposable
         IReadOnlyDictionary<string, double>? checks = null,
         string? draft = null)
     {
+        NotNumbers(checks, "checked");
         var idText = new Utf8(id);
         var savedText = new Utf8(Values(saved));
         var settledText = new Utf8(settled is null

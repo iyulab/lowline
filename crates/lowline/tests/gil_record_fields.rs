@@ -360,3 +360,50 @@ fn the_hosts_attestation_replaces_who_settled_the_batch_and_the_checks_a_draft_r
     assert!(refused.is_err());
     assert_eq!(kept.by(), Some("screen-1"));
 }
+
+#[test]
+fn the_hosts_attestation_names_only_fields_the_form_decides() {
+    let intake = intake();
+
+    // A field the form does not have, or has but does not decide, is refused — it would otherwise be dropped without
+    // a trace, and a typo would turn the check the host believes it drew into a record without one. The draft is left
+    // as it was.
+    for name in ["nope", "customer"] {
+        let mut draft = Draft::new();
+        draft.settled_by("screen-1");
+        let refused = intake
+            .attest(
+                &mut draft,
+                &lowline::Attestation {
+                    by: Some("server-9".to_owned()),
+                    batch: Some("b".to_owned()),
+                    held: BTreeMap::from([(name.to_owned(), 0.5)]),
+                },
+            )
+            .unwrap_err();
+        assert!(
+            refused.contains(name) && refused.contains("does not decide"),
+            "{refused}"
+        );
+        assert_eq!(draft.by(), Some("screen-1"), "{name}");
+        assert_eq!(draft.held(name), None, "{name}");
+    }
+
+    // Not a number is no probability, and the form's decided field takes a real one.
+    let mut draft = Draft::new();
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let attested = lowline::Attestation {
+            held: BTreeMap::from([("owner".to_owned(), bad)]),
+            ..Default::default()
+        };
+        assert!(intake.attest(&mut draft, &attested).is_err(), "{bad}");
+    }
+    let attested = lowline::Attestation {
+        by: Some("server-9".to_owned()),
+        held: BTreeMap::from([("owner".to_owned(), 0.05)]),
+        ..Default::default()
+    };
+    intake.attest(&mut draft, &attested).unwrap();
+    assert_eq!(draft.held("owner"), Some(0.05));
+    assert_eq!(draft.by(), Some("server-9"));
+}

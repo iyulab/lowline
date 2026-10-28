@@ -611,7 +611,9 @@ pub unsafe extern "C" fn lowline_engine_offer(
 /// given at all it replaces the draft's `by`, `batch` and checks even where it names none) — `by` a person or
 /// the application (`LOWLINE_SETTLED_BY_…`) at `settled_at`, learns it, and gives back the record to store: one Gil
 /// record as JSON, the line [`lowline_engine_learn`] reads back. Refused, with nothing learned, for a value the form does
-/// not hold: a field it does not have, several values for one that takes one, a value none of a choice field's choices.
+/// not hold: a field it does not have, several values for one that takes one, a value none of a choice field's choices —
+/// and for an `attest` that says a field was drawn for a check which the form does not decide, or with a probability
+/// that is not above 0 and at most 1.
 ///
 /// # Safety
 /// `engine` is a live handle used by nothing else during the call; the texts are valid for the call; `result_len`
@@ -641,7 +643,7 @@ pub unsafe extern "C" fn lowline_engine_settle(
             let attest = text(attest, "attest")?;
             if !attest.trim().is_empty() {
                 let attestation: Attestation = json(attest, "attest")?;
-                draft.attest(&attestation).map_err(input)?;
+                engine.attest(&mut draft, &attestation).map_err(input)?;
             }
             let by = match by {
                 LOWLINE_SETTLED_BY_PERSON => SettledBy::Person,

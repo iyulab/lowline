@@ -96,6 +96,35 @@ public sealed class EngineTests
             new Attestation { Held = new Dictionary<string, double> { ["owner"] = 1.5 } });
         refused.Should().Throw<ArgumentException>().WithMessage("*probability*");
         engine.Settled.Should().Be(settled, "nothing is learned from a refused save");
+
+        // Not a number is no probability, said in the engine's words and not the serializer's.
+        foreach (var bad in new[] { double.NaN, double.PositiveInfinity })
+        {
+            var notANumber = () => engine.Settle(
+                "d", saved, draft, SettledBy.Person, Start,
+                new Attestation { Held = new Dictionary<string, double> { ["owner"] = bad } });
+            notANumber.Should().Throw<ArgumentException>().WithMessage("*not a probability above 0*");
+        }
+
+        engine.Settled.Should().Be(settled);
+    }
+
+    [Theory]
+    [InlineData("nope")]
+    [InlineData("customer")]
+    public void The_hosts_attestation_names_only_fields_the_form_decides(string field)
+    {
+        using var engine = LowlineEngine.Create(Intake);
+        var saved = new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" };
+        var settled = engine.Settled;
+
+        // A field the form does not have, or does not decide, would be dropped without a trace: a typo would turn the
+        // check the host believes it drew into a record without one.
+        var refused = () => engine.Settle(
+            "typo", saved, null, SettledBy.Person, Start,
+            new Attestation { Held = new Dictionary<string, double> { [field] = 0.5 } });
+        refused.Should().Throw<ArgumentException>().WithMessage($"*'{field}'*does not decide*");
+        engine.Settled.Should().Be(settled, "nothing is learned from a refused save");
     }
 
     [Fact]

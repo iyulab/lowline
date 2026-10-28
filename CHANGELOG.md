@@ -6,6 +6,22 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Behaviour change:** an attestation that names a field the form does not decide is refused. `Attestation.Held` (`held`
+  in the C ABI, `Attestation.Held` in .NET) used to accept any field name: one the form does not have, or has but does not
+  decide, was dropped without a trace, so a mistyped name turned the check the host believed it had drawn into a record
+  with none — and the answer held back for the field it meant was dropped with it. `Engine::attest` (used by
+  `lowline_engine_settle`, `LowlineEngine.Settle` and `LowlineForms.SettleAsync`) now refuses it, as `Engine::record`
+  already refuses a check for a field the form does not decide, and nothing is learned. A host that passed such a name
+  must pass the field it meant. `Draft::attest` alone still does not know the form; a Rust host settling through `Engine`
+  uses `Engine::attest`.
+
+### Fixed
+
+- A probability that is not a number (NaN, infinity) in `Attestation.Held` or in the checks of `LowlineEngine.Record` is
+  refused with the engine's words ("not a probability above 0 and at most 1"); it surfaced as the JSON serializer's message.
+
 ## [0.10.0] - 2026-10-28
 
 ### Changed

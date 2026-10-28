@@ -585,5 +585,30 @@ fn the_hosts_word_replaces_the_drafts_on_who_settled_and_what_was_checked() {
     assert_ne!(status, LOWLINE_OK);
     assert!(last_error().contains("probability"), "{}", last_error());
     assert_eq!(unsafe { lowline_engine_settled(engine) }, learned);
+
+    // A draw for a field the form does not have, or does not decide, is refused too — a typo must not turn the check
+    // the host believes it drew into a record without one — and nothing is learned.
+    for (n, name) in ["nope", "customer"].into_iter().enumerate() {
+        let typo = json!({ "held": { name: 0.5 } }).to_string();
+        let status = unsafe {
+            lowline_engine_settle(
+                engine,
+                s("e"),
+                s(&saved),
+                s(&draft),
+                s(&typo),
+                LOWLINE_SETTLED_BY_PERSON,
+                5 + n as i64,
+                &mut len,
+            )
+        };
+        assert_ne!(status, LOWLINE_OK, "{name}");
+        assert!(
+            last_error().contains(name) && last_error().contains("does not decide"),
+            "{}",
+            last_error()
+        );
+        assert_eq!(unsafe { lowline_engine_settled(engine) }, learned);
+    }
     unsafe { lowline_engine_free(engine) };
 }
