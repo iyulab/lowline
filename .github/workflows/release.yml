@@ -1,6 +1,6 @@
 name: Release
 
-# Publishes the .NET packages (Lowline, Lowline.Sqlite, Lowline.AspNetCore) to NuGet and the form element
+# Publishes the .NET packages (Lowline, Lowline.Sqlite) to NuGet and the form element
 # (@iyulab/lowline-form) to npm. The `lowline` crate goes to crates.io from the same tag by hand:
 # `cargo publish -p lowline` (README, «Releasing»).
 #
@@ -183,7 +183,7 @@ jobs:
 
       - name: Pack
         run: |
-          for project in Lowline Lowline.Sqlite Lowline.AspNetCore; do
+          for project in Lowline Lowline.Sqlite; do
             dotnet pack "bindings/csharp/$project/$project.csproj" -c Release -o packages
           done
           unzip -l "packages/Lowline.${{ needs.check.outputs.version }}.nupkg" | grep -E "runtimes/|THIRD-PARTY-NOTICES"

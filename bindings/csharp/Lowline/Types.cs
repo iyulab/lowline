@@ -35,8 +35,12 @@ public readonly record struct FieldValue
     /// <summary>Several values.</summary>
     public static implicit operator FieldValue(string[] values) => Many(values);
 
-    internal sealed class FieldValueConverter : JsonConverter<FieldValue>
+    /// <summary>Reads and writes a value as the wire has it: a string for one value, an array for several. Public so that
+    /// a host's own source-generated serializer context, which can only name accessible converters, can carry
+    /// <see cref="FieldValue"/> too.</summary>
+    public sealed class FieldValueConverter : JsonConverter<FieldValue>
     {
+        /// <inheritdoc />
         public override FieldValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if (reader.TokenType == JsonTokenType.String)
@@ -53,6 +57,7 @@ public readonly record struct FieldValue
             return Many(values);
         }
 
+        /// <inheritdoc />
         public override void Write(Utf8JsonWriter writer, FieldValue value, JsonSerializerOptions options)
         {
             if (value._many is null)
@@ -503,6 +508,10 @@ public sealed record Attestation
 /// <summary>Why an engine's thresholds should be chosen again.</summary>
 public sealed record Staleness(string Reason, JsonElement? Detail = null);
 
+/// <summary>The wire shapes of what the engine returns — proposals, the report, usage — and of what it reads
+/// (<see cref="Attestation"/>, values), source-generated, for a host that carries them over HTTP or any other
+/// transport: the web client (<c>@iyulab/lowline-form</c>) reads exactly these. A host serializes with
+/// <c>LowlineJson.Default</c> rather than writing the shape again.</summary>
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(List<Proposal>))]
 [JsonSerializable(typeof(List<FillField>))]
@@ -518,4 +527,4 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(Dictionary<string, AttributeUsage>))]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(Attestation))]
-internal sealed partial class LowlineJson : JsonSerializerContext;
+public sealed partial class LowlineJson : JsonSerializerContext;

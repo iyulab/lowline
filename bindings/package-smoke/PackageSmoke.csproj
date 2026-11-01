@@ -12,6 +12,5 @@
   <ItemGroup>
     <PackageReference Include="Lowline" Version="$(LowlineVersion)" />
     <PackageReference Include="Lowline.Sqlite" Version="$(LowlineVersion)" />
-    <PackageReference Include="Lowline.AspNetCore" Version="$(LowlineVersion)" />
   </ItemGroup>
 </Project>

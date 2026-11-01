@@ -5,7 +5,7 @@ export default {
     'Cargo.toml', // [workspace.package] — both crates take it
     { file: 'Cargo.lock', package: 'lowline' },
     { file: 'Cargo.lock', package: 'lowline-ffi' },
-    'bindings/csharp/Directory.Build.props', // Lowline, Lowline.Sqlite, Lowline.AspNetCore
+    'bindings/csharp/Directory.Build.props', // Lowline, Lowline.Sqlite
     'bindings/web/package.json',
     'bindings/web/package-lock.json',
   ],

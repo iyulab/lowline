@@ -33,6 +33,5 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Lowline.Tests" />
-    <InternalsVisibleTo Include="Lowline.AspNetCore" />
   </ItemGroup>
 </Project>

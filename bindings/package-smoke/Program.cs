@@ -14,4 +14,3 @@ if (engine.Settled != 0)
 
 Console.WriteLine($"Lowline {typeof(LowlineEngine).Assembly.GetName().Version} on {System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier}: loaded");
 _ = typeof(Lowline.Sqlite.SqliteLowlineStore);
-_ = typeof(Lowline.AspNetCore.LowlineEndpoints);

@@ -6,7 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\bindings\csharp\Lowline.AspNetCore\Lowline.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\bindings\csharp\Lowline\Lowline.csproj" />
     <ProjectReference Include="..\..\bindings\csharp\Lowline.Sqlite\Lowline.Sqlite.csproj" />
   </ItemGroup>
 </Project>

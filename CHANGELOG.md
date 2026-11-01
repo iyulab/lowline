@@ -34,6 +34,16 @@ All notable changes to this project are written here. The format follows
 
 ### Changed
 
+- **Breaking:** `Lowline.AspNetCore` is no longer built or published. The engine does not host a web server; the host is
+  built by whoever runs the engine, over `LowlineForms`, and the next hosts (a framework's own, a desktop sidecar) are
+  not served by a second implementation of the same rules here. The endpoints are now the reference host in
+  `samples/aspnet` (`LowlineEndpoints.cs`: `AddLowline`, `MapLowline`, `LowlineWebOptions`), tested against the same routes;
+  copy the file, or serve the routes yourself. The routes the form element speaks are written in `bindings/web/README.md`
+  as the contract a host implements. To move off the package: drop the `Lowline.AspNetCore` reference, add the
+  file, and change `using Lowline.AspNetCore;` to your own namespace. 0.10.0 of the package stays on NuGet.
+- The wire shapes a host carries are public so a host does not write them again: `LowlineJson` (the engine's
+  source-generated serializer context for proposals, the report, usage, values and `Attestation`) and
+  `FieldValue.FieldValueConverter` (a host's own serializer context can only name accessible converters).
 - **Behaviour change:** an attestation that names a field the form does not decide is refused. `Attestation.Held` (`held`
   in the C ABI, `Attestation.Held` in .NET) used to accept any field name: one the form does not have, or has but does not
   decide, was dropped without a trace, so a mistyped name turned the check the host believed it had drawn into a record

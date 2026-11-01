@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Lowline.AspNetCore;
+namespace Lowline.Sample;
 
 /// <summary>What a web host's forms run on: <see cref="LowlineOptions"/>, and what the host decides per request — the
 /// memory space a request's records belong to, and the choices its person may pick.</summary>

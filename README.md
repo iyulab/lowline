@@ -17,18 +17,21 @@ Status: early development (0.x) — the packages are published, and may change b
 |---|---|
 | [`crates/lowline`](crates/lowline) | The core, in Rust with no I/O: the form in one shape whatever it was written in (formdown read from its schema), which of its fields are decided, per-field suggestion policy, and the account of what a person did with each suggestion while writing a record — taken, changed, turned down, or typed with nothing in view — turned into the settlements a decider learns from. With the `gil` feature, the form and its settlements in the vocabulary of the [Gil](https://crates.io/crates/iyulab-gil) decider, and an engine that keeps one form's decider between calls — records learned, fields answered, saves settled, thresholds chosen again when they no longer stand — leaving the host only to store what it hands back. Builds for WebAssembly too. |
 | [`crates/lowline-ffi`](crates/lowline-ffi) | A C ABI over the engine, one handle per form, everything as JSON — the native side of a .NET host. Not published on its own. |
-| [`bindings/csharp`](bindings/csharp) | The .NET host: an engine per form and memory space over the store the host keeps its records in (`ILowlineStore`, or SQLite with `Lowline.Sqlite`), proposing and settling through the C ABI; `Lowline.AspNetCore` puts it behind its routes with `AddLowline` and `MapLowline`. NuGet: `Lowline` (with the native library for Windows, Linux and macOS, x64 and arm64), `Lowline.Sqlite`, `Lowline.AspNetCore`. |
+| [`bindings/csharp`](bindings/csharp) | The .NET host: an engine per form and memory space over the store the host keeps its records in (`ILowlineStore`, or SQLite with `Lowline.Sqlite`), proposing and settling through the C ABI. NuGet: `Lowline` (with the native library for Windows, Linux — glibc and musl, so Alpine too — and macOS, x64 and arm64) and `Lowline.Sqlite`. The engine does not host a web server: the host is built by whoever runs the engine, over `LowlineForms`, and [`samples/aspnet`](samples/aspnet) is a reference host. |
 | [`bindings/web`](bindings/web) | `<lowline-form>`: a formdown form whose decided fields are suggested through those routes; it keeps the account of what was shown and done and sends it with the save. npm: `@iyulab/lowline-form`. |
 
 ## Using it
 
-A web host writes two pieces on the server and one on the page.
+A web host serves the routes the element speaks ([`bindings/web`](bindings/web) says which) over `LowlineForms`, and puts
+one element on the page. The reference host in [`samples/aspnet`](samples/aspnet) does it in two lines on the server —
+`AddLowline` and `MapLowline` are in its `LowlineEndpoints.cs`, which a host copies or builds on; it is tested against the
+same routes, and `LowlineJson` is the engine's own wire shape for what it returns.
 
 ```csharp
 builder.Services.AddLowline(o => o
     .UseSqlite("Data Source=lowline.db")       // where the confirmed records are kept
     .Form("intake", intakeDefinition));        // the form: its fields, as JSON or as formdown's getSchema()
-app.MapLowline("/lowline");                    // POST /lowline/{form}/propose · settle · fill · judge · GET report
+app.MapLowline("/lowline");                    // the routes of bindings/web, under /lowline
 ```
 
 ```html
@@ -66,18 +69,9 @@ refused. A form the engine refuses — this, or one with no field to decide — 
 `AddLowline`, or `LowlineForms.Define`), so the host fails as it starts rather than answering each request with the
 same 400.
 
-The routes, under the prefix `MapLowline` was given:
-
-| Route | Takes | Answers |
-|---|---|---|
-| `POST {form}/propose` | `{ "id", "values" }` — the record so far | per open decided field: the suggestion, what it rests on, its `promise`, or why there is none |
-| `POST {form}/settle` | `{ "id", "saved", "draft" }` — no `saved` with `Saved` | `{ "id", "settledAt" }`; 400 for a value the form cannot hold, and nothing is learned |
-| `GET {form}/report` | — | per decided field: the thresholds chosen, how many records they were chosen on (`chosenOn`), and what the replay of the records saw at them |
-| `POST {form}/fill` | `{ "values", "text" }` | the model's values as suggestions; 404 saying so without a model |
-| `POST {form}/judge` | `{ "id", "values" }` | the model's judgements for the fields the records could not answer; 404 saying so without a model |
-
-A form not defined is 404. Each request's memory space and allowed choices come from the host (below), never from the
-request body.
+The routes are the contract between the element and a host: they are written in [`bindings/web`](bindings/web), and the
+reference host serves them. A form not defined is 404; each request's memory space and allowed choices come from the host,
+never from the request body.
 
 Suggestions start once the records can back them. The engine replays the confirmed records to choose, per decided
 field, the threshold at which its answers have been right at least 80% of the time, over ten answers or more (thirty
