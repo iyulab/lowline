@@ -131,7 +131,7 @@ A server that is the trust boundary does not take the client's word about who se
 `Attestation`: its `Settler`, `Batch` and `Held` replace the draft's, even where it names none. Always give one from a
 server. What was shown (`shown`, `layer`, `promise`, `score`) stays the draft's account of what the form displayed.
 
-Filling from what a person wrote is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
+Filling from what a person wrote or showed — a photo, a scan, sent as attachments the model reads — is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
 tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
 in its field for the person to take — never put in on its own, and never counted as the records' own answer.
 

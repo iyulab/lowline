@@ -135,6 +135,52 @@ public sealed class WebTests : IAsyncDisposable
         missing.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    /// <summary>A model that reads the customer off the first attachment's name and says what it was given.</summary>
+    private sealed class NameplateModel : ILowlineModel
+    {
+        public LowlineFillRequest? Asked { get; private set; }
+
+        public Task<IReadOnlyDictionary<string, FieldValue>> FillAsync(
+            LowlineFillRequest request, CancellationToken cancellationToken = default)
+        {
+            Asked = request;
+            IReadOnlyDictionary<string, FieldValue> answered = new Dictionary<string, FieldValue>
+            {
+                ["customer"] = request.Attachments[0].Name ?? "unknown",
+            };
+            return Task.FromResult(answered);
+        }
+    }
+
+    [Fact]
+    public async Task A_picture_sent_to_fill_reaches_the_model_and_its_answer_comes_back_as_a_suggestion()
+    {
+        var model = new NameplateModel();
+        using var client = await StartAsync(o => o.UseModel(model));
+        var picture = new
+        {
+            mediaType = "image/jpeg",
+            data = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
+            name = "Beta",
+        };
+        using var response = await client.SendAsync(
+            Post("/lowline/intake/fill", new { values = new { }, attachments = new[] { picture } }), Ct);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var shown = JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!.AsArray();
+        shown.Should().ContainSingle();
+        shown[0]!["suggestion"]!["value"]!.GetValue<string>().Should().Be("Beta");
+        model.Asked!.Attachments.Should().ContainSingle().Which.MediaType.Should().Be("image/jpeg");
+        model.Asked.Attachments[0].Content.ToArray().Should().Equal(1, 2, 3);
+
+        // Data that is not base64 is a bad request, and the model is not asked again.
+        var asked = model.Asked;
+        using var broken = await client.SendAsync(
+            Post("/lowline/intake/fill", new { values = new { }, attachments = new[] { new { mediaType = "image/png", data = "***" } } }),
+            Ct);
+        broken.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        model.Asked.Should().BeSameAs(asked);
+    }
+
     [Fact]
     public async Task A_form_not_defined_is_not_found_and_a_body_that_does_not_read_is_refused()
     {

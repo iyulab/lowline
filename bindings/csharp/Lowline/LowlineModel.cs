@@ -2,12 +2,24 @@ namespace Lowline;
 
 /// <summary>What a host's model is asked when a form is filled from what a person wrote or showed: the form, the fields
 /// it may fill (each with the kind of value it takes and, for a choice field, the values this person may pick), the
-/// text, and the values the record holds already.</summary>
+/// text, what the person showed (<see cref="Attachments"/>), and the values the record holds already.</summary>
 public sealed record LowlineFillRequest(
     string Form,
     IReadOnlyList<FillField> Fields,
     string Text,
-    IReadOnlyDictionary<string, FieldValue> Values);
+    IReadOnlyDictionary<string, FieldValue> Values)
+{
+    /// <summary>What the person showed rather than wrote — a photo of a nameplate, a scan — for the model to read; empty
+    /// when only text was given. The engine does not read, keep or store them.</summary>
+    public IReadOnlyList<LowlineAttachment> Attachments { get; init; } = [];
+}
+
+/// <summary>Something a person showed rather than wrote, handed to the host's model with a fill request: its media type
+/// (<c>image/jpeg</c>, <c>application/pdf</c>, …), its bytes and, if known, its name. It is the model's input and no
+/// more — the engine reads none of it, keeps none of it, and does not know what the model makes of it; whatever the model
+/// answers is a suggestion from elsewhere, like an answer to text. A host that holds files by reference reads them before
+/// it asks.</summary>
+public sealed record LowlineAttachment(string MediaType, ReadOnlyMemory<byte> Content, string? Name = null);
 
 /// <summary>What a host's model is asked when the records could not answer a decided field: the form, the field, the
 /// values this person may pick for it (<c>null</c> for any), the fields and values the record holds that the judgement

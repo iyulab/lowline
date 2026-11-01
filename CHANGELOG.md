@@ -19,6 +19,12 @@ All notable changes to this project are written here. The format follows
   A store written from here carries `scores`, which a decider older than `iyulab-gil` 0.10 refuses: take 0.10 or later
   on every reader of the store.
 
+- **A fill request can carry what a person showed.** `LowlineFillRequest.Attachments` holds `LowlineAttachment`s (media
+  type, bytes, name) for the host's model to read — a photo of a nameplate, a scan — beside or instead of text;
+  `LowlineForms.FillAsync` takes them (`attachments`, before the cancellation token) and asks the model when either is
+  given. The engine reads none of it and keeps none of it: the model's values are suggestions from elsewhere, as for text.
+  The route `POST {form}/fill` of `bindings/web` takes `attachments` (base64 `data`), the element's `fill(text,
+  attachments)` and the client's `fill` send them, and the reference host serves them.
 - **The `Lowline` package carries the native library for Alpine Linux** (`linux-musl-x64` and `linux-musl-arm64`; it had six
   runtimes, now eight). Until now an Alpine process picked the glibc library for `linux-x64`, which does not load there.
   The library is dynamic against musl and needs `libgcc` at run time, which the .NET images for Alpine have; a bare

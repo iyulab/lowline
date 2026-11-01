@@ -292,6 +292,21 @@ describe('LowlineClient', () => {
     ])
   })
 
+  it('sends what the person showed with the text to the fill route, and nothing extra without it', async () => {
+    const calls: { url: string; body: unknown }[] = []
+    const client = new LowlineClient('/lowline', async (url, init) => {
+      calls.push({ url: String(url), body: JSON.parse(String(init?.body)) })
+      return new Response(JSON.stringify([lee]))
+    })
+    const photo = { mediaType: 'image/jpeg', data: 'AQID', name: 'nameplate' }
+    await client.fill('intake', {}, '', [photo])
+    await client.fill('intake', {}, 'Beta, lee')
+    expect(calls).toEqual([
+      { url: '/lowline/intake/fill', body: { values: {}, text: '', attachments: [photo] } },
+      { url: '/lowline/intake/fill', body: { values: {}, text: 'Beta, lee' } },
+    ])
+  })
+
   it('asks the judge route with the record', async () => {
     const calls: { url: string; body: unknown }[] = []
     const client = new LowlineClient('/lowline', async (url, init) => {

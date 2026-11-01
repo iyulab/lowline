@@ -61,6 +61,45 @@ public sealed class FillTests
         shown.Should().ContainSingle().Which.Suggestion.Should().Be(new Suggestion("lee", "other"));
     }
 
+    /// <summary>A model that reads the customer off what it was shown: the first attachment's name stands for the nameplate.
+    /// </summary>
+    private sealed class NameplateModel : ILowlineModel
+    {
+        public LowlineFillRequest? Asked { get; private set; }
+
+        public Task<IReadOnlyDictionary<string, FieldValue>> FillAsync(
+            LowlineFillRequest request, CancellationToken cancellationToken = default)
+        {
+            Asked = request;
+            IReadOnlyDictionary<string, FieldValue> answered = new Dictionary<string, FieldValue>
+            {
+                ["customer"] = request.Attachments[0].Name ?? "unknown",
+            };
+            return Task.FromResult(answered);
+        }
+    }
+
+    [Fact]
+    public async Task What_a_person_showed_goes_to_the_model_with_or_without_text()
+    {
+        var model = new NameplateModel();
+        using var forms = new LowlineOptions().UseStore(new InMemoryLowlineStore()).UseModel(model)
+            .Form("intake", EngineTests.Intake).Build();
+        var empty = new Dictionary<string, FieldValue>();
+
+        // Nothing written, nothing shown: the model is not asked.
+        (await forms.FillAsync(Seoul, empty, "", cancellationToken: Ct)).Should().BeEmpty();
+        model.Asked.Should().BeNull();
+
+        // A picture alone is enough, and its bytes reach the model as they are.
+        var nameplate = new LowlineAttachment("image/jpeg", new byte[] { 1, 2, 3 }, "Beta");
+        var shown = await forms.FillAsync(Seoul, empty, "", attachments: [nameplate], cancellationToken: Ct);
+        var asked = model.Asked!;
+        asked.Attachments.Should().ContainSingle().Which.MediaType.Should().Be("image/jpeg");
+        asked.Attachments[0].Content.ToArray().Should().Equal(1, 2, 3);
+        shown.Should().ContainSingle().Which.Suggestion.Should().Be(new Suggestion("Beta", "other"));
+    }
+
     [Fact]
     public async Task Without_a_model_there_is_no_filling()
     {

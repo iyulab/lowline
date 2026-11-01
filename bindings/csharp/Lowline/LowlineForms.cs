@@ -29,28 +29,30 @@ public sealed class LowlineForms : IDisposable
     /// <summary>Whether forms can be filled from what a person wrote: the host gave a model.</summary>
     public bool CanFill => _model is not null;
 
-    /// <summary>Fills a record from <paramref name="text"/> through the host's model: the model is told the fields still
-    /// empty, and what it answers is shown as suggestions from elsewhere — see <see cref="LowlineEngine.Fill"/>. Nothing
-    /// is asked when no field is left to fill or nothing is written.</summary>
+    /// <summary>Fills a record from <paramref name="text"/> and what the person showed (<paramref name="attachments"/>)
+    /// through the host's model: the model is told the fields still empty, and what it answers is shown as suggestions
+    /// from elsewhere — see <see cref="LowlineEngine.Fill"/>. Nothing is asked when no field is left to fill or nothing
+    /// is written or shown.</summary>
     /// <exception cref="InvalidOperationException">The host gave no model.</exception>
     public async Task<IReadOnlyList<Proposal>> FillAsync(
         LowlineScope scope,
         IReadOnlyDictionary<string, FieldValue> values,
         string text,
         IReadOnlyDictionary<string, IReadOnlyList<string>>? allowed = null,
+        IReadOnlyList<LowlineAttachment>? attachments = null,
         CancellationToken cancellationToken = default)
     {
         var model = _model
             ?? throw new InvalidOperationException("Lowline has no model to fill forms with: give one with UseModel.");
         var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
         var fields = running.Engine.Describe(values, allowed);
-        if (fields.Count == 0 || string.IsNullOrWhiteSpace(text))
+        if (fields.Count == 0 || (string.IsNullOrWhiteSpace(text) && (attachments is null || attachments.Count == 0)))
         {
             return [];
         }
 
-        var answered = await model.FillAsync(new LowlineFillRequest(scope.Form, fields, text, values), cancellationToken)
-            .ConfigureAwait(false);
+        var request = new LowlineFillRequest(scope.Form, fields, text, values) { Attachments = attachments ?? [] };
+        var answered = await model.FillAsync(request, cancellationToken).ConfigureAwait(false);
         return running.Engine.Fill(values, answered, allowed);
     }
 

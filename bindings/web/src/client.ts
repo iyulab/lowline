@@ -12,6 +12,15 @@ export class LowlineError extends Error {
   }
 }
 
+/** Something a person showed rather than wrote — a photo, a scan — sent to the host's model with a fill request. */
+export interface Attachment {
+  /** Its media type, such as `image/jpeg` or `application/pdf`. */
+  mediaType: string
+  /** Its bytes, base64. */
+  data: string
+  name?: string
+}
+
 /** A threshold chosen on a replay of the settled records, and what the replay saw at it. */
 export interface ThresholdChoice {
   threshold: number
@@ -88,9 +97,12 @@ export class LowlineClient {
     return this.post(form, 'settle', { id, saved, draft })
   }
 
-  /** What the host's model makes of `text` for the fields of record values still empty — 404 when the host gave none. */
-  fill(form: string, values: Values, text: string): Promise<Proposal[]> {
-    return this.post(form, 'fill', { values, text })
+  /**
+   * What the host's model makes of `text` and of what the person showed (`attachments`) for the fields of record values
+   * still empty — 404 when the host gave no model.
+   */
+  fill(form: string, values: Values, text: string, attachments?: Attachment[]): Promise<Proposal[]> {
+    return this.post(form, 'fill', attachments?.length ? { values, text, attachments } : { values, text })
   }
 
   /**

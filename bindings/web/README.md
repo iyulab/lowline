@@ -54,7 +54,7 @@ Under the prefix the host mounted them at (`src`):
 | `POST {form}/propose` | `{ "id", "values" }` — the record so far | per open decided field: the suggestion, what it rests on, its `promise`, or why there is none |
 | `POST {form}/settle` | `{ "id", "saved", "draft" }` — no `saved` with `Saved` | `{ "id", "settledAt" }`; 400 for a value the form cannot hold, and nothing is learned |
 | `GET {form}/report` | — | per decided field: the thresholds chosen, how many records they were chosen on (`chosenOn`), and what the replay of the records saw at them |
-| `POST {form}/fill` | `{ "values", "text" }` | the model's values as suggestions; 404 saying so without a model |
+| `POST {form}/fill` | `{ "values", "text", "attachments" }` — `attachments`, optional: what the person showed, each `{ "mediaType", "data" (base64), "name" }`; `text` may be empty when something is shown | the model's values as suggestions; 400 for data that is not base64; 404 saying so without a model |
 | `POST {form}/judge` | `{ "id", "values" }` | the model's judgements for the fields the records could not answer; 404 saying so without a model |
 
 A form not defined is 404. Each request's memory space and allowed choices come from the host, never from the request

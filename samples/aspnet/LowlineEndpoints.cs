@@ -197,8 +197,12 @@ public static class LowlineEndpoints
         await RespondAsync(context, async () =>
         {
             var scope = new LowlineScope(form, options.Space(context));
+            var attachments = (request.Attachments ?? [])
+                .Select(a => new LowlineAttachment(a.MediaType, ReadBytes(a.Data), a.Name))
+                .ToList();
             var shown = await forms.FillAsync(
-                    scope, request.Values, request.Text, options.Allowed(context, form), context.RequestAborted)
+                    scope, request.Values, request.Text ?? "", options.Allowed(context, form), attachments,
+                    context.RequestAborted)
                 .ConfigureAwait(false);
             await context.Response.WriteAsJsonAsync(
                     shown, LowlineJson.Default.IReadOnlyListProposal, cancellationToken: context.RequestAborted)
@@ -268,6 +272,19 @@ public static class LowlineEndpoints
         return null;
     }
 
+    /// <summary>The bytes of an attachment, sent as base64; a body that is not base64 is refused as a bad request.</summary>
+    private static byte[] ReadBytes(string data)
+    {
+        try
+        {
+            return Convert.FromBase64String(data);
+        }
+        catch (FormatException)
+        {
+            throw new ArgumentException("An attachment's data is not base64.");
+        }
+    }
+
     private static async Task RespondAsync(HttpContext context, Func<Task> respond)
     {
         try
@@ -293,7 +310,13 @@ internal sealed record SettleRequest(
 
 internal sealed record FillRequest(
     [property: JsonPropertyName("values")] Dictionary<string, FieldValue> Values,
-    [property: JsonPropertyName("text")] string Text);
+    [property: JsonPropertyName("text")] string? Text,
+    [property: JsonPropertyName("attachments")] List<AttachmentRequest>? Attachments);
+
+internal sealed record AttachmentRequest(
+    [property: JsonPropertyName("mediaType")] string MediaType,
+    [property: JsonPropertyName("data")] string Data,
+    [property: JsonPropertyName("name")] string? Name);
 
 internal sealed record SettleResponse(
     [property: JsonPropertyName("id")] string Id,
@@ -303,4 +326,5 @@ internal sealed record SettleResponse(
 [JsonSerializable(typeof(SettleRequest))]
 [JsonSerializable(typeof(SettleResponse))]
 [JsonSerializable(typeof(FillRequest))]
+[JsonSerializable(typeof(AttachmentRequest))]
 internal sealed partial class WebJson : JsonSerializerContext;

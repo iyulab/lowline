@@ -1,7 +1,7 @@
 import { LitElement, html } from 'lit'
 import { customElement, property, query } from 'lit/decorators.js'
 import '@formdown/ui'
-import { LowlineClient, LowlineError } from './client.js'
+import { LowlineClient, LowlineError, type Attachment } from './client.js'
 import { valuesOf, type Values } from './draft.js'
 import { Session, englishStrings, type FieldState, type Proposal, type Strings } from './session.js'
 
@@ -126,13 +126,14 @@ export class LowlineForm extends LitElement {
   }
 
   /**
-   * Fills the record from `text` — what the person wrote or a picture's description — through the host's model: each
-   * value it gives is offered in its field for the person to take. Nothing is put in on its own.
+   * Fills the record from `text` — what the person wrote — and `attachments` — what they showed: a photo, a scan —
+   * through the host's model: each value it gives is offered in its field for the person to take. Nothing is put in
+   * on its own.
    */
-  async fill(text: string): Promise<void> {
+  async fill(text: string, attachments?: Attachment[]): Promise<void> {
     const session = this.session
     if (!session || !this.form) return
-    const proposals = await this.client.fill(this.form, this.values(), text)
+    const proposals = await this.client.fill(this.form, this.values(), text, attachments)
     if (session !== this.session) return
     this.fieldStates = session.applyFill(proposals)
     if (this.formdown) this.formdown.fieldStates = this.fieldStates
