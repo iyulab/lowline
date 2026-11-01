@@ -19,6 +19,13 @@ All notable changes to this project are written here. The format follows
   A store written from here carries `scores`, which a decider older than `iyulab-gil` 0.10 refuses: take 0.10 or later
   on every reader of the store.
 
+### Documentation
+
+- The README names the way in for a host's existing history (`Record` and `Learn`, only rows a person actually settled)
+  and says why a record the application wrote on its own (`SettledBy.Application`) teaches no suggestion.
+- The README and `LowlineForms.SettleAsync` say that a server which is the trust boundary always gives an
+  `Attestation`: without one the draft's settler, batch and checks are the client's words.
+
 ### Changed
 
 - **Behaviour change:** an attestation that names a field the form does not decide is refused. `Attestation.Held` (`held`

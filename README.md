@@ -132,6 +132,11 @@ which reads a record back from its own store: the element then calls `settle()` 
 carries only the account of what was shown, and the engine learns the record as stored. A record the host has not
 stored is 404, and nothing is learned.
 
+A server that is the trust boundary does not take the client's word about who settled. The draft the form sends carries
+`by`, `batch` and `held` (the fields drawn for a check), and `Settle` keeps them as sent unless the host gives an
+`Attestation`: its `Settler`, `Batch` and `Held` replace the draft's, even where it names none. Always give one from a
+server. What was shown (`shown`, `layer`, `promise`, `score`) stays the draft's account of what the form displayed.
+
 Filling from what a person wrote is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
 tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
 in its field for the person to take — never put in on its own, and never counted as the records' own answer.
@@ -152,6 +157,14 @@ A host whose records live somewhere of its own — files, an existing database �
 build the engine's store from it: `LowlineEngine.Record` makes the line to store for each record (its values, how each
 decided field was settled, when), and `Learn` takes them together. `Report` says, per decided field, how far the
 records have come: the thresholds chosen, with the precision and answers the replay saw at them, or how close it came.
+
+**Starting from the history a host already has.** This is also the way in for records from before the engine, so that
+suggestions are there on the first day. A decided field left out of what `Record` is told was typed by a person with
+nothing in view, which is what a row in an existing store usually is, and `Learn` teaches the engine from the whole of
+it. The condition is the host's to keep: pass only rows a person actually settled. A record the application wrote on
+its own — an import, a file another program produced — is `SettledBy.Application` when it goes through `Settle`, and it
+teaches no suggestion: nobody saw one, and a value no person confirmed must not train what the engine suggests to
+people. Its fields are settled as `Fill`, which the decider does not learn from, however many there are.
 
 [`samples/aspnet`](samples/aspnet) is all of it on one page, with a stand-in model, seeding forty records so the
 owner of a known customer is suggested at once:

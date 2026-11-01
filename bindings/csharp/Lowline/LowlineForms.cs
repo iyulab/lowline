@@ -159,7 +159,8 @@ public sealed class LowlineForms : IDisposable
     /// <summary>Settles and stores record <paramref name="id"/> as saved — see <see cref="LowlineEngine.Settle"/>.
     /// When the thresholds no longer stand, they are chosen again on every stored record in the background — the
     /// engine answers with the ones it has meanwhile — then put in and stored; <see cref="WhenTunedAsync"/> waits for
-    /// that.</summary>
+    /// that. A host whose server is the trust boundary always gives <paramref name="attestation"/>: without it the
+    /// draft's own settler, batch and checks — the client's words — go into the record as sent.</summary>
     public async Task<SettledRecord> SettleAsync(
         LowlineScope scope,
         string id,
