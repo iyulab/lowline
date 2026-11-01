@@ -116,3 +116,18 @@ jobs:
 
       - name: Check public text
         run: npx --yes @iyulab/tauri-kit-dev@0.11.0 public-text .
+
+  # The native library for Alpine is built and loaded the way the release does it, so a change that breaks it fails here and
+  # not on a tag.
+  alpine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The native library builds and loads on Alpine
+        run: >
+          docker run --rm -v "$PWD":/src -w /src -e RUSTFLAGS="-C target-feature=-crt-static" rust:alpine
+          sh -c "apk add --no-cache musl-dev python3 &&
+          cargo build --release --locked -p lowline-ffi &&
+          python3 -c \"import ctypes; l = ctypes.CDLL('target/release/liblowline_native.so'); l.lowline_abi_version.restype = ctypes.c_uint32; print('abi', l.lowline_abi_version())\""

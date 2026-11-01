@@ -104,27 +104,41 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - { rid: win-x64, os: windows-latest, target: x86_64-pc-windows-msvc, file: lowline_native.dll }
-          - { rid: win-arm64, os: windows-latest, target: aarch64-pc-windows-msvc, file: lowline_native.dll }
+          - { rid: win-x64, os: windows-latest, target: x86_64-pc-windows-msvc, out: target/x86_64-pc-windows-msvc/release/lowline_native.dll }
+          - { rid: win-arm64, os: windows-latest, target: aarch64-pc-windows-msvc, out: target/aarch64-pc-windows-msvc/release/lowline_native.dll }
           # The library links against the build image's glibc, so the image decides the oldest Linux it loads on.
-          - { rid: linux-x64, os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, file: liblowline_native.so }
-          - { rid: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, file: liblowline_native.so }
-          - { rid: osx-x64, os: macos-latest, target: x86_64-apple-darwin, file: liblowline_native.dylib }
-          - { rid: osx-arm64, os: macos-latest, target: aarch64-apple-darwin, file: liblowline_native.dylib }
+          - { rid: linux-x64, os: ubuntu-24.04, target: x86_64-unknown-linux-gnu, out: target/x86_64-unknown-linux-gnu/release/liblowline_native.so }
+          - { rid: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, out: target/aarch64-unknown-linux-gnu/release/liblowline_native.so }
+          # Alpine (musl) is built where it runs: in an Alpine image on the runner of the same architecture, so the
+          # library is linked against musl's own loader, dynamically (a musl cdylib cannot be built static).
+          - { rid: linux-musl-x64, os: ubuntu-24.04, musl: true, out: target/release/liblowline_native.so }
+          - { rid: linux-musl-arm64, os: ubuntu-24.04-arm, musl: true, out: target/release/liblowline_native.so }
+          - { rid: osx-x64, os: macos-latest, target: x86_64-apple-darwin, out: target/x86_64-apple-darwin/release/liblowline_native.dylib }
+          - { rid: osx-arm64, os: macos-latest, target: aarch64-apple-darwin, out: target/aarch64-apple-darwin/release/liblowline_native.dylib }
     steps:
       - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
+        if: ${{ !matrix.musl }}
         with:
           targets: ${{ matrix.target }}
 
       - name: Build
+        if: ${{ !matrix.musl }}
         run: cargo build --release --locked -p lowline-ffi --target ${{ matrix.target }}
+
+      # The Alpine image's Rust is the host's own, musl: `-crt-static` off makes the library dynamic, as a cdylib must be
+      # there, and it needs Alpine's `libgcc` at run time — which the .NET images for Alpine carry.
+      - name: Build (Alpine)
+        if: ${{ matrix.musl }}
+        run: >
+          docker run --rm -v "$PWD":/src -w /src -e RUSTFLAGS="-C target-feature=-crt-static" rust:alpine
+          sh -c "apk add --no-cache musl-dev && cargo build --release --locked -p lowline-ffi"
 
       - uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.rid }}
-          path: target/${{ matrix.target }}/release/${{ matrix.file }}
+          path: ${{ matrix.out }}
           if-no-files-found: error
           retention-days: 1
 
@@ -157,7 +171,7 @@ jobs:
             mv "$dir"/* "$dest/"
             [ "$(find "$dest" -type f | wc -l)" -eq 1 ] || { echo "::error::$dest holds other than one library"; exit 1; }
           done
-          [ "$(ls bindings/csharp/Lowline/runtimes | wc -l)" -eq 6 ] || { echo "::error::expected six runtimes"; exit 1; }
+          [ "$(ls bindings/csharp/Lowline/runtimes | wc -l)" -eq 8 ] || { echo "::error::expected eight runtimes"; exit 1; }
 
       - uses: actions/setup-node@v7
         with:
@@ -219,6 +233,16 @@ jobs:
           dotnet run --project bindings/package-smoke
           -p:LowlineVersion=${{ needs.check.outputs.version }}
           -p:RestoreAdditionalProjectSources="$GITHUB_WORKSPACE/packages"
+
+      # Alpine takes the musl library, not the glibc one that `linux-x64` carries: restore the packages in a .NET image
+      # for Alpine and call into it there.
+      - name: Load the native library from the package on Alpine
+        if: runner.os == 'Linux'
+        run: >
+          docker run --rm -v "$GITHUB_WORKSPACE":/w -w /w -e DOTNET_NOLOGO=true mcr.microsoft.com/dotnet/sdk:10.0-alpine
+          dotnet run --project bindings/package-smoke
+          -p:LowlineVersion=${{ needs.check.outputs.version }}
+          -p:RestoreAdditionalProjectSources=/w/packages
 
   publish:
     needs: [check, smoke]

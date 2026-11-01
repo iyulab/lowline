@@ -19,6 +19,12 @@ All notable changes to this project are written here. The format follows
   A store written from here carries `scores`, which a decider older than `iyulab-gil` 0.10 refuses: take 0.10 or later
   on every reader of the store.
 
+- **The `Lowline` package carries the native library for Alpine Linux** (`linux-musl-x64` and `linux-musl-arm64`; it had six
+  runtimes, now eight). Until now an Alpine process picked the glibc library for `linux-x64`, which does not load there.
+  The library is dynamic against musl and needs `libgcc` at run time, which the .NET images for Alpine have; a bare
+  Alpine image needs `apk add libgcc`. The release builds it in an Alpine image on each architecture and loads it from the
+  packed package in a .NET image for Alpine before anything is published; CI builds and loads it on every push.
+
 ### Documentation
 
 - The README names the way in for a host's existing history (`Record` and `Learn`, only rows a person actually settled)
