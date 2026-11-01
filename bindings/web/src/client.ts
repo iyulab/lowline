@@ -51,6 +51,12 @@ export interface FieldReport {
   coarseSimilar?: ThresholdChoice
   similar?: ThresholdChoice
   similarOffered: boolean
+  /**
+   * For a judgement from outside the records: the score from which it is trusted, chosen from the cases it answered and
+   * people settled (its `promise` is the precision to expect of the next answers at or above it); absent while too few
+   * cases are settled for one to stand.
+   */
+  judgement?: ThresholdChoice
   promiseOver: number
   /** How many checks — answers held back while a person wrote the value — are among the records. */
   checks: number

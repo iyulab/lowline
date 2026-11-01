@@ -30,10 +30,12 @@ export interface Proposal {
   together?: string | null
   /**
    * How often an answer of this kind for this field has been right — the replay's precision at the threshold the
-   * suggestion was held to. Absent with no suggestion, for a judgement or a value from elsewhere, and before thresholds
-   * were chosen.
+   * suggestion was held to. Absent with no suggestion, for a value from elsewhere, for a judgement until the score it
+   * is trusted from was chosen from the records, and before thresholds were chosen.
    */
   promise?: number
+  /** For a judgement from outside the records: the score it gave the suggestion, on its own scale. The draft keeps it. */
+  score?: number
   /** Whether the field takes several values: it is settled as a set, which cannot be a check, so none is drawn for it. */
   several?: boolean
 }

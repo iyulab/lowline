@@ -156,6 +156,14 @@ describe('Session', () => {
     })
   })
 
+  it('reports the score of a judgement to the draft, and none for an answer of the records', () => {
+    const session = new Session('r', {}, 0.05, never, undefined, () => 10)
+    session.apply([{ ...lee, layer: 'judgement', score: 0.73 }], {})
+    expect(session.draft.fields.owner).toMatchObject({ layer: 'judgement', score: 0.73 })
+    session.apply([{ ...lee, suggestion: { value: 'kim' }, layer: 'key', promise: 0.9 }], {})
+    expect(session.draft.fields.owner.score).toBeUndefined()
+  })
+
   it('keeps the answer held back for a check, with its layer and promise', () => {
     const session = new Session('r', {}, 0.05, () => 0, undefined, () => 10)
     session.apply([{ ...lee, promise: 0.8 }], {})

@@ -14,10 +14,14 @@ export interface Suggestion {
 /** The layer of the decider an answer came from. */
 export type Layer = 'key' | 'similar' | 'judgement'
 
-/** What the host knows of the answer it shows or holds back, beyond its value: the layer that gave it and what it promised. */
+/**
+ * What the host knows of the answer it shows or holds back, beyond its value: the layer that gave it, what it promised,
+ * and — for a judgement from outside the records — the score it gave it on its own scale.
+ */
 export interface Reported {
   layer?: Layer | null
   promise?: number
+  score?: number
 }
 
 interface Track extends Reported {
@@ -38,7 +42,7 @@ interface Track extends Reported {
  *
  * Written as the engine reads it: `{ opened, fields: { field: { shown, declined, held } } }`, and — only what was
  * reported — `opened_at`, `saved_at` (milliseconds on one steady clock), `arrival` (the fields in the order their values
- * arrived), `by` and `batch`, and in a field `layer`, `promise`, `at` and `withheld`.
+ * arrived), `by` and `batch`, and in a field `layer`, `promise`, `score`, `at` and `withheld`.
  */
 export class Draft {
   readonly opened: Values
@@ -66,7 +70,7 @@ export class Draft {
 
   /**
    * The field's answer is held back for a check, drawn with `probability`: what the person settles is checked.
-   * `withheld` is the answer not shown, with its layer and promise, for the record to say what was held back.
+   * `withheld` is the answer not shown, with its layer, promise and score, for the record to say what was held back.
    */
   hold(field: string, probability: number, withheld?: { suggestion: Suggestion } & Reported): void {
     if (!(probability > 0 && probability <= 1)) throw new RangeError('a check is drawn with a probability above 0 and at most 1')
@@ -112,11 +116,13 @@ export class Draft {
     this.batch = id
   }
 
-  private report(track: Track, { layer, promise }: Reported): void {
+  private report(track: Track, { layer, promise, score }: Reported): void {
     if (layer) track.layer = layer
     else delete track.layer
     if (promise !== undefined) track.promise = promise
     else delete track.promise
+    if (score !== undefined) track.score = score
+    else delete track.score
   }
 
   /** The person turned down the suggestion in view; false, changing nothing, when none was shown. */

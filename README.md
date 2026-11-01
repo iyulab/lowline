@@ -140,9 +140,13 @@ The same model judges what the records cannot answer yet — a decided field of 
 Such a field asks for a judgement and says which of the record's values to read; the element asks the host, the host
 puts it to the model (`ILowlineModel.JudgeAsync`), and the model's value is offered back to the engine, which shows it
 as its own answer when the model trusts it and it is one of the field's choices. A judgement is shown, never put in on
-its own; taken by a person, it counts as the engine's answer. Whether a judgement is trusted is the model's own measure:
-the engine does not yet choose a threshold for judgements from how often they held, and `Report` has no row for them.
-Where the records have evidence, a judgement changes nothing.
+its own; taken by a person, it counts as the engine's answer. Whether a judgement is trusted starts as the model's own
+measure. The score the model gave an answer that was shown is kept on the record of the case (the draft's `score`,
+which `Session` reports as it does the layer), and once enough such cases are settled `Tune` chooses, as it does for the
+records' own layers, the score from which the judgement was right often enough: it is `Judgement` in `Report`, and from
+then on `Offer` trusts a judgement at or above it whatever the model said of itself, with the precision to expect in
+`Proposal.Promise`. A model's score is read only as "higher is surer" — it need not be a probability. Where the records
+have evidence, a judgement changes nothing.
 
 A host whose records live somewhere of its own — files, an existing database — can keep that as the original and
 build the engine's store from it: `LowlineEngine.Record` makes the line to store for each record (its values, how each

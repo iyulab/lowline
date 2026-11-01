@@ -273,9 +273,15 @@ public sealed record Proposal
 
     /// <summary>How often an answer of this kind for this field has been right — the precision the replay expects of the
     /// next answers at the threshold the suggestion was held to (<see cref="ThresholdChoice.Promise"/> in the
-    /// <see cref="LowlineEngine.Report"/>); <c>null</c> with no suggestion, for a judgement from outside the records or a
-    /// value from elsewhere, and before the thresholds were chosen.</summary>
+    /// <see cref="LowlineEngine.Report"/>); <c>null</c> with no suggestion, for a value from elsewhere, for a judgement
+    /// from outside the records until the score it is trusted from was chosen from the records
+    /// (<see cref="FieldReport.Judgement"/>), and before the thresholds were chosen.</summary>
     [JsonPropertyName("promise")] public double? Promise { get; init; }
+
+    /// <summary>For a suggestion from <see cref="Layer.Judgement"/>: the score the judgement gave it, on the judgement's
+    /// own scale. The draft keeps it (<c>score</c> in the field's account), so the engine can choose from the records the
+    /// score from which the judgement is trusted; <c>null</c> for an answer of the records, which have no such scale.</summary>
+    [JsonPropertyName("score")] public double? Score { get; init; }
 
     /// <summary>Whether the field takes several values. Such a field is settled as a set, which cannot be a check, so
     /// <see cref="Recheck.Draw(Proposal, double)"/> never draws it.</summary>
@@ -390,6 +396,12 @@ public sealed record FieldReport
 
     /// <summary>Whether the similar records layer is offered for the field.</summary>
     [JsonPropertyName("similarOffered")] public bool SimilarOffered { get; init; }
+
+    /// <summary>For a judgement from outside the records: the score from which it is trusted, chosen from the cases it
+    /// answered and people settled; its <see cref="ThresholdChoice.Promise"/> is the precision to expect of the next
+    /// answers at or above it. <c>null</c> while too few cases are settled for one to stand — the judgement is then
+    /// trusted by its own measure, with no promise.</summary>
+    [JsonPropertyName("judgement")] public ThresholdChoice? Judgement { get; init; }
 
     /// <summary>How many of the latest records each choice's <see cref="ThresholdChoice.Promise"/> is the precision
     /// over.</summary>

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AwesomeAssertions;
 
 namespace Lowline.Tests;
@@ -63,6 +64,64 @@ public sealed class JudgeTests
             SettledBy.Person,
             EngineTests.Start);
         record.Json.Should().Contain("\"owner\":\"Accept\"");
+    }
+
+    [Fact]
+    public void The_engine_chooses_the_score_a_judgement_is_trusted_from_by_how_the_cases_it_answered_were_settled()
+    {
+        using var engine = LowlineEngine.Create(EngineTests.Intake);
+        var records = new List<SettledRecord>();
+        for (var n = 0; n < 60; n++)
+        {
+            // The model is right whenever it is sure (0.9) and right half the time when it is not (0.3).
+            var sure = n % 3 != 2;
+            var score = sure ? 0.9 : 0.3;
+            var values = new Dictionary<string, FieldValue> { ["customer"] = $"customer-{n}" };
+            var shown = engine.Offer($"c{n}", values, "owner", [new JudgedValue("kim", score, true)])!;
+            shown.Layer.Should().Be(Layer.Judgement);
+            shown.Score.Should().Be(score);
+
+            // The score travels from the proposal into the draft the form sends back, as `promise` does.
+            var draft = new JsonObject
+            {
+                ["fields"] = new JsonObject
+                {
+                    ["owner"] = new JsonObject
+                    {
+                        ["shown"] = new JsonObject { ["value"] = "kim" },
+                        ["layer"] = "judgement",
+                        ["score"] = shown.Score,
+                    },
+                },
+            }.ToJsonString();
+            var owner = sure || n % 2 == 0 ? "kim" : "lee";
+            records.Add(engine.Settle(
+                $"c{n}",
+                new Dictionary<string, FieldValue> { ["customer"] = $"customer-{n}", ["owner"] = owner },
+                draft,
+                SettledBy.Person,
+                EngineTests.Start.AddMinutes(n)));
+        }
+
+        records[0].Json.Should().Contain("\"scores\":{\"owner\":0.9}");
+
+        // Before the engine has chosen, the model's own word stands and nothing is promised.
+        var before = engine.Offer(
+            "new", new Dictionary<string, FieldValue> { ["customer"] = "Gamma" }, "owner", [new JudgedValue("kim", 0.3, true)])!;
+        before.Suggestion.Should().Be(new Suggestion("kim"));
+        before.Promise.Should().BeNull();
+
+        engine.Tune(records.Select(r => r.Json));
+        var chosen = engine.Report!.Single(r => r.Field == "owner").Judgement!;
+        chosen.Threshold.Should().BeInRange(0.3, 0.9).And.NotBe(0.3);
+        chosen.Promise.Should().BeGreaterThanOrEqualTo(0.8);
+
+        // Now the chosen score decides, whatever the model said of itself, and the promise is beside the answer.
+        var values2 = new Dictionary<string, FieldValue> { ["customer"] = "Gamma" };
+        var sureNow = engine.Offer("a", values2, "owner", [new JudgedValue("kim", 0.9, false)])!;
+        sureNow.Suggestion.Should().Be(new Suggestion("kim"));
+        sureNow.Promise.Should().Be(chosen.Promise);
+        engine.Offer("b", values2, "owner", [new JudgedValue("kim", 0.3, true)])!.Suggestion.Should().BeNull();
     }
 
     [Fact]
