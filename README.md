@@ -113,26 +113,26 @@ make the lines with `LowlineEngine.Record`, choose thresholds on them with `Choo
 Set the element's `content` to the form's formdown text. While a record is written, the element asks what to show
 for the fields the engine decides, draws each suggestion in its field with what it rests on, and keeps the account of
 what the person took, changed or turned down; `save()` sends it with the values, and the engine learns from it. The
-host decides, per request, the memory space a record belongs to (`Space` — a workplace, a team; records of one space
-never answer for another) and the choices its person may pick (`Allowed`) — a value outside them is never suggested.
-Authentication and authorization stay the host's. A host that draws its own form imports `Draft`, `Session` and
+host decides, per request, the memory space a record belongs to (a workplace, a team; records of one space never answer
+for another — the reference host's `Space`) and the choices its person may pick (its `Allowed`) — a value outside them
+is never suggested. Authentication and authorization stay the host's. A host that draws its own form imports `Draft`, `Session` and
 `LowlineClient` from `@iyulab/lowline-form/headless` — no element, no Lit, no formdown — and does what the element does:
 `Session.apply` each round of proposals (it draws the checks and hides what they hold back), then
 `LowlineClient.settle(form, id, session.draft, values)` once the record is saved.
 
 What the engine learns is what a person confirmed, so `settle` takes the values it is sent as the save itself. A host
-that already stores its records through its own API — its permissions, validation and corrections — gives `Saved`,
-which reads a record back from its own store: the element then calls `settle()` after the host's save, the request
+that already stores its records through its own API — its permissions, validation and corrections — has the settle route
+read the record back from its own store (the reference host's `Saved`): the element then calls `settle()` after the host's save, the request
 carries only the account of what was shown, and the engine learns the record as stored. A record the host has not
 stored is 404, and nothing is learned.
 
 A server that is the trust boundary does not take the client's word about who settled. The draft the form sends carries
 `by`, `batch` and `held` (the fields drawn for a check), and `Settle` keeps them as sent unless the host gives an
-`Attestation`: its `Settler`, `Batch` and `Held` replace the draft's, even where it names none. Always give one from a
-server. What was shown (`shown`, `layer`, `promise`, `score`) stays the draft's account of what the form displayed.
+`Attestation`: its `Settler`, `Batch` and `Held` replace the draft's, even where it names none (the reference host's
+`Attest`). Always give one from a server. What was shown (`shown`, `layer`, `promise`, `score`) stays the draft's account of what the form displayed.
 
-Filling from what a person wrote or showed — a photo, a scan, sent as attachments the model reads — is on when the host gives its model (`UseModel` with an `ILowlineModel`): the engine
-tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
+Filling from what a person wrote or showed — a photo, a scan, sent as attachments the model reads — is on when the host
+gives its model (`UseModel` with an `ILowlineModel`): the engine tells the model which fields are still empty and what each may hold, checks what comes back, and offers each value
 in its field for the person to take — never put in on its own, and never counted as the records' own answer.
 
 The same model judges what the records cannot answer yet — a decided field of a record unlike any confirmed before.
