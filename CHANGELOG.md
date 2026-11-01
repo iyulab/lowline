@@ -6,6 +6,19 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A judgement from outside the records is trusted from a score the records choose.** The host's model has its own scale,
+  and what it says of itself (`trusted`) was all the engine had. Now the score a judgement gave an answer that was shown
+  is kept on the record of the case (`Proposal::score`, `Draft::score`, the record's `scores` entry — written only for an
+  answer that came from a judgement), and once enough cases are settled `Engine::tune` chooses, as it does for the
+  records' own layers, the score from which the judgement is right often enough (`FieldReport::judgement`). From then on
+  `Engine::offer` trusts a judgement at or above that score whatever the model said of itself, and `Proposal::promise`
+  carries the precision to expect of it. Before a score stands — too few cases — nothing changes: the judgement is trusted
+  by its own measure and has no promise. A tuning stored before has no such score and is read as before.
+  A store written from here carries `scores`, which a decider older than `iyulab-gil` 0.10 refuses: take 0.10 or later
+  on every reader of the store.
+
 ### Changed
 
 - **Behaviour change:** an attestation that names a field the form does not decide is refused. `Attestation.Held` (`held`

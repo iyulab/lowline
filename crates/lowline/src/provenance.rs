@@ -164,6 +164,13 @@ struct Track {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     promise: Option<f64>,
+    /// The score a judgement from outside the records gave the suggestion shown (or held back), on its own scale, when
+    /// the host reported it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    score: Option<f64>,
     /// When the person reached the field, or its suggestion came into view — the first of the two — on the host's
     /// clock, in milliseconds.
     #[cfg_attr(
@@ -179,7 +186,7 @@ struct Track {
 /// The host reports what the person sees and does — [`Draft::show`], [`Draft::decline`], [`Draft::hold`] — and hands
 /// the saved values to [`Draft::settle`]. Typing needs no report: the saved value says what was typed.
 ///
-/// A host that wants the record to say more reports more, all of it optional: the layer and promise of a suggestion
+/// A host that wants the record to say more reports more, all of it optional: the layer, promise and score of a suggestion
 /// ([`Draft::show_proposed`], [`Draft::hold_proposed`]), when the record was opened and saved and when a field was
 /// reached ([`Draft::open_at`], [`Draft::save_at`], [`Draft::reach`] — one steady clock, in milliseconds), the order
 /// values arrived in ([`Draft::arrived`]), who settled ([`Draft::settled_by`]) and the batch ([`Draft::in_batch`]).
@@ -187,7 +194,7 @@ struct Track {
 /// With `serde` it reads and writes as `{ "opened": { field: value }, "fields": { field: { "shown": suggestion,
 /// "declined": bool, "held": probability } } }`, each part optional — what a form drawn in a browser keeps and sends
 /// with the save — plus, when reported, `"opened_at"`, `"saved_at"` (milliseconds), `"arrival"` (field names), `"by"`
-/// and `"batch"` beside them, and `"layer"`, `"promise"`, `"at"` and `"withheld"` in a field.
+/// and `"batch"` beside them, and `"layer"`, `"promise"`, `"score"`, `"at"` and `"withheld"` in a field.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Draft {
@@ -286,6 +293,7 @@ impl Draft {
         track.withheld = None;
         track.layer = None;
         track.promise = None;
+        track.score = None;
     }
 
     /// The suggestion of `proposal` came into view, with the layer that gave it and the precision it promised, so
@@ -298,6 +306,7 @@ impl Draft {
         let track = self.fields.entry(proposal.field.clone()).or_default();
         track.layer = proposal.layer;
         track.promise = proposal.promise;
+        track.score = proposal.score;
         true
     }
 
@@ -319,6 +328,7 @@ impl Draft {
         track.withheld = None;
         track.layer = None;
         track.promise = None;
+        track.score = None;
     }
 
     /// As [`Draft::hold`] for the field of `proposal`, which also keeps the answer held back with its layer and
@@ -336,6 +346,7 @@ impl Draft {
         track.withheld = Some(suggestion);
         track.layer = proposal.layer;
         track.promise = proposal.promise;
+        track.score = proposal.score;
         true
     }
 
@@ -430,6 +441,11 @@ impl Draft {
     /// The precision reported as promised for the answer in view for the field.
     pub fn promise(&self, field: &str) -> Option<f64> {
         self.fields.get(field).and_then(|track| track.promise)
+    }
+
+    /// The score a judgement from outside the records reported for the answer in view for the field.
+    pub fn score(&self, field: &str) -> Option<f64> {
+        self.fields.get(field).and_then(|track| track.score)
     }
 
     /// Milliseconds from when the person reached the field to the save, when both were reported.

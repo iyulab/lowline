@@ -208,6 +208,11 @@ pub struct FieldReport {
     /// [`Counting::SettledUntilChecked`], which of the two its checks so far made it.
     #[cfg_attr(feature = "serde", serde(default))]
     pub counting: Counting,
+    /// For a judgement from outside the records: the score from which it is trusted, chosen from the cases it answered
+    /// and people settled (its `promise` is the precision to expect of the next answers at or above it). `None` while
+    /// too few cases are settled for one to stand — the judgement is then trusted by its own measure, with no promise.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub judgement: Option<gil::replay::ThresholdChoice>,
 }
 
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
@@ -313,6 +318,7 @@ pub fn tune(
             promise_over: gil::replay::RECENT_RECORDS,
             checks,
             counting,
+            judgement: None,
         };
         if multiple {
             field.closest = closest(&keyed.chosen);
@@ -343,6 +349,12 @@ pub fn tune(
         field.closest = closest(&layers.key);
         field.similar = layers.memory.chosen.clone();
         field.similar_offered = similar.is_some();
+        // A judgement from outside the records is measured on the cases it answered: the records say how often it was
+        // right at each score, as they say it of their own layers.
+        let judged = gil::replay::scored_decisions(&ordered, &name);
+        if !judged.is_empty() {
+            field.judgement = gil::replay::select_score_threshold(&judged, choice).chosen;
+        }
 
         if typed_longest > 0 {
             let typed = gil::replay::select_typed_key_thresholds(
@@ -526,6 +538,12 @@ pub fn annotate(
                     if let Some(promise) = draft.promise(field) {
                         record.promises.insert(field.clone(), promise);
                     }
+                    // A judgement's score is read only for a field whose answer came from a judgement.
+                    if draft.layer(field) == Some(crate::Layer::Judgement)
+                        && let Some(score) = draft.score(field).filter(|score| score.is_finite())
+                    {
+                        record.scores.insert(field.clone(), score);
+                    }
                 }
             }
             if let Some(id) = draft.by() {
@@ -580,13 +598,19 @@ fn answered(
             return Proposal::abstain(name, Abstain::NotAllowed);
         }
         let suggestion = Suggestion::new(first.value.clone());
-        return Proposal::suggest(
+        let mut proposal = Proposal::suggest(
             name,
             suggestion,
             layer(first.source),
             basis(first),
             field.policy,
         );
+        // The judgement's own score, kept on the record so the engine can choose from the records the score it is
+        // trusted from. The records' layers have no such scale.
+        if first.source == gil::decider::Source::External {
+            proposal.score = Some(first.score);
+        }
+        return proposal;
     }
     if let Some(class) = answer.coarse.as_ref().filter(|c| c.trusted) {
         if allowed.is_some_and(|a| !a.iter().any(|c| c.starts_with(&class.value))) {
@@ -689,6 +713,11 @@ pub fn decision(proposal: &Proposal, settlement: Option<&Settlement>) -> gil::sc
         );
         if let Some(promise) = proposal.promise {
             record.promises.insert(field.clone(), promise);
+        }
+        if proposal.layer == Some(crate::Layer::Judgement)
+            && let Some(score) = proposal.score.filter(|score| score.is_finite())
+        {
+            record.scores.insert(field.clone(), score);
         }
     }
     if let Some(settlement) = settlement.filter(|s| s.kind != SettlementKind::Reject) {

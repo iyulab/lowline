@@ -331,7 +331,8 @@ impl Engine {
 
     /// `shown` with the promise of the threshold its suggestion was held to, from the report of the thresholds chosen:
     /// the key layer's — or, with `typed` characters typed, the threshold for that many — the coarse level's for a
-    /// class (the key layer's or the similar records', whichever backs it), the similar records layer's. Nothing for a judgement from outside the records, a value from elsewhere, or
+    /// class (the key layer's or the similar records', whichever backs it), the similar records layer's, a judgement's from
+    /// outside the records. Nothing for a judgement before its score threshold was chosen, a value from elsewhere, or
     /// an engine not tuned.
     fn promised(&self, mut shown: Proposal, typed: Option<usize>) -> Proposal {
         let Some(suggestion) = &shown.suggestion else {
@@ -357,6 +358,7 @@ impl Engine {
                 None => report.key.as_ref(),
             },
             (Origin::Decider, Fit::Exact, Some(Layer::Similar)) => report.similar.as_ref(),
+            (Origin::Decider, Fit::Exact, Some(Layer::Judgement)) => report.judgement.as_ref(),
             _ => None,
         };
         shown.promise = choice.map(|c| c.promise);
@@ -463,11 +465,31 @@ impl Engine {
         let lookup = Lookup::new(&self.schema, field, &known.values)
             .sets(&known.sets)
             .excluding(Some(id));
+        // Once the records say from which score the judgement is right often enough, that score decides what is trusted,
+        // whatever the judgement said of itself; before that, the judgement's own measure stands.
+        let judged;
+        let ranked = match self
+            .tuned
+            .as_ref()
+            .and_then(|t| t.report.iter().find(|r| r.field == field))
+            .and_then(|r| r.judgement.as_ref())
+        {
+            Some(chosen) => {
+                judged = ranked
+                    .iter()
+                    .map(|candidate| ExternalCandidate {
+                        trusted: candidate.probability >= chosen.threshold,
+                        ..candidate.clone()
+                    })
+                    .collect::<Vec<_>>();
+                &judged[..]
+            }
+            None => ranked,
+        };
         let answer = self.decider.offer_external(&lookup, ranked);
-        Some(proposal(
-            resolved,
-            &answer,
-            allowed.get(field).map(Vec::as_slice),
+        Some(self.promised(
+            proposal(resolved, &answer, allowed.get(field).map(Vec::as_slice)),
+            None,
         ))
     }
 

@@ -111,13 +111,23 @@ pub struct Proposal {
     pub together: Option<String>,
     /// How often an answer of this kind for this field has been right — the precision the replay expects of the next
     /// answers at the threshold the suggestion was held to (the layer's `promise` in [`crate::gil::FieldReport`]).
-    /// `None` with no suggestion, for a judgement from outside the records or a value from elsewhere, and before the
-    /// thresholds were chosen.
+    /// `None` with no suggestion, for a value from elsewhere, for a judgement from outside the records until the score
+    /// from which it is trusted was chosen from the settled records ([`crate::gil::FieldReport::judgement`]), and before
+    /// the thresholds were chosen.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub promise: Option<f64>,
+    /// For a suggestion from [`Layer::Judgement`]: the score the judgement gave it, on the judgement's own scale (the
+    /// probability the host's model reported). It is kept on the record the suggestion ends up in
+    /// ([`crate::Draft::show_proposed`]), so that the engine can choose, from the settled records, the score from which
+    /// the judgement is trusted. `None` for an answer of the records, which have no such scale.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub score: Option<f64>,
     /// Whether the field takes several values. Such a field is settled as a set, which cannot be a check — a check is
     /// one value written with the answer held back — so it is never drawn for one ([`Recheck::draw`]).
     #[cfg_attr(
@@ -141,6 +151,7 @@ impl Proposal {
             with: Vec::new(),
             together: None,
             promise: None,
+            score: None,
             several: false,
         }
     }
@@ -168,6 +179,7 @@ impl Proposal {
             with: Vec::new(),
             together: None,
             promise: None,
+            score: None,
             several: false,
         }
     }
