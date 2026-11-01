@@ -16,9 +16,9 @@ checksum = "5dfac9bfd94595b7c2d9195474c8b7cbf54fa47b92a11bd97c74fc3805137276"
 
 [[package]]
 name = "iyulab-gil"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50779cd16dd741967be9e5150cd4a407a0cce0e4960a04020f10b9ae33c109da"
+checksum = "748473b681aee43d884000e7648170ba4842d88deeca91fbb9aa849f1421d603"
 dependencies = [
  "serde",
  "unicode-normalization",

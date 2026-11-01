@@ -16,6 +16,8 @@ All notable changes to this project are written here. The format follows
   already refuses a check for a field the form does not decide, and nothing is learned. A host that passed such a name
   must pass the field it meant. `Draft::attest` alone still does not know the form; a Rust host settling through `Engine`
   uses `Engine::attest`.
+- Builds on `iyulab-gil` 0.10 (it was 0.9). Nothing in the engine's own surface changes with the bump; a tuning stored
+  under 0.9 is read and put back as it was.
 
 ### Fixed
 

@@ -712,3 +712,37 @@ fn a_field_waiting_on_its_group_holds_nothing_back() {
     assert_eq!(industry.abstain, Some(lowline::Abstain::Together));
     assert_eq!(industry.with, ["occupation"]);
 }
+
+/// A host keeps the tuning it was given and puts it back after a restart, often across an upgrade of the decider. A
+/// tuning chosen by the Gil before this one, written without the settings that Gil has since added, is read, and what
+/// it holds answers as it did.
+#[cfg(feature = "serde")]
+#[test]
+fn a_tuning_stored_before_the_decider_gained_settings_is_read_and_put_back() {
+    let form = Form {
+        fields: vec![
+            Field::new("customer", FieldKind::Text),
+            Field::choice("owner", ["kim", "lee"]),
+        ],
+    };
+    let fields = form.resolve(Inference::ClosedChoices).unwrap();
+    let mut intake = Engine::new("intake", fields.clone(), engine::Tune::default()).unwrap();
+    let records = alternating(&intake, 40);
+    let tuned = intake.tune(&records).clone();
+    let typed = saved(&[("customer", "Beta")]);
+    let shown = intake.propose("new", &typed, &BTreeMap::new());
+
+    // What the previous decider wrote: no settings for the first record of a batch, an older version.
+    let mut stored = serde_json::to_value(&tuned).unwrap();
+    for attribute in stored["tuning"]["attributes"].as_array_mut().unwrap() {
+        let attribute = attribute.as_object_mut().unwrap();
+        attribute.retain(|name, _| !name.starts_with("first_"));
+    }
+    let tuned_before: lowline::gil::Tuned = serde_json::from_value(stored).unwrap();
+
+    let mut restarted = Engine::new("intake", fields, engine::Tune::default()).unwrap();
+    restarted.learn(&records);
+    restarted.restore(Some(tuned_before));
+    assert_eq!(restarted.stale(), None);
+    assert_eq!(restarted.propose("new", &typed, &BTreeMap::new()), shown);
+}
