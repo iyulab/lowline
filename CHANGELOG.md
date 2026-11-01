@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-01
+
 ### Added
 
 - **A judgement from outside the records is trusted from a score the records choose.** The host's model has its own scale,
