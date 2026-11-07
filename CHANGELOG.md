@@ -6,6 +6,15 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`Lowline.Extensions.AI`: the host's model over a `Microsoft.Extensions.AI` chat client.** `UseChatClient(client)` (or
+  `new ChatClientLowlineModel(client)`) fills forms from what a person wrote and showed — attachments are handed to the
+  client as data — and judges a decided field the records could not answer, trusting a value from `TrustFrom` (0.7). It
+  sends the client the engine's request and nothing else. A client whose `ChatClientMetadata.ProviderUri` names another
+  machine is refused unless `AllowRemote` is set, so what people write stays on the machine unless the host says
+  otherwise. A host that implements `ILowlineModel` itself is unaffected.
+
 ### Changed
 
 - **The `gil` feature uses `iyulab-gil` 0.11.** A host that names Gil's types alongside the engine's moves its own

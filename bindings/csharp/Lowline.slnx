@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Lowline/Lowline.csproj" />
+  <Project Path="Lowline.Extensions.AI/Lowline.Extensions.AI.csproj" />
   <Project Path="Lowline.Sqlite/Lowline.Sqlite.csproj" />
   <Project Path="Lowline.Tests/Lowline.Tests.csproj" />
 </Solution>

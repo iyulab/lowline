@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Lowline.Extensions.AI</RootNamespace>
+    <Description>The Lowline engine's model over a Microsoft.Extensions.AI chat client: filling a form's fields from what a person wrote or showed, and judging a decided field the records could not answer. A client that talks to a remote service is refused unless the host allows it.</Description>
+    <PackageTags>forms;suggestion;ai;chat</PackageTags>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Lowline\Lowline.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Lowline.Tests" />
+  </ItemGroup>
+</Project>

@@ -5,6 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Lowline\Lowline.csproj" />
     <ProjectReference Include="..\Lowline.Sqlite\Lowline.Sqlite.csproj" />
+    <ProjectReference Include="..\Lowline.Extensions.AI\Lowline.Extensions.AI.csproj" />
     <!-- The reference host the sample is: its endpoints are the HTTP contract the web client speaks, and are tested here. -->
     <Compile Include="..\..\..\samples\aspnet\LowlineEndpoints.cs" Link="Sample\LowlineEndpoints.cs" />
   </ItemGroup>
