@@ -200,6 +200,7 @@ jobs:
           npm run build
           npm run bundle
           npm test
+          mkdir -p ../../npm-package
           npm pack --pack-destination ../../npm-package
           tar -tzf ../../npm-package/iyulab-lowline-form-${{ needs.check.outputs.version }}.tgz | grep -x package/LICENSE
 
