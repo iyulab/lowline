@@ -86,6 +86,12 @@ suggestions themselves. A field held back holds back the open fields settled tog
 `together` group): the checked value is written with nothing of its group in view. Only the field drawn is the check. A
 host drawing its own checks finds the fields to hide with `Draft::hidden` (Rust) or `Recheck.Hidden` (.NET).
 
+The rate is the host's, field by field: `Recheck` is a value the host holds, and each check carries the probability it was
+drawn with, so fields may be drawn at different rates and still count right. One in twenty keeps the cost low where a field
+is settled rarely. A host that wants to tell, field by field, whether seeing the answer changes how people settle it needs
+many checks in each field it asks that of, and draws more often in those — its busiest fields. The answer held back is still
+written on the record (`suggested`, `sources`, `promises`), so what the decider would have said is there to compare.
+
 The record the engine hands back to store is a Gil record line, and it says more than how each field was settled when
 the draft reports more. The element reports it all: the answer in view with its layer and promise (`suggested`,
 `sources`, `promises` — the answer held back for a check counts as in view), how long each field took from the person
