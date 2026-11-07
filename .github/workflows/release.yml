@@ -4,6 +4,9 @@ name: Release
 # (@iyulab/lowline-form) to npm. The `lowline` crate goes to crates.io from the same tag by hand:
 # `cargo publish -p lowline` (README, «Releasing»).
 #
+# NuGet: this repository holds no NuGet key. The packed .nupkg files go up as the artifact `nuget-packages` and the
+# organization's publishing repository, iyulab/nuget-publish, pushes them with Trusted Publishing (`request.yml`).
+#
 # To release: `npx @iyulab/tauri-kit-dev versions --config versions.config.js --bump <version>`, move the
 # changelog's [Unreleased] under that version, commit, tag `v<version>`, push the tag.
 # - Pushing a `v*` tag publishes that tag.
@@ -77,14 +80,15 @@ jobs:
           fi
 
       # Said on every run, so a trial run shows whether a publish would find its keys; only a publish needs them.
+      # RELEASE_BOT_PRIVATE_KEY lets `request.yml` ask iyulab/nuget-publish to push the NuGet packages.
       - name: Registry keys reach this repository
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+          RELEASE_BOT_PRIVATE_KEY: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           PUBLISH: ${{ steps.version.outputs.publish }}
         run: |
           missing=0
-          for name in NUGET_API_KEY NPM_TOKEN; do
+          for name in RELEASE_BOT_PRIVATE_KEY NPM_TOKEN; do
             if [ -n "${!name}" ]; then echo "$name: available"; else echo "::warning::$name is not available"; missing=1; fi
           done
           [ "$PUBLISH" != "true" ] || [ "$missing" -eq 0 ]
@@ -181,6 +185,7 @@ jobs:
       - name: Write the native libraries' notices
         run: npx --yes @iyulab/tauri-kit-dev@0.11.1 notices --config notices/config.mjs --strict
 
+      # NuGet and npm packages go in separate folders: the NuGet artifact may hold .nupkg/.snupkg files only.
       - name: Pack
         run: |
           for project in Lowline Lowline.Sqlite; do
@@ -195,13 +200,20 @@ jobs:
           npm run build
           npm run bundle
           npm test
-          npm pack --pack-destination ../../packages
-          tar -tzf ../../packages/iyulab-lowline-form-${{ needs.check.outputs.version }}.tgz | grep -x package/LICENSE
+          npm pack --pack-destination ../../npm-package
+          tar -tzf ../../npm-package/iyulab-lowline-form-${{ needs.check.outputs.version }}.tgz | grep -x package/LICENSE
 
       - uses: actions/upload-artifact@v7
         with:
-          name: packages
+          name: nuget-packages
           path: packages/
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: npm-package/
           if-no-files-found: error
           retention-days: 1
 
@@ -224,7 +236,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: packages
+          name: nuget-packages
           path: packages
 
       - name: Load the native library from the package
@@ -244,7 +256,15 @@ jobs:
           -p:LowlineVersion=${{ needs.check.outputs.version }}
           -p:RestoreAdditionalProjectSources=/w/packages
 
-  publish:
+  # A run triggered by a pull request is refused by iyulab/nuget-publish; this workflow has no such trigger.
+  nuget:
+    needs: [check, smoke]
+    if: needs.check.outputs.publish == 'true'
+    uses: iyulab/nuget-publish/.github/workflows/request.yml@de1e58c8bcefaf88f497fcb58899a1c6e84f4e29 # main
+    permissions: {}
+    secrets: inherit
+
+  npm:
     needs: [check, smoke]
     if: needs.check.outputs.publish == 'true'
     runs-on: ubuntu-latest
@@ -257,20 +277,8 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: packages
-          path: packages
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      - name: NuGet
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          [ -n "$NUGET_API_KEY" ] || { echo "::error::NUGET_API_KEY is not available to this repository"; exit 1; }
-          dotnet nuget push "packages/*.nupkg" --api-key "$NUGET_API_KEY" \
-            --source https://api.nuget.org/v3/index.json --skip-duplicate
+          name: npm-package
+          path: npm-package
 
       - uses: actions/setup-node@v7
         with:
@@ -287,5 +295,5 @@ jobs:
             echo "@iyulab/lowline-form@$VERSION is already on npm — skipped."
           else
             # `./` — a bare `dir/file.tgz` reads as a GitHub repository to npm.
-            npm publish "./packages/iyulab-lowline-form-$VERSION.tgz" --provenance --access public
+            npm publish "./npm-package/iyulab-lowline-form-$VERSION.tgz" --provenance --access public
           fi
