@@ -6,6 +6,12 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The `gil` feature uses `iyulab-gil` 0.11.** A host that names Gil's types alongside the engine's moves its own
+  `iyulab-gil` dependency to 0.11 too. What the engine proposes and learns is unchanged; Gil 0.11 replays less when
+  settlements arrive out of order or records are forgotten, and keeps its memories in less space.
+
 ## [0.11.0] - 2026-11-01
 
 ### Added

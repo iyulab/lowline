@@ -291,6 +291,7 @@ pub fn tune(
             target_precision: tune.target_precision,
             minimum_answered: tune.minimum_answered,
             counting: Some(counting.kinds(checks)),
+            uncounted_batches: &[],
         };
 
         let typed_longest = if typeable(fields, &name) {

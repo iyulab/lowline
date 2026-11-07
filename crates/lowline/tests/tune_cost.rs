@@ -82,6 +82,7 @@ fn measures_choosing_thresholds_on_ten_thousand_records() {
         target_precision: 0.8,
         minimum_answered: 10,
         counting: Some(engine::COUNTED),
+        uncounted_batches: &[],
     };
     let at = Instant::now();
     let concentrations = gil::replay::select_key_concentrations(
