@@ -37,9 +37,10 @@ mod value;
 #[cfg(feature = "formdown")]
 pub use formdown::{FormdownField, FormdownSchema};
 pub use policy::{ParsePolicyError, Policy};
-pub use proposal::{Abstain, Audit, Basis, Layer, Proposal, Recheck};
+pub use proposal::{Abstain, Audit, Basis, Layer, PromiseDisplay, Proposal, Recheck};
 pub use provenance::{
-    Attestation, Draft, Fit, Origin, SettledBy, Settlement, SettlementKind, Suggestion,
+    Attestation, Draft, Fit, Origin, PromiseShown, SettledBy, Settlement, SettlementKind,
+    Suggestion,
 };
 pub use schema::{Field, FieldKind, Form, Inference, ResolvedField, Role, SchemaError};
 pub use value::FieldValue;

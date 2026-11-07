@@ -346,6 +346,46 @@ public sealed record Audit(double Rate = 0)
     public double? Draw(double roll) => Rate > 0 && Rate <= 1 && roll < Rate ? Rate : null;
 }
 
+/// <summary>Whether the promise of the answer shown for a field (<see cref="Proposal.Promise"/>) was displayed beside it,
+/// and the probability it was drawn to be displayed with — fixed before the draw: 1 for a host that always displays it, 0
+/// for one that never does. The draft keeps it in the field's account as <c>promise_shown</c>, and the record carries it
+/// for an answer shown (not for a check, whose answer was not displayed at all), so the records can tell how displaying
+/// the promise changes what people settle. The engine refuses a draft whose outcome its probability rules out —
+/// displayed at 0, not displayed at 1.</summary>
+public sealed record PromiseShown(
+    [property: JsonPropertyName("shown")] bool Shown,
+    [property: JsonPropertyName("probability")] double Probability)
+{
+    /// <summary>A promise always displayed: drawn with 1.</summary>
+    public static PromiseShown Always { get; } = new(true, 1);
+
+    /// <summary>A promise never displayed: drawn with 0.</summary>
+    public static PromiseShown Never { get; } = new(false, 0);
+}
+
+/// <summary>How often the promise of an answer shown is displayed beside it. Drawn at random for each answer, before it
+/// is looked at, the records can tell how displaying the promise changes what people settle; the draw goes into the
+/// draft's account of the field as <c>promise_shown</c>.</summary>
+/// <param name="Rate">The probability the promise is displayed, fixed before the draw: in [0, 1].</param>
+public sealed record PromiseDisplay(double Rate)
+{
+    /// <summary>Whether to display the promise of the answer <paramref name="proposal"/> shows, given
+    /// <paramref name="roll"/> — a number drawn uniformly from [0, 1) by the host, for this field of this record, before
+    /// looking at the answer. Answers what the draft reports, or <c>null</c> when there is no promise to display — no
+    /// suggestion, one from something other than the decider, or no promise — or the rate is not in [0, 1].</summary>
+    public PromiseShown? Draw(Proposal proposal, double roll)
+    {
+        ArgumentNullException.ThrowIfNull(proposal);
+        var promised = proposal is { Promise: not null, Suggestion.Origin: "decider" };
+        if (!promised || !(Rate >= 0 && Rate <= 1))
+        {
+            return null;
+        }
+        var shown = Rate > 0 && (Rate >= 1 || roll < Rate);
+        return new PromiseShown(shown, Rate);
+    }
+}
+
 /// <summary>A threshold chosen on a replay of the settled records, and what the replay saw at it: the share of answers
 /// that matched (<see cref="Precision"/>), the share of lookups answered (<see cref="AnswerRate"/>), the answers and
 /// lookups, and the precision to expect of the next answers (<see cref="Promise"/>, resting on

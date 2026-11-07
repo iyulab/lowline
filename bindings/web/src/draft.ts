@@ -24,8 +24,19 @@ export interface Reported {
   score?: number
 }
 
+/**
+ * Whether the promise of the answer shown was displayed beside it, and the probability it was drawn to be displayed with
+ * — fixed before the draw: 1 for a form that always displays it, 0 for one that never does.
+ */
+export interface PromiseShown {
+  shown: boolean
+  probability: number
+}
+
 interface Track extends Reported {
   shown?: Suggestion
+  /** Whether the promise of the suggestion shown was displayed beside it. */
+  promise_shown?: PromiseShown
   declined?: boolean
   held?: number
   /** The answer held back for a check, kept so the record can say what the person was not shown. */
@@ -42,7 +53,7 @@ interface Track extends Reported {
  *
  * Written as the engine reads it: `{ opened, fields: { field: { shown, declined, held } } }`, and — only what was
  * reported — `opened_at`, `saved_at` (milliseconds on one steady clock), `arrival` (the fields in the order their values
- * arrived), `by` and `batch`, and in a field `layer`, `promise`, `score`, `at` and `withheld`.
+ * arrived), `by` and `batch`, and in a field `layer`, `promise`, `score`, `promise_shown`, `at` and `withheld`.
  */
 export class Draft {
   readonly opened: Values
@@ -61,7 +72,10 @@ export class Draft {
   /** A suggestion came into view for the field. A suggestion turned down earlier stays turned down only if it is this. */
   show(field: string, suggestion: Suggestion, reported: Reported = {}): void {
     const track = (this.fields[field] ??= {})
-    if (!sameSuggestion(track.shown, suggestion)) track.declined = false
+    if (!sameSuggestion(track.shown, suggestion)) {
+      track.declined = false
+      delete track.promise_shown
+    }
     track.shown = { ...suggestion }
     delete track.held
     delete track.withheld
@@ -82,6 +96,21 @@ export class Draft {
       this.report(track, withheld)
     }
     this.fields[field] = track
+  }
+
+  /**
+   * Whether the promise of the suggestion shown for the field was displayed beside it, drawn with `probability` (fixed
+   * before the draw: 1 for always, 0 for never). It stands until another suggestion is shown or the answer is held back
+   * for a check. False, changing nothing, when no suggestion is shown.
+   */
+  showPromise(field: string, shown: boolean, probability: number): boolean {
+    if (!(probability >= 0 && probability <= 1) || (shown ? probability === 0 : probability === 1)) {
+      throw new RangeError(`a promise ${shown ? 'shown' : 'not shown'} with probability ${probability} is not possible`)
+    }
+    const track = this.fields[field]
+    if (!track?.shown) return false
+    track.promise_shown = { shown, probability }
+    return true
   }
 
   /** The record was opened at `ms` on the session's clock (a steady clock in milliseconds: only differences are read). */

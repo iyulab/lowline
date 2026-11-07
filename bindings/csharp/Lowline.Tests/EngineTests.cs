@@ -203,6 +203,37 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void The_promise_display_draw_rides_on_the_record_of_an_answer_shown()
+    {
+        var stored = Alternating(40);
+        using var engine = LowlineEngine.Create(Intake);
+        engine.Tune(stored.Select(r => r.Json));
+        var shown = engine.ProposeField("new", new Dictionary<string, FieldValue> { ["customer"] = "Beta" }, "owner")!;
+        shown.Promise.Should().NotBeNull();
+        var display = new PromiseDisplay(0.25);
+
+        display.Draw(shown, 0.1).Should().Be(new PromiseShown(true, 0.25));
+        display.Draw(shown, 0.5).Should().Be(new PromiseShown(false, 0.25));
+        new PromiseDisplay(1).Draw(shown, 0.99).Should().Be(PromiseShown.Always);
+        new PromiseDisplay(0).Draw(shown, 0).Should().Be(PromiseShown.Never);
+        new PromiseDisplay(2).Draw(shown, 0).Should().BeNull();
+        display.Draw(shown with { Promise = null }, 0).Should().BeNull();
+        display.Draw(shown with { Suggestion = shown.Suggestion! with { Origin = "other" } }, 0).Should().BeNull();
+
+        var drawn = System.Text.Json.JsonSerializer.Serialize(display.Draw(shown, 0.75));
+        var draft = "{ \"fields\": { \"owner\": { \"shown\": { \"value\": \"lee\" }, \"layer\": \"key\", "
+            + "\"promise\": 0.9, \"promise_shown\": " + drawn + " } } }";
+        var saved = new Dictionary<string, FieldValue> { ["customer"] = "Beta", ["owner"] = "lee" };
+        var record = JsonNode.Parse(engine.Settle("a", saved, draft, SettledBy.Person, Start).Json)!;
+        record["promise_shown"]!["owner"]!["shown"]!.GetValue<bool>().Should().BeFalse();
+        record["promise_shown"]!["owner"]!["probability"]!.GetValue<double>().Should().Be(0.25);
+
+        // A draw its probability rules out is refused with the draft.
+        var impossible = () => engine.Settle("b", saved, draft.Replace("0.25", "1"), SettledBy.Person, Start);
+        impossible.Should().Throw<ArgumentException>().WithMessage("*not possible*");
+    }
+
+    [Fact]
     public void A_host_round()
     {
         var stored = Alternating(40);

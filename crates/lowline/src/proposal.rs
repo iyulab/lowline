@@ -280,6 +280,38 @@ impl Recheck {
     }
 }
 
+/// How often the promise of an answer shown is displayed beside it — the precision to expect of it
+/// ([`Proposal::promise`]). Drawn at random for each answer, before it is looked at, the records can tell how displaying
+/// the promise changes what people settle; the draw is reported with [`crate::Draft::show_promise`]. A host that always
+/// displays it draws with 1, one that never does with 0 ([`crate::PromiseShown::always`], [`crate::PromiseShown::never`]
+/// say so without a draw).
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct PromiseDisplay {
+    /// The probability the promise is displayed, fixed before the draw: in [0, 1].
+    pub rate: f64,
+}
+
+impl PromiseDisplay {
+    /// Whether to display the promise of the answer `proposal` shows, given `roll` — a number drawn uniformly from
+    /// [0, 1) by the host, for this field of this record, before looking at the answer. Answers what to report with
+    /// [`crate::Draft::show_promise`], or `None` when there is no promise to display — no suggestion, one from
+    /// something other than the decider, or no promise reported — or the rate is not in [0, 1].
+    pub fn draw(&self, proposal: &Proposal, roll: f64) -> Option<crate::PromiseShown> {
+        let promised = proposal.promise.is_some()
+            && proposal
+                .suggestion
+                .as_ref()
+                .is_some_and(|s| s.origin == crate::provenance::Origin::Decider);
+        if !promised {
+            return None;
+        }
+        // At 1 the promise is always displayed and at 0 never, whatever the roll.
+        let shown = self.rate > 0.0 && (self.rate >= 1.0 || roll < self.rate);
+        crate::PromiseShown::new(shown, self.rate)
+    }
+}
+
 /// How often a record already settled is drawn to be settled once more by another person, who is shown none of what
 /// the first settler or the decider said: its decided fields are held back ([`crate::Draft::hold_proposed`], the
 /// probability `draw` answered) and the values the second person settles are checks, so that how well each person

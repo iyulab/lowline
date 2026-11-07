@@ -15,11 +15,28 @@ All notable changes to this project are written here. The format follows
   machine is refused unless `AllowRemote` is set, so what people write stays on the machine unless the host says
   otherwise. A host that implements `ILowlineModel` itself is unaffected.
 
+- **The record says whether a suggestion's promise was displayed.** A draft reports, for the suggestion shown, whether
+  its promise was displayed beside it and the probability it was drawn to be displayed with (`Draft::show_promise` with a
+  `PromiseShown`; `promise_shown` in a field of the draft's JSON), and the record carries it as `promise_shown` for an
+  answer shown — not for a check, whose answer was not displayed. `PromiseDisplay { rate }` draws it at random, before
+  the answer is looked at (`PromiseDisplay`, `PromiseShown` in .NET), so the records can tell how displaying the promise
+  changes what people settle. The report stands until another suggestion is shown for the field or its answer is held
+  back. The element never displays the promise and reports so (`shown: false` at probability 0) for each answer that
+  carries one.
+
 ### Changed
 
-- **The `gil` feature uses `iyulab-gil` 0.11.** A host that names Gil's types alongside the engine's moves its own
-  `iyulab-gil` dependency to 0.11 too. What the engine proposes and learns is unchanged; Gil 0.11 replays less when
-  settlements arrive out of order or records are forgotten, and keeps its memories in less space.
+- **The `gil` feature uses `iyulab-gil` 0.12.** A host that names Gil's types alongside the engine's moves its own
+  `iyulab-gil` dependency to 0.12 too. What the engine proposes and learns is unchanged; Gil 0.11 replays less when
+  settlements arrive out of order or records are forgotten, and keeps its memories in less space, and Gil 0.12 reads a
+  record's `promise_shown`. A store written from here may carry `promise_shown`, which a decider older than
+  `iyulab-gil` 0.12 refuses: take 0.12 or later on every reader of the store.
+
+### Fixed
+
+- **A draft whose check is drawn with an impossible probability is refused.** A field of a draft's JSON held back with
+  `held` 0, below 0 or above 1 was taken, and the check counted as infinitely many values, or as fewer than one; it is
+  now refused when the draft is read.
 
 ## [0.11.0] - 2026-11-01
 

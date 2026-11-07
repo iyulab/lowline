@@ -149,6 +149,11 @@ export class Session {
       // Turned down, it stays down for this record: neither shown again nor put back in.
       if (this.draft.declined(field, suggestion)) continue
       this.draft.show(field, suggestion, proposal)
+      // The form shows the answer and where it came from, never the precision promised for it: the record says so, for
+      // the answers that carry one.
+      if (proposal.promise !== undefined && (suggestion.origin ?? 'decider') === 'decider') {
+        this.draft.showPromise(field, false, 0)
+      }
       this.draft.reach(field, this.clock())
       if (proposal.prefill && isEmpty(values[field])) {
         round.prefill[field] = suggestion.value

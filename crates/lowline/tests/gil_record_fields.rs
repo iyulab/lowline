@@ -407,3 +407,154 @@ fn the_hosts_attestation_names_only_fields_the_form_decides() {
     assert_eq!(draft.held("owner"), Some(0.05));
     assert_eq!(draft.by(), Some("server-9"));
 }
+
+#[test]
+fn whether_the_promise_was_displayed_rides_on_the_line_for_an_answer_shown() {
+    let mut intake = intake();
+    let typed = saved(&[("customer", "Acme")]);
+    let proposal = intake.propose("shown", &typed, &BTreeMap::new())[0].clone();
+    assert!(
+        proposal.promise.is_some(),
+        "the owner's answer carries a promise"
+    );
+
+    let drawn = lowline::PromiseDisplay { rate: 0.5 }
+        .draw(&proposal, 0.75)
+        .unwrap();
+    assert_eq!(
+        drawn,
+        lowline::PromiseShown {
+            shown: false,
+            probability: 0.5
+        }
+    );
+    let mut draft = Draft::new();
+    assert!(
+        !draft.show_promise("owner", drawn),
+        "nothing is shown yet, so there is no promise to display"
+    );
+    assert!(draft.show_proposed(&proposal));
+    let impossible = lowline::PromiseShown {
+        shown: true,
+        probability: 0.0,
+    };
+    assert!(!draft.show_promise("owner", impossible));
+    assert_eq!(draft.promise_shown("owner"), None);
+    assert!(draft.show_promise("owner", drawn));
+
+    let values = saved(&[("customer", "Acme"), ("owner", "lee")]);
+    let stored = intake
+        .settle("shown", &values, &draft, SettledBy::Person, 43)
+        .unwrap();
+    assert_eq!(
+        stored.promise_shown.get("owner"),
+        Some(&gil::schema::PromiseShown {
+            shown: false,
+            probability: 0.5
+        })
+    );
+
+    // The line Gil reads back says the same.
+    let line = serde_json::to_string(&stored).unwrap();
+    let read: gil::schema::Record = serde_json::from_str(&line).unwrap();
+    assert_eq!(read.promise_shown, stored.promise_shown);
+}
+
+#[test]
+fn a_check_and_another_suggestion_leave_no_word_on_the_promise() {
+    let mut intake = intake();
+    let typed = saved(&[("customer", "Acme")]);
+    let proposal = intake.propose("checked", &typed, &BTreeMap::new())[0].clone();
+
+    // Shown with its promise displayed, then the host's word makes it a check: the answer was not displayed at all.
+    let mut draft = Draft::new();
+    draft.show_proposed(&proposal);
+    draft.show_promise("owner", lowline::PromiseShown::always());
+    intake
+        .attest(
+            &mut draft,
+            &lowline::Attestation {
+                held: BTreeMap::from([("owner".to_owned(), 0.25)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(draft.promise_shown("owner"), None);
+    let values = saved(&[("customer", "Acme"), ("owner", "kim")]);
+    let stored = intake
+        .settle("checked", &values, &draft, SettledBy::Person, 44)
+        .unwrap();
+    assert!(stored.promise_shown.is_empty());
+
+    // The same suggestion shown again keeps the report; another one drops it.
+    let mut draft = Draft::new();
+    draft.show_proposed(&proposal);
+    draft.show_promise("owner", lowline::PromiseShown::never());
+    draft.show_proposed(&proposal);
+    assert_eq!(
+        draft.promise_shown("owner"),
+        Some(lowline::PromiseShown::never())
+    );
+    draft.show("owner", lowline::Suggestion::new("lee"));
+    assert_eq!(draft.promise_shown("owner"), None);
+}
+
+#[test]
+fn the_draw_answers_only_for_a_promise_to_display() {
+    let intake = intake();
+    let typed = saved(&[("customer", "Acme")]);
+    let proposal = intake.propose("draw", &typed, &BTreeMap::new())[0].clone();
+    let display = lowline::PromiseDisplay { rate: 0.25 };
+    assert_eq!(
+        display.draw(&proposal, 0.1),
+        lowline::PromiseShown::new(true, 0.25)
+    );
+    assert_eq!(
+        display.draw(&proposal, 0.25),
+        lowline::PromiseShown::new(false, 0.25)
+    );
+    assert_eq!(
+        lowline::PromiseDisplay { rate: 1.0 }.draw(&proposal, 0.99),
+        Some(lowline::PromiseShown::always())
+    );
+    assert_eq!(
+        lowline::PromiseDisplay { rate: 0.0 }.draw(&proposal, 0.0),
+        Some(lowline::PromiseShown::never())
+    );
+    assert_eq!(
+        lowline::PromiseDisplay { rate: 1.5 }.draw(&proposal, 0.0),
+        None
+    );
+
+    let unpromised = lowline::Proposal {
+        promise: None,
+        ..proposal.clone()
+    };
+    assert_eq!(display.draw(&unpromised, 0.0), None);
+    let elsewhere = lowline::Proposal {
+        suggestion: Some(lowline::Suggestion::other("kim")),
+        ..proposal
+    };
+    assert_eq!(display.draw(&elsewhere, 0.0), None);
+}
+
+#[test]
+fn a_draft_from_the_page_refuses_a_draw_its_probability_rules_out() {
+    let read = |json: &str| serde_json::from_str::<Draft>(json);
+    assert!(
+        read(r#"{"fields":{"owner":{"shown":{"value":"kim"},"promise_shown":{"shown":true,"probability":0.5}}}}"#)
+            .is_ok()
+    );
+    for impossible in [
+        r#"{"fields":{"owner":{"shown":{"value":"kim"},"promise_shown":{"shown":true,"probability":0}}}}"#,
+        r#"{"fields":{"owner":{"shown":{"value":"kim"},"promise_shown":{"shown":false,"probability":1}}}}"#,
+        r#"{"fields":{"owner":{"shown":{"value":"kim"},"promise_shown":{"shown":true,"probability":1.5}}}}"#,
+        r#"{"fields":{"owner":{"held":0}}}"#,
+        r#"{"fields":{"owner":{"held":1.5}}}"#,
+        r#"{"fields":{"owner":{"held":-0.25}}}"#,
+    ] {
+        assert!(read(impossible).is_err(), "{impossible}");
+    }
+    assert!(read(r#"{"fields":{"owner":{"held":0.05}}}"#).is_ok());
+    assert!(read(r#"{"fields":{"owner":{"held":null}}}"#).is_ok());
+}

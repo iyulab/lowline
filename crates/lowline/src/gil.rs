@@ -514,7 +514,8 @@ pub fn record(
 
 /// Writes into `record` what `draft` knows of how the settlements in it came about, beyond their kinds — the optional
 /// fields of Gil's record line: for each field a person settled, the answer in view (`suggested`, its layer in
-/// `sources` when the host reported it, its promise in `promises` — the answer held back for a check counts as in view) and the time to settle
+/// `sources` when the host reported it, its promise in `promises` — the answer held back for a check counts as in view —
+/// and, for an answer shown, whether that promise was displayed in `promise_shown`) and the time to settle
 /// it (`settle_ms`), who settled it (`settled_by`); for the record, how long it was open (`open_ms`), the order its
 /// values arrived in (`arrival`) and its batch. Whatever the host did not report is left out. A record the application
 /// settled on its own has nobody to name and nothing in view, so only its record-level fields are written.
@@ -538,6 +539,15 @@ pub fn annotate(
                     }
                     if let Some(promise) = draft.promise(field) {
                         record.promises.insert(field.clone(), promise);
+                        // Whether the promise was displayed is read only for an answer that was: a check's answer was
+                        // held back, its promise with it.
+                        if settlement.kind != SettlementKind::Check
+                            && let Some(shown) = draft.promise_shown(field)
+                            && let Some(shown) =
+                                gil::schema::PromiseShown::new(shown.shown, shown.probability)
+                        {
+                            record.promise_shown.insert(field.clone(), shown);
+                        }
                     }
                     // A judgement's score is read only for a field whose answer came from a judgement.
                     if draft.layer(field) == Some(crate::Layer::Judgement)

@@ -136,6 +136,90 @@ pub struct Settlement {
     pub probability: Option<f64>,
 }
 
+/// Whether the promise of the answer shown for a field was displayed beside it, and the probability it was drawn to be
+/// displayed with — fixed before the draw: 1 for a host that always displays it, 0 for one that never does, between for
+/// one that draws ([`crate::PromiseDisplay`]). Drawn at random, it lets the records tell how displaying the promise
+/// changes what people settle.
+///
+/// With `serde` it reads and writes as `{ "shown": bool, "probability": number }`; an outcome the probability rules out
+/// is refused.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "PromiseShownForm"))]
+pub struct PromiseShown {
+    /// Whether the promise was displayed.
+    pub shown: bool,
+    /// The probability it was drawn to be displayed with, fixed before the draw, in [0, 1].
+    pub probability: f64,
+}
+
+impl PromiseShown {
+    /// A promise displayed (`shown`) or not, drawn with `probability`; `None` when the probability is outside [0, 1]
+    /// or the outcome is one it rules out — displayed at 0, not displayed at 1.
+    pub fn new(shown: bool, probability: f64) -> Option<Self> {
+        let possible = (0.0..=1.0).contains(&probability)
+            && if shown {
+                probability > 0.0
+            } else {
+                probability < 1.0
+            };
+        possible.then_some(Self { shown, probability })
+    }
+
+    /// A promise always displayed: drawn with 1.
+    pub fn always() -> Self {
+        Self {
+            shown: true,
+            probability: 1.0,
+        }
+    }
+
+    /// A promise never displayed: drawn with 0.
+    pub fn never() -> Self {
+        Self {
+            shown: false,
+            probability: 0.0,
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PromiseShownForm {
+    shown: bool,
+    probability: f64,
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<PromiseShownForm> for PromiseShown {
+    type Error = String;
+
+    fn try_from(form: PromiseShownForm) -> Result<Self, String> {
+        Self::new(form.shown, form.probability).ok_or_else(|| {
+            format!(
+                "a promise {} with probability {} is not possible",
+                if form.shown { "shown" } else { "not shown" },
+                form.probability
+            )
+        })
+    }
+}
+
+/// Reads the probability a field was drawn to be checked with, refusing one that is not above 0 and at most 1: a check
+/// counts as one ÷ that probability values, so a 0 or a value past 1 would count it as infinitely many, or as fewer
+/// than one.
+#[cfg(feature = "serde")]
+fn drawn<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<f64>, D::Error> {
+    let probability = <Option<f64> as serde::Deserialize>::deserialize(deserializer)?;
+    match probability {
+        Some(p) if !(p > 0.0 && p <= 1.0) => Err(serde::de::Error::custom(format!(
+            "a check drawn with {p} — a check is drawn with a probability above 0 and at most 1"
+        ))),
+        _ => Ok(probability),
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Track {
@@ -144,7 +228,7 @@ struct Track {
     #[cfg_attr(feature = "serde", serde(default))]
     declined: bool,
     /// The probability the field was drawn to be checked with, while its answer is held back.
-    #[cfg_attr(feature = "serde", serde(default))]
+    #[cfg_attr(feature = "serde", serde(default, deserialize_with = "drawn"))]
     held: Option<f64>,
     /// The answer held back for a check, kept so the record can say what the person was not shown.
     #[cfg_attr(
@@ -171,6 +255,12 @@ struct Track {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     score: Option<f64>,
+    /// Whether the promise of the suggestion shown was displayed beside it, when the host reported it.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    promise_shown: Option<PromiseShown>,
     /// When the person reached the field, or its suggestion came into view — the first of the two — on the host's
     /// clock, in milliseconds.
     #[cfg_attr(
@@ -187,14 +277,15 @@ struct Track {
 /// the saved values to [`Draft::settle`]. Typing needs no report: the saved value says what was typed.
 ///
 /// A host that wants the record to say more reports more, all of it optional: the layer, promise and score of a suggestion
-/// ([`Draft::show_proposed`], [`Draft::hold_proposed`]), when the record was opened and saved and when a field was
+/// ([`Draft::show_proposed`], [`Draft::hold_proposed`]), whether its promise was displayed ([`Draft::show_promise`]), when the record was opened and saved and when a field was
 /// reached ([`Draft::open_at`], [`Draft::save_at`], [`Draft::reach`] — one steady clock, in milliseconds), the order
 /// values arrived in ([`Draft::arrived`]), who settled ([`Draft::settled_by`]) and the batch ([`Draft::in_batch`]).
 ///
 /// With `serde` it reads and writes as `{ "opened": { field: value }, "fields": { field: { "shown": suggestion,
 /// "declined": bool, "held": probability } } }`, each part optional — what a form drawn in a browser keeps and sends
 /// with the save — plus, when reported, `"opened_at"`, `"saved_at"` (milliseconds), `"arrival"` (field names), `"by"`
-/// and `"batch"` beside them, and `"layer"`, `"promise"`, `"score"`, `"at"` and `"withheld"` in a field.
+/// and `"batch"` beside them, and `"layer"`, `"promise"`, `"score"`, `"promise_shown"`, `"at"` and `"withheld"` in a
+/// field.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Draft {
@@ -287,6 +378,7 @@ impl Draft {
         let track = self.fields.entry(field.to_owned()).or_default();
         if track.shown.as_ref() != Some(&suggestion) {
             track.declined = false;
+            track.promise_shown = None;
         }
         track.shown = Some(suggestion);
         track.held = None;
@@ -329,6 +421,7 @@ impl Draft {
         track.layer = None;
         track.promise = None;
         track.score = None;
+        track.promise_shown = None;
     }
 
     /// As [`Draft::hold`] for the field of `proposal`, which also keeps the answer held back with its layer and
@@ -347,6 +440,22 @@ impl Draft {
         track.layer = proposal.layer;
         track.promise = proposal.promise;
         track.score = proposal.score;
+        true
+    }
+
+    /// Whether the promise of the suggestion shown for the field was displayed beside it, and the probability it was
+    /// drawn to be displayed with ([`PromiseShown`], [`crate::PromiseDisplay::draw`]). Report it after the suggestion
+    /// came into view: it stands until another suggestion is shown for the field, or its answer is held back for a check
+    /// — whose answer was not displayed at all. Returns false, changing nothing, when no suggestion is shown or the
+    /// outcome is one its probability rules out ([`PromiseShown::new`] would not make it).
+    pub fn show_promise(&mut self, field: &str, shown: PromiseShown) -> bool {
+        if PromiseShown::new(shown.shown, shown.probability).is_none() {
+            return false;
+        }
+        let Some(track) = self.fields.get_mut(field).filter(|t| t.shown.is_some()) else {
+            return false;
+        };
+        track.promise_shown = Some(shown);
         true
     }
 
@@ -423,6 +532,7 @@ impl Draft {
             track.shown = None;
             track.declined = false;
             track.held = Some(*probability);
+            track.promise_shown = None;
         }
         Ok(())
     }
@@ -441,6 +551,11 @@ impl Draft {
     /// The precision reported as promised for the answer in view for the field.
     pub fn promise(&self, field: &str) -> Option<f64> {
         self.fields.get(field).and_then(|track| track.promise)
+    }
+
+    /// Whether the promise of the suggestion shown for the field was displayed, when reported.
+    pub fn promise_shown(&self, field: &str) -> Option<PromiseShown> {
+        self.fields.get(field).and_then(|track| track.promise_shown)
     }
 
     /// The score a judgement from outside the records reported for the answer in view for the field.

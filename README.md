@@ -92,6 +92,13 @@ is settled rarely. A host that wants to tell, field by field, whether seeing the
 many checks in each field it asks that of, and draws more often in those — its busiest fields. The answer held back is still
 written on the record (`suggested`, `sources`, `promises`), so what the decider would have said is there to compare.
 
+Whether a suggestion's promise was displayed beside it rides on the record too (`promise_shown`: displayed or not, and the
+probability it was drawn to be displayed with), for an answer shown — a check's answer was not displayed at all. The
+element never displays the promise and says so (`shown: false` at probability 0). A host that displays it says so with
+`Draft::show_promise` (Rust) or the draft's `promise_shown` (`PromiseShown.Always`, .NET); one that wants to tell whether
+displaying the promise changes how people settle draws it at random with `PromiseDisplay`, field by field, before looking
+at the answer. A draft whose outcome its probability rules out — displayed at 0, not displayed at 1 — is refused.
+
 The record the engine hands back to store is a Gil record line, and it says more than how each field was settled when
 the draft reports more. The element reports it all: the answer in view with its layer and promise (`suggested`,
 `sources`, `promises` — the answer held back for a check counts as in view), how long each field took from the person

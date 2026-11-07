@@ -43,6 +43,23 @@ describe('Draft', () => {
     expect(() => draft.hold('owner', 0)).toThrow(RangeError)
   })
 
+  it('says whether the promise of the suggestion shown was displayed, until another one is shown or the answer is held', () => {
+    const draft = new Draft()
+    expect(draft.showPromise('owner', true, 0.5)).toBe(false)
+    draft.show('owner', { value: 'lee' })
+    expect(draft.showPromise('owner', true, 0.5)).toBe(true)
+    draft.show('owner', { value: 'lee' })
+    expect(draft.fields.owner.promise_shown).toEqual({ shown: true, probability: 0.5 })
+    draft.show('owner', { value: 'kim' })
+    expect(draft.fields.owner.promise_shown).toBeUndefined()
+    draft.showPromise('owner', false, 0)
+    draft.hold('owner', 0.05)
+    expect(draft.fields.owner.promise_shown).toBeUndefined()
+    for (const [shown, probability] of [[true, 0], [false, 1], [true, 1.5], [false, -0.1]] as const) {
+      expect(() => draft.showPromise('owner', shown, probability)).toThrow(RangeError)
+    }
+  })
+
   it('reads a form’s data as texts and lists of texts', () => {
     expect(valuesOf({ a: 'x', b: ['p', 'q'], c: 3, d: true, e: '', f: null, g: [] })).toEqual({
       a: 'x',
@@ -146,7 +163,14 @@ describe('Session', () => {
       opened: {},
       fields: {
         customer: { at: 1500 },
-        owner: { shown: lee.suggestion, declined: false, layer: 'key', promise: 0.9, at: 2001 },
+        owner: {
+          shown: lee.suggestion,
+          declined: false,
+          layer: 'key',
+          promise: 0.9,
+          promise_shown: { shown: false, probability: 0 },
+          at: 2001,
+        },
       },
       opened_at: 1000,
       saved_at: 4000,
@@ -162,6 +186,16 @@ describe('Session', () => {
     expect(session.draft.fields.owner).toMatchObject({ layer: 'judgement', score: 0.73 })
     session.apply([{ ...lee, suggestion: { value: 'kim' }, layer: 'key', promise: 0.9 }], {})
     expect(session.draft.fields.owner.score).toBeUndefined()
+  })
+
+  it('says the form never displays a promise, for the answers that carry one', () => {
+    const session = new Session('r', {}, 0.05, never, undefined, () => 10)
+    session.apply([lee], {})
+    expect(session.draft.fields.owner.promise_shown).toBeUndefined()
+    session.apply([{ ...lee, promise: 0.9 }], {})
+    expect(session.draft.fields.owner.promise_shown).toEqual({ shown: false, probability: 0 })
+    session.applyFill([{ ...lee, suggestion: { value: 'park', origin: 'other' }, promise: 0.9 }])
+    expect(session.draft.fields.owner.promise_shown).toBeUndefined()
   })
 
   it('keeps the answer held back for a check, with its layer and promise', () => {
