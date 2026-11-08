@@ -210,6 +210,8 @@ export class LowlineForm extends LitElement {
     this.session?.picked(field)
     const formdown = this.formdown
     if (formdown) formdown.updateData({ ...formdown.data, [field]: value })
+    // A value taken is one the records can answer from: ask again, as after a value typed.
+    this.changed()
   }
 
   private declined = (event: Event) => {
