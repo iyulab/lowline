@@ -145,7 +145,7 @@ public sealed class ChatClientModelTests
     [InlineData("The owner is probably lee.", "unreadable", "not-json")]
     public void A_judging_answer_says_what_came_of_it(string answer, string kind, string? reason)
     {
-        var (_, outcome) = ChatClientLowlineModel.ReadJudged(answer, ["lee", "park"], 0.7);
+        var (_, outcome, _) = ChatClientLowlineModel.ReadJudged(answer, ["lee", "park"], 0.7);
 
         outcome.Should().Be(new ChatClientLowlineModel.AnswerOutcome(kind, reason));
     }
@@ -160,9 +160,28 @@ public sealed class ChatClientModelTests
     [InlineData("Beta, lee", "unreadable", "not-json")]
     public void A_filling_answer_says_what_came_of_it(string answer, string kind, string? reason)
     {
-        var (_, outcome) = ChatClientLowlineModel.ReadFill(answer, Fields);
+        var (_, outcome, _) = ChatClientLowlineModel.ReadFill(answer, Fields);
 
         outcome.Should().Be(new ChatClientLowlineModel.AnswerOutcome(kind, reason));
+    }
+
+    [Fact]
+    public void An_answer_with_a_value_kept_says_which_others_it_skipped_and_why()
+    {
+        var (judged, outcome, skipped) = ChatClientLowlineModel.ReadJudged(
+            """
+            {"values": [{"value": "lee", "probability": 0.8}, {"value": "park", "probability": "0.6"},
+                        {"value": "kim", "probability": 0.5}]}
+            """, ["lee", "park"], 0.7);
+
+        judged.Should().ContainSingle();
+        outcome.Kind.Should().Be("answered");
+        skipped.Should().Equal("probability-not-a-number", "not-a-choice");
+
+        var (_, filled, fillSkipped) = ChatClientLowlineModel.ReadFill(
+            """{"customer": "Beta", "owner": {"name": "lee"}}""", Fields);
+        filled.Kind.Should().Be("answered");
+        fillSkipped.Should().Equal("value-not-text");
     }
 
     [Fact]

@@ -38,7 +38,9 @@ public sealed record ChatClientLowlineModelOptions
 /// of it (<c>lowline.outcome</c>): <c>answered</c> — a value was kept; <c>unknown</c> — the model said it could not
 /// tell; <c>unreadable</c> — the answer was not in the shape asked for, with why in <c>lowline.reason</c>. An unreadable
 /// answer suggests nothing, as an unknown one does; the count is how a host tells that its model answers in a shape the
-/// engine cannot use.</remarks>
+/// engine cannot use. A value skipped inside an answer whose other values were kept — a field or a judged value not in
+/// the shape asked for — is counted on <see cref="SkippedCounter"/>, tagged with the operation, the form and
+/// <c>lowline.reason</c>.</remarks>
 public sealed class ChatClientLowlineModel : ILowlineModel
 {
     /// <summary>The name of the meter the model counts its answers on.</summary>
@@ -47,7 +49,13 @@ public sealed class ChatClientLowlineModel : ILowlineModel
     /// <summary>The counter of answers the model had from its chat client.</summary>
     public const string AnswersCounter = "lowline.model.answers";
 
+    /// <summary>The counter of values skipped in answers whose other values were kept, each tagged with why.</summary>
+    public const string SkippedCounter = "lowline.model.values.skipped";
+
     private static readonly Meter Meter = new(MeterName);
+
+    private static readonly Counter<long> Skipped = Meter.CreateCounter<long>(
+        SkippedCounter, unit: "{value}", description: "Values skipped in a model's answers, by why.");
 
     private static readonly Counter<long> Answers = Meter.CreateCounter<long>(
         AnswersCounter, unit: "{answer}", description: "Answers a model gave, by what came of them.");
@@ -91,8 +99,8 @@ public sealed class ChatClientLowlineModel : ILowlineModel
         }
 
         var answer = await AskAsync(FillInstructions, contents, cancellationToken).ConfigureAwait(false);
-        var (filled, outcome) = ReadFill(answer, request.Fields);
-        Count("fill", request.Form, outcome);
+        var (filled, outcome, skipped) = ReadFill(answer, request.Fields);
+        Count("fill", request.Form, outcome, skipped);
         return filled;
     }
 
@@ -108,13 +116,23 @@ public sealed class ChatClientLowlineModel : ILowlineModel
 
         var answer = await AskAsync(JudgeInstructions, [new TextContent(JudgePrompt(request))], cancellationToken)
             .ConfigureAwait(false);
-        var (judged, outcome) = ReadJudged(answer, request.Choices, _options.TrustFrom);
-        Count("judge", request.Form, outcome);
+        var (judged, outcome, skipped) = ReadJudged(answer, request.Choices, _options.TrustFrom);
+        Count("judge", request.Form, outcome, skipped);
         return judged;
     }
 
-    private static void Count(string operation, string form, AnswerOutcome outcome)
+    private static void Count(string operation, string form, AnswerOutcome outcome, IReadOnlyList<string> skipped)
     {
+        foreach (var why in skipped)
+        {
+            Skipped.Add(1, new TagList
+            {
+                { "lowline.operation", operation },
+                { "lowline.form", form },
+                { "lowline.reason", why },
+            });
+        }
+
         var tags = new TagList
         {
             { "lowline.operation", operation },
@@ -204,22 +222,22 @@ public sealed class ChatClientLowlineModel : ILowlineModel
         public static AnswerOutcome Unreadable(string reason) => new("unreadable", reason);
     }
 
-    internal static (IReadOnlyDictionary<string, FieldValue> Filled, AnswerOutcome Outcome) ReadFill(
-        string answer, IReadOnlyList<FillField> fields)
+    internal static (IReadOnlyDictionary<string, FieldValue> Filled, AnswerOutcome Outcome, IReadOnlyList<string> Skipped)
+        ReadFill(string answer, IReadOnlyList<FillField> fields)
     {
         var filled = new Dictionary<string, FieldValue>();
         if (Parse(answer) is not { } root)
         {
-            return (filled, AnswerOutcome.Unreadable("not-json"));
+            return (filled, AnswerOutcome.Unreadable("not-json"), []);
         }
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            return (filled, AnswerOutcome.Unreadable("not-an-object"));
+            return (filled, AnswerOutcome.Unreadable("not-an-object"), []);
         }
 
         var asked = fields.ToDictionary(f => f.Name, StringComparer.Ordinal);
-        var unusable = false;
+        var skipped = new List<string>();
         foreach (var property in root.EnumerateObject())
         {
             if (!asked.ContainsKey(property.Name))
@@ -235,7 +253,7 @@ public sealed class ChatClientLowlineModel : ILowlineModel
                 case JsonValueKind.String or JsonValueKind.Null:
                     break;
                 case JsonValueKind.Object:
-                    unusable = true;
+                    skipped.Add("value-not-text");
                     break;
                 case JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False:
                     filled[property.Name] = FieldValue.One(property.Value.GetRawText());
@@ -252,39 +270,40 @@ public sealed class ChatClientLowlineModel : ILowlineModel
                     }
                     else if (property.Value.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.String))
                     {
-                        unusable = true;
+                        skipped.Add("value-not-text");
                     }
 
                     break;
             }
         }
 
+        // An answer with nothing usable is unreadable, and that is its count; one with a value kept says what it skipped.
         var outcome = filled.Count > 0 ? AnswerOutcome.Answered
-            : unusable ? AnswerOutcome.Unreadable("value-not-text")
+            : skipped.Count > 0 ? AnswerOutcome.Unreadable(skipped[0])
             : AnswerOutcome.Unknown;
-        return (filled, outcome);
+        return (filled, outcome, filled.Count > 0 ? skipped : []);
     }
 
-    internal static (IReadOnlyList<JudgedValue> Judged, AnswerOutcome Outcome) ReadJudged(
-        string answer, IReadOnlyList<string>? choices, double trustFrom)
+    internal static (IReadOnlyList<JudgedValue> Judged, AnswerOutcome Outcome, IReadOnlyList<string> Skipped)
+        ReadJudged(string answer, IReadOnlyList<string>? choices, double trustFrom)
     {
         if (Parse(answer) is not { } root)
         {
-            return ([], AnswerOutcome.Unreadable("not-json"));
+            return ([], AnswerOutcome.Unreadable("not-json"), []);
         }
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            return ([], AnswerOutcome.Unreadable("not-an-object"));
+            return ([], AnswerOutcome.Unreadable("not-an-object"), []);
         }
 
         if (!root.TryGetProperty("values", out var values) || values.ValueKind != JsonValueKind.Array)
         {
-            return ([], AnswerOutcome.Unreadable("no-values"));
+            return ([], AnswerOutcome.Unreadable("no-values"), []);
         }
 
         var judged = new List<JudgedValue>();
-        string? skipped = null;
+        var skipped = new List<string>();
         foreach (var each in values.EnumerateArray())
         {
             if (Judged(each, choices, trustFrom, out var why) is { } value)
@@ -293,14 +312,15 @@ public sealed class ChatClientLowlineModel : ILowlineModel
             }
             else
             {
-                skipped ??= why;
+                skipped.Add(why!);
             }
         }
 
+        // An answer with nothing usable is unreadable, and that is its count; one with a value kept says what it skipped.
         var outcome = judged.Count > 0 ? AnswerOutcome.Answered
-            : skipped is null ? AnswerOutcome.Unknown
-            : AnswerOutcome.Unreadable(skipped);
-        return (judged, outcome);
+            : skipped.Count == 0 ? AnswerOutcome.Unknown
+            : AnswerOutcome.Unreadable(skipped[0]);
+        return (judged, outcome, judged.Count > 0 ? skipped : []);
     }
 
     /// <summary>One value of a judging answer, or <c>null</c> with why it is skipped.</summary>

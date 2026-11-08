@@ -18,7 +18,8 @@ All notable changes to this project are written here. The format follows
   throws; values read leniently are not taken. Every answer is counted on the counter `lowline.model.answers` of the
   meter `Lowline.Extensions.AI` (`ChatClientLowlineModel.MeterName`, `AnswersCounter`), tagged `answered`, `unknown`
   (the model said it could not tell) or `unreadable` with the reason, so a host can tell a model that answers in a shape
-  the engine cannot use from one that does not know.
+  the engine cannot use from one that does not know. A value skipped in an answer whose other values were kept is
+  counted on `lowline.model.values.skipped` (`SkippedCounter`) with the reason.
 
 - **The record says whether a suggestion's promise was displayed.** A draft reports, for the suggestion shown, whether
   its promise was displayed beside it and the probability it was drawn to be displayed with (`Draft::show_promise` with a
@@ -30,8 +31,8 @@ All notable changes to this project are written here. The format follows
   carries one.
 
 - **The element says why an empty decided field has no suggestion.** `<lowline-form>` shows a note beside a decided
-  field the engine abstains on — needs a judgement, not sure enough, nothing settled yet, among others — and, when a
-  judgement was asked for and gave nothing it can show, says so. A field that holds a value, or one held back for a check
+  field the engine abstains on — needs a judgement, not sure enough, nothing settled yet, never suggested for, among
+  others — and, when a judgement was asked for and gave nothing it can show, says so. A field that holds a value, or one held back for a check
   with its group, shows no note. Before, such a field looked like one nothing is ever suggested for.
 
 ### Changed
