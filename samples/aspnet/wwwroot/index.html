@@ -30,6 +30,8 @@
         <option value="Prose">answers in a sentence</option>
       </select></label></p>
     <p>Model: <span id="health">no answers yet</span></p>
+    <p>An answer the engine cannot read suggests nothing, as one that could not tell does — this line is how the host
+      tells them apart.</p>
   </section>
   <script type="module">
     const form = document.querySelector('lowline-form')
@@ -45,13 +47,27 @@
     })
 
     // What the model's answers came to — read by the host from the counter the engine's model keeps.
+    const unreadable = {
+      'not-json': 'it was a sentence, not JSON',
+      'not-an-object': 'it was not a JSON object',
+      'no-values': 'it had no list of values',
+      'item-not-an-object': 'its values were not objects',
+      'value-not-text': 'a value was not text',
+      'probability-not-a-number': 'its probability was not a number',
+      'probability-out-of-range': 'its probability was not between 0 and 1',
+      'not-a-choice': 'its value was not one of the choices',
+    }
     const show = (model) => {
       document.querySelector('#stand-in').hidden = !model.standIn
       if (model.answer) document.querySelector('#answer').value = model.answer
       const parts = []
-      if (model.answered) parts.push(`${model.answered} answered`)
-      if (model.unknown) parts.push(`${model.unknown} said it could not tell`)
-      if (model.unreadable) parts.push(`${model.unreadable} could not be read (${model.lastUnreadable})`)
+      const answers = (n) => (n === 1 ? '1 answer' : `${n} answers`)
+      if (model.answered) parts.push(`${answers(model.answered)} used`)
+      if (model.unknown) parts.push(`${answers(model.unknown)} saying it could not tell`)
+      if (model.unreadable) {
+        const why = unreadable[model.lastUnreadable] ?? 'it was not in the shape asked for'
+        parts.push(`${answers(model.unreadable)} the engine could not read — the last because ${why}`)
+      }
       document.querySelector('#health').textContent = parts.length ? parts.join(' · ') : 'no answers yet'
     }
     const refresh = async () => show(await (await fetch('/sample/model')).json())
