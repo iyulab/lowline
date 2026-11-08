@@ -101,6 +101,115 @@ public sealed class ChatClientModelTests
         judged.Should().Equal(new JudgedValue("lee", 0.8, true), new JudgedValue("park", 0.4, false));
     }
 
+    private static readonly LowlineJudgeRequest OwnerOfBeta = new("intake", "owner", ["lee", "park"],
+        [new("customer", "Beta")], new Dictionary<string, FieldValue> { ["customer"] = "Beta" });
+
+    [Theory]
+    [InlineData("""{"values": [{"value": "lee", "probability": "0.9"}]}""")]
+    [InlineData("""{"values": [{"value": "lee"}]}""")]
+    [InlineData("""{"values": [{"value": "lee", "probability": null}]}""")]
+    [InlineData("""{"values": {"value": "lee", "probability": 0.9}}""")]
+    [InlineData("""{"values": ["lee"]}""")]
+    [InlineData("""{"values": [{"value": 1, "probability": 0.9}]}""")]
+    [InlineData("""["lee"]""")]
+    [InlineData("The owner is probably lee.")]
+    public async Task A_judging_answer_in_another_shape_judges_nothing_and_never_throws(string answer)
+    {
+        var model = new ChatClientLowlineModel(new CannedClient(answer));
+
+        (await model.JudgeAsync(OwnerOfBeta, Ct)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_quoted_probability_skips_only_its_value()
+    {
+        var client = new CannedClient("""
+            {"values": [{"value": "park", "probability": "0.9"}, {"value": "lee", "probability": 0.8}]}
+            """);
+
+        var judged = await new ChatClientLowlineModel(client).JudgeAsync(OwnerOfBeta, Ct);
+
+        judged.Should().Equal(new JudgedValue("lee", 0.8, true));
+    }
+
+    [Theory]
+    [InlineData("""{"values": [{"value": "lee", "probability": 0.8}, {"value": "x", "probability": 2}]}""", "answered", null)]
+    [InlineData("""{"values": []}""", "unknown", null)]
+    [InlineData("""{"values": [{"value": "lee", "probability": "0.9"}]}""", "unreadable", "probability-not-a-number")]
+    [InlineData("""{"values": [{"value": "lee", "probability": 90}]}""", "unreadable", "probability-out-of-range")]
+    [InlineData("""{"values": [{"value": "Lee", "probability": 0.9}]}""", "unreadable", "not-a-choice")]
+    [InlineData("""{"values": ["lee"]}""", "unreadable", "item-not-an-object")]
+    [InlineData("""{"values": [{"value": 1, "probability": 0.9}]}""", "unreadable", "value-not-text")]
+    [InlineData("""{"owner": "lee"}""", "unreadable", "no-values")]
+    [InlineData("""["lee"]""", "unreadable", "not-an-object")]
+    [InlineData("The owner is probably lee.", "unreadable", "not-json")]
+    public void A_judging_answer_says_what_came_of_it(string answer, string kind, string? reason)
+    {
+        var (_, outcome) = ChatClientLowlineModel.ReadJudged(answer, ["lee", "park"], 0.7);
+
+        outcome.Should().Be(new ChatClientLowlineModel.AnswerOutcome(kind, reason));
+    }
+
+    [Theory]
+    [InlineData("""{"customer": "Beta"}""", "answered", null)]
+    [InlineData("""{}""", "unknown", null)]
+    [InlineData("""{"customer": "", "site": "busan"}""", "unknown", null)]
+    [InlineData("""{"customer": {"name": "Beta"}}""", "unreadable", "value-not-text")]
+    [InlineData("""{"tags": [1, 2]}""", "unreadable", "value-not-text")]
+    [InlineData("""["Beta"]""", "unreadable", "not-an-object")]
+    [InlineData("Beta, lee", "unreadable", "not-json")]
+    public void A_filling_answer_says_what_came_of_it(string answer, string kind, string? reason)
+    {
+        var (_, outcome) = ChatClientLowlineModel.ReadFill(answer, Fields);
+
+        outcome.Should().Be(new ChatClientLowlineModel.AnswerOutcome(kind, reason));
+    }
+
+    [Fact]
+    public async Task Each_answer_is_counted_with_what_came_of_it()
+    {
+        var counted = new List<(long Count, Dictionary<string, object?> Tags)>();
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == ChatClientLowlineModel.MeterName &&
+                instrument.Name == ChatClientLowlineModel.AnswersCounter)
+            {
+                l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        {
+            var named = new Dictionary<string, object?>();
+            foreach (var tag in tags)
+            {
+                named[tag.Key] = tag.Value;
+            }
+
+            // Other tests count on the same static meter at the same time: keep only this one's form.
+            if ((string?)named["lowline.form"] == "counted")
+            {
+                lock (counted)
+                {
+                    counted.Add((value, named));
+                }
+            }
+        });
+        listener.Start();
+
+        var request = OwnerOfBeta with { Form = "counted" };
+        await new ChatClientLowlineModel(new CannedClient("""{"values": [{"value": "lee", "probability": "0.9"}]}"""))
+            .JudgeAsync(request, Ct);
+        await new ChatClientLowlineModel(new CannedClient("""{"values": []}""")).JudgeAsync(request, Ct);
+
+        counted.Should().HaveCount(2);
+        counted[0].Tags.Should().Contain(new KeyValuePair<string, object?>("lowline.operation", "judge"))
+            .And.Contain(new KeyValuePair<string, object?>("lowline.outcome", "unreadable"))
+            .And.Contain(new KeyValuePair<string, object?>("lowline.reason", "probability-not-a-number"));
+        counted[1].Tags.Should().Contain(new KeyValuePair<string, object?>("lowline.outcome", "unknown"))
+            .And.NotContainKey("lowline.reason");
+    }
+
     [Fact]
     public async Task Judging_can_be_turned_off()
     {

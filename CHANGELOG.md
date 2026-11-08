@@ -13,7 +13,12 @@ All notable changes to this project are written here. The format follows
   client as data — and judges a decided field the records could not answer, trusting a value from `TrustFrom` (0.7). It
   sends the client the engine's request and nothing else. A client whose `ChatClientMetadata.ProviderUri` names another
   machine is refused unless `AllowRemote` is set, so what people write stays on the machine unless the host says
-  otherwise. A host that implements `ILowlineModel` itself is unaffected.
+  otherwise. A host that implements `ILowlineModel` itself is unaffected. An answer in another shape than the one asked
+  for — not JSON, a probability in quotes or out of range, a value not among the choices — suggests nothing and never
+  throws; values read leniently are not taken. Every answer is counted on the counter `lowline.model.answers` of the
+  meter `Lowline.Extensions.AI` (`ChatClientLowlineModel.MeterName`, `AnswersCounter`), tagged `answered`, `unknown`
+  (the model said it could not tell) or `unreadable` with the reason, so a host can tell a model that answers in a shape
+  the engine cannot use from one that does not know.
 
 - **The record says whether a suggestion's promise was displayed.** A draft reports, for the suggestion shown, whether
   its promise was displayed beside it and the probability it was drawn to be displayed with (`Draft::show_promise` with a

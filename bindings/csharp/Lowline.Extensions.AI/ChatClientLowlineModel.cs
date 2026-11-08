@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
@@ -31,8 +33,25 @@ public sealed record ChatClientLowlineModelOptions
 /// It sends the client what the engine's request holds — the form's name, the fields to fill with their kinds and
 /// choices, the text, the attachments and the values the record holds — and nothing else; whatever the client answers
 /// the engine checks against its field and shows as a suggestion for the person to take.</summary>
+/// <remarks>Every answer is counted on <see cref="AnswersCounter"/> of the meter <see cref="MeterName"/>, tagged with
+/// what was asked (<c>lowline.operation</c>: <c>fill</c> or <c>judge</c>), the form (<c>lowline.form</c>) and what came
+/// of it (<c>lowline.outcome</c>): <c>answered</c> — a value was kept; <c>unknown</c> — the model said it could not
+/// tell; <c>unreadable</c> — the answer was not in the shape asked for, with why in <c>lowline.reason</c>. An unreadable
+/// answer suggests nothing, as an unknown one does; the count is how a host tells that its model answers in a shape the
+/// engine cannot use.</remarks>
 public sealed class ChatClientLowlineModel : ILowlineModel
 {
+    /// <summary>The name of the meter the model counts its answers on.</summary>
+    public const string MeterName = "Lowline.Extensions.AI";
+
+    /// <summary>The counter of answers the model had from its chat client.</summary>
+    public const string AnswersCounter = "lowline.model.answers";
+
+    private static readonly Meter Meter = new(MeterName);
+
+    private static readonly Counter<long> Answers = Meter.CreateCounter<long>(
+        AnswersCounter, unit: "{answer}", description: "Answers a model gave, by what came of them.");
+
     private readonly IChatClient _client;
     private readonly ChatClientLowlineModelOptions _options;
 
@@ -72,7 +91,9 @@ public sealed class ChatClientLowlineModel : ILowlineModel
         }
 
         var answer = await AskAsync(FillInstructions, contents, cancellationToken).ConfigureAwait(false);
-        return ReadFill(answer, request.Fields);
+        var (filled, outcome) = ReadFill(answer, request.Fields);
+        Count("fill", request.Form, outcome);
+        return filled;
     }
 
     /// <inheritdoc />
@@ -87,7 +108,25 @@ public sealed class ChatClientLowlineModel : ILowlineModel
 
         var answer = await AskAsync(JudgeInstructions, [new TextContent(JudgePrompt(request))], cancellationToken)
             .ConfigureAwait(false);
-        return ReadJudged(answer, request.Choices, _options.TrustFrom);
+        var (judged, outcome) = ReadJudged(answer, request.Choices, _options.TrustFrom);
+        Count("judge", request.Form, outcome);
+        return judged;
+    }
+
+    private static void Count(string operation, string form, AnswerOutcome outcome)
+    {
+        var tags = new TagList
+        {
+            { "lowline.operation", operation },
+            { "lowline.form", form },
+            { "lowline.outcome", outcome.Kind },
+        };
+        if (outcome.Reason is { } reason)
+        {
+            tags.Add("lowline.reason", reason);
+        }
+
+        Answers.Add(1, tags);
     }
 
     private async Task<string> AskAsync(string instructions, IList<AIContent> contents, CancellationToken cancellationToken)
@@ -155,15 +194,32 @@ public sealed class ChatClientLowlineModel : ILowlineModel
         WriteValues(writer, request.Values);
     });
 
-    internal static IReadOnlyDictionary<string, FieldValue> ReadFill(string answer, IReadOnlyList<FillField> fields)
+    /// <summary>What came of one answer: <c>answered</c>, <c>unknown</c>, or <c>unreadable</c> with why.</summary>
+    internal readonly record struct AnswerOutcome(string Kind, string? Reason = null)
+    {
+        public static AnswerOutcome Answered { get; } = new("answered");
+
+        public static AnswerOutcome Unknown { get; } = new("unknown");
+
+        public static AnswerOutcome Unreadable(string reason) => new("unreadable", reason);
+    }
+
+    internal static (IReadOnlyDictionary<string, FieldValue> Filled, AnswerOutcome Outcome) ReadFill(
+        string answer, IReadOnlyList<FillField> fields)
     {
         var filled = new Dictionary<string, FieldValue>();
-        if (Parse(answer) is not { } root || root.ValueKind != JsonValueKind.Object)
+        if (Parse(answer) is not { } root)
         {
-            return filled;
+            return (filled, AnswerOutcome.Unreadable("not-json"));
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return (filled, AnswerOutcome.Unreadable("not-an-object"));
         }
 
         var asked = fields.ToDictionary(f => f.Name, StringComparer.Ordinal);
+        var unusable = false;
         foreach (var property in root.EnumerateObject())
         {
             if (!asked.ContainsKey(property.Name))
@@ -175,6 +231,11 @@ public sealed class ChatClientLowlineModel : ILowlineModel
             {
                 case JsonValueKind.String when property.Value.GetString() is { Length: > 0 } one:
                     filled[property.Name] = FieldValue.One(one);
+                    break;
+                case JsonValueKind.String or JsonValueKind.Null:
+                    break;
+                case JsonValueKind.Object:
+                    unusable = true;
                     break;
                 case JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False:
                     filled[property.Name] = FieldValue.One(property.Value.GetRawText());
@@ -189,43 +250,98 @@ public sealed class ChatClientLowlineModel : ILowlineModel
                     {
                         filled[property.Name] = FieldValue.Many(many);
                     }
+                    else if (property.Value.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.String))
+                    {
+                        unusable = true;
+                    }
 
                     break;
             }
         }
 
-        return filled;
+        var outcome = filled.Count > 0 ? AnswerOutcome.Answered
+            : unusable ? AnswerOutcome.Unreadable("value-not-text")
+            : AnswerOutcome.Unknown;
+        return (filled, outcome);
     }
 
-    internal static IReadOnlyList<JudgedValue> ReadJudged(string answer, IReadOnlyList<string>? choices, double trustFrom)
+    internal static (IReadOnlyList<JudgedValue> Judged, AnswerOutcome Outcome) ReadJudged(
+        string answer, IReadOnlyList<string>? choices, double trustFrom)
     {
-        if (Parse(answer) is not { } root || root.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("values", out var values) || values.ValueKind != JsonValueKind.Array)
+        if (Parse(answer) is not { } root)
         {
-            return [];
+            return ([], AnswerOutcome.Unreadable("not-json"));
+        }
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return ([], AnswerOutcome.Unreadable("not-an-object"));
+        }
+
+        if (!root.TryGetProperty("values", out var values) || values.ValueKind != JsonValueKind.Array)
+        {
+            return ([], AnswerOutcome.Unreadable("no-values"));
         }
 
         var judged = new List<JudgedValue>();
+        string? skipped = null;
         foreach (var each in values.EnumerateArray())
         {
-            if (each.ValueKind != JsonValueKind.Object ||
-                !each.TryGetProperty("value", out var value) || value.ValueKind != JsonValueKind.String ||
-                !each.TryGetProperty("probability", out var probability) ||
-                !probability.TryGetDouble(out var p) || p is < 0 or > 1 or double.NaN)
+            if (Judged(each, choices, trustFrom, out var why) is { } value)
             {
-                continue;
+                judged.Add(value);
             }
-
-            var text = value.GetString()!;
-            if (choices is not null && !choices.Contains(text, StringComparer.Ordinal))
+            else
             {
-                continue;
+                skipped ??= why;
             }
-
-            judged.Add(new JudgedValue(text, p, p >= trustFrom));
         }
 
-        return judged;
+        var outcome = judged.Count > 0 ? AnswerOutcome.Answered
+            : skipped is null ? AnswerOutcome.Unknown
+            : AnswerOutcome.Unreadable(skipped);
+        return (judged, outcome);
+    }
+
+    /// <summary>One value of a judging answer, or <c>null</c> with why it is skipped.</summary>
+    private static JudgedValue? Judged(JsonElement each, IReadOnlyList<string>? choices, double trustFrom, out string? why)
+    {
+        why = null;
+        if (each.ValueKind != JsonValueKind.Object)
+        {
+            why = "item-not-an-object";
+            return null;
+        }
+
+        if (!each.TryGetProperty("value", out var value) || value.ValueKind != JsonValueKind.String)
+        {
+            why = "value-not-text";
+            return null;
+        }
+
+        // A probability is read only as a JSON number — "0.9" in quotes is skipped like any value the engine cannot
+        // use, never read leniently (and TryGetDouble throws on an element that is not a number).
+        if (!each.TryGetProperty("probability", out var probability) || probability.ValueKind != JsonValueKind.Number ||
+            !probability.TryGetDouble(out var p))
+        {
+            why = "probability-not-a-number";
+            return null;
+        }
+
+        if (p is < 0 or > 1)
+        {
+            why = "probability-out-of-range";
+            return null;
+        }
+
+        var text = value.GetString()!;
+        if (choices is not null && !choices.Contains(text, StringComparer.Ordinal))
+        {
+            why = "not-a-choice";
+            return null;
+        }
+
+        return new JudgedValue(text, p, p >= trustFrom);
     }
 
     /// <summary>The answer as JSON, reading past a code fence a model may wrap it in; <c>null</c> when it is not
