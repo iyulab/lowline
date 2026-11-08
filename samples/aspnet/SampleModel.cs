@@ -23,6 +23,9 @@ public enum StandInAnswer
 
     /// <summary>A sentence instead of the JSON asked for.</summary>
     Prose,
+
+    /// <summary>Two values: a choice as asked for, and another with its probability in quotes.</summary>
+    Mixed,
 }
 
 /// <summary>A chat client standing in for a real model, so the sample runs anywhere and answers as the page asks: it
@@ -71,6 +74,7 @@ public sealed partial class StandInChatClient : IChatClient
             StandInAnswer.Knows => $$"""{"values": [{"value": "{{choice}}", "probability": 0.9}]}""",
             StandInAnswer.DoesNotKnow => """{"values": []}""",
             StandInAnswer.QuotedProbability => $$"""{"values": [{"value": "{{choice}}", "probability": "0.9"}]}""",
+            StandInAnswer.Mixed => $$"""{"values": [{"value": "{{choice}}", "probability": 0.9}, {"value": "{{choices.LastOrDefault() ?? choice}}", "probability": "0.1"}]}""",
             _ => $"The {asked["field"]} is probably {choice}.",
         };
     }
@@ -131,18 +135,20 @@ public sealed class ModelHealth : IDisposable
     private readonly MeterListener _listener = new();
     private readonly Dictionary<string, long> _counts = [];
     private string? _lastUnreadable;
+    private long _skipped;
+    private string? _lastSkipped;
 
     public ModelHealth()
     {
         _listener.InstrumentPublished = (instrument, listener) =>
         {
             if (instrument.Meter.Name == ChatClientLowlineModel.MeterName &&
-                instrument.Name == ChatClientLowlineModel.AnswersCounter)
+                instrument.Name is ChatClientLowlineModel.AnswersCounter or ChatClientLowlineModel.SkippedCounter)
             {
                 listener.EnableMeasurementEvents(instrument);
             }
         };
-        _listener.SetMeasurementEventCallback<long>((_, value, tags, _) =>
+        _listener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
         {
             string? outcome = null, reason = null;
             foreach (var tag in tags)
@@ -159,6 +165,13 @@ public sealed class ModelHealth : IDisposable
 
             lock (_counts)
             {
+                if (instrument.Name == ChatClientLowlineModel.SkippedCounter)
+                {
+                    _skipped += value;
+                    _lastSkipped = reason;
+                    return;
+                }
+
                 _counts[outcome ?? "unknown"] = _counts.GetValueOrDefault(outcome ?? "unknown") + value;
                 if (outcome == "unreadable")
                 {
@@ -180,6 +193,8 @@ public sealed class ModelHealth : IDisposable
                 ["unknown"] = _counts.GetValueOrDefault("unknown"),
                 ["unreadable"] = _counts.GetValueOrDefault("unreadable"),
                 ["lastUnreadable"] = _lastUnreadable,
+                ["skipped"] = _skipped,
+                ["lastSkipped"] = _lastSkipped,
             };
         }
     }

@@ -28,8 +28,9 @@
         <option value="DoesNotKnow">says it cannot tell</option>
         <option value="QuotedProbability">answers with its probability in quotes</option>
         <option value="Prose">answers in a sentence</option>
+        <option value="Mixed">answers a choice, and another value with its probability in quotes</option>
       </select></label></p>
-    <p>Model: <span id="health">no answers yet</span></p>
+    <p>The model since the host started: <span id="health">no answers yet</span></p>
     <p>An answer the engine cannot read suggests nothing, as one that could not tell does — this line is how the host
       tells them apart.</p>
   </section>
@@ -67,6 +68,11 @@
       if (model.unreadable) {
         const why = unreadable[model.lastUnreadable] ?? 'it was not in the shape asked for'
         parts.push(`${answers(model.unreadable)} the engine could not read — the last because ${why}`)
+      }
+      if (model.skipped) {
+        const why = unreadable[model.lastSkipped] ?? 'it was not in the shape asked for'
+        const values = model.skipped === 1 ? '1 value' : `${model.skipped} values`
+        parts.push(`${values} skipped in answers otherwise used — the last because ${why}`)
       }
       document.querySelector('#health').textContent = parts.length ? parts.join(' · ') : 'no answers yet'
     }
