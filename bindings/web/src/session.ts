@@ -60,6 +60,13 @@ export interface Strings {
   fromJudgement: string
   /** The note of a value filled in from what the person wrote. */
   fromWriting: string
+  /**
+   * The note of an empty decided field shown no suggestion, by why: a field is never left looking like one that is not
+   * decided. An empty text shows no note for that reason.
+   */
+  abstain: Record<Abstain, string>
+  /** The note of an empty decided field a judgement was asked for and gave nothing the form can show. */
+  judgedNothing: string
 }
 
 export const englishStrings: Strings = {
@@ -68,6 +75,17 @@ export const englishStrings: Strings = {
   fromSimilar: 'As in a similar record',
   fromJudgement: 'Suggested from what was written',
   fromWriting: 'From what you wrote',
+  abstain: {
+    off: '',
+    'no-evidence': 'No suggestion yet — nothing settled bears on it',
+    unsure: 'No suggestion — the records are not sure enough',
+    'not-allowed': 'No suggestion among the choices you may pick',
+    'needs-judgement': 'Needs your judgement — the records cannot tell',
+    'not-a-choice': 'No suggestion — the judgement was not one of the choices',
+    malformed: 'No suggestion — the judgement does not fit this field',
+    together: 'No suggestion until the fields decided with it are settled',
+  },
+  judgedNothing: 'Needs your judgement — neither the records nor the judgement could tell',
 }
 
 /** What the form does with one round of proposals: what each field shows, and the values to put in unasked. */
@@ -144,8 +162,16 @@ export class Session {
     const hidden = (p: Proposal) => held.some((h) => h.field === p.field || (h.together != null && h.together === p.together))
     for (const proposal of proposals) {
       const { field, suggestion } = proposal
-      if (!suggestion || this.written.has(field)) continue
+      if (this.written.has(field)) continue
       if (hidden(proposal)) continue
+      if (!suggestion) {
+        // Why the field is empty, said beside it: silent, it would read as a field nothing is suggested for, and a
+        // person passes over it. A field that already holds a value needs no word.
+        const judged = this.judgements.get(field)?.proposal === proposal
+        const why = judged ? this.strings.judgedNothing : proposal.abstain ? this.strings.abstain[proposal.abstain] : ''
+        if (why && isEmpty(values[field])) round.fieldStates[field] = { note: why }
+        continue
+      }
       // Turned down, it stays down for this record: neither shown again nor put back in.
       if (this.draft.declined(field, suggestion)) continue
       this.draft.show(field, suggestion, proposal)

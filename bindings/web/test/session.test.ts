@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Draft, valuesOf } from '../src/draft.js'
-import { Session, type Proposal } from '../src/session.js'
+import { Session, englishStrings, type Proposal } from '../src/session.js'
 import { LowlineClient, LowlineError } from '../src/client.js'
 
 const lee: Proposal = {
@@ -83,6 +83,44 @@ describe('Session', () => {
     expect(session.draft.shown('owner')).toEqual(lee.suggestion)
     // Taken before the suggestion: what the record was opened with is not the prefilled value.
     expect(session.draft.opened).toEqual({ customer: 'Beta' })
+  })
+
+  it('says why an empty decided field is shown no suggestion, in the host’s words', () => {
+    const asking: Proposal = { field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement' }
+    const unsure: Proposal = { ...asking, field: 'site', abstain: 'unsure' }
+    const off: Proposal = { ...asking, field: 'note', abstain: 'off' }
+    const round = new Session('r', {}, 0.05, never).apply([asking, unsure, off], {})
+    expect(round.fieldStates).toEqual({
+      owner: { note: 'Needs your judgement — the records cannot tell' },
+      site: { note: 'No suggestion — the records are not sure enough' },
+    })
+    expect(round.prefill).toEqual({})
+
+    const strings = { ...englishStrings, abstain: { ...englishStrings.abstain, unsure: '' } }
+    const own = new Session('r', {}, 0.05, never, strings).apply([asking, unsure], {})
+    expect(Object.keys(own.fieldStates)).toEqual(['owner'])
+  })
+
+  it('says a judgement was asked and could not tell, when the judged answer suggests nothing', () => {
+    const asking: Proposal = {
+      field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement', asks: [['customer', 'Gamma']],
+    }
+    const session = new Session('r', {}, 0.05, never)
+    expect(session.apply([asking], {}).fieldStates.owner).toEqual({ note: 'Needs your judgement — the records cannot tell' })
+    expect(session.toJudge([asking])).toEqual(['owner'])
+    session.takeJudged([asking], [{ ...asking, abstain: 'unsure', asks: [] }])
+    const round = session.apply(session.judged([asking]), {})
+    expect(round.fieldStates.owner).toEqual({ note: 'Needs your judgement — neither the records nor the judgement could tell' })
+  })
+
+  it('says nothing of a field that holds a value, or one held back with a field drawn for a check', () => {
+    const asking: Proposal = { field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement' }
+    expect(new Session('r', {}, 0.05, never).apply([asking], { owner: 'kim' }).fieldStates).toEqual({})
+
+    const kind: Proposal = { ...lee, field: 'kind', together: 'case' }
+    const cause: Proposal = { ...asking, field: 'cause', abstain: 'together', together: 'case' }
+    const checked = new Session('r', {}, 0.05, () => 0.01).apply([kind, cause], {})
+    expect(checked.fieldStates).toEqual({})
   })
 
   it('puts nothing in a field that holds a value, or for a field the host must not fill', () => {
@@ -293,10 +331,11 @@ describe('Session', () => {
     expect(other.toJudge([asking])).toEqual(['owner'])
   })
 
-  it('shows nothing for a field it abstains on', () => {
+  it('puts nothing in for a field it abstains on, and offers no value', () => {
     const session = new Session('r', {}, 0.05, never)
     const round = session.apply([{ ...lee, suggestion: null, prefill: false, layer: null, basis: [], abstain: 'unsure' }], {})
-    expect(round).toEqual({ fieldStates: {}, prefill: {} })
+    expect(round.prefill).toEqual({})
+    expect(round.fieldStates.owner?.suggestions).toBeUndefined()
   })
 })
 

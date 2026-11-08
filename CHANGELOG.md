@@ -29,7 +29,15 @@ All notable changes to this project are written here. The format follows
   back. The element never displays the promise and reports so (`shown: false` at probability 0) for each answer that
   carries one.
 
+- **The element says why an empty decided field has no suggestion.** `<lowline-form>` shows a note beside a decided
+  field the engine abstains on — needs a judgement, not sure enough, nothing settled yet, among others — and, when a
+  judgement was asked for and gave nothing it can show, says so. A field that holds a value, or one held back for a check
+  with its group, shows no note. Before, such a field looked like one nothing is ever suggested for.
+
 ### Changed
+
+- **`Strings` takes the abstain notes.** A host that gives its own `strings` adds `abstain` (a text for each reason, an
+  empty one to show no note) and `judgedNothing`; `englishStrings` has both.
 
 - **The `gil` feature uses `iyulab-gil` 0.12.** A host that names Gil's types alongside the engine's moves its own
   `iyulab-gil` dependency to 0.12 too. What the engine proposes and learns is unchanged; Gil 0.11 replays less when
