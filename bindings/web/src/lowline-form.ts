@@ -50,6 +50,13 @@ export class LowlineForm extends LitElement {
   /** The words the form shows, in the host's language. */
   @property({ attribute: false }) strings: Strings = englishStrings
 
+  /**
+   * Whether a suggestion the engine allows to go in unasked is put in as the field's starting value. Off by default: a
+   * value in a field reads as the person's own, so a suggestion stays beside the field until the person takes it. A host
+   * that turns it on puts values in before anyone looks, and a value put in and saved unchanged is settled as taken.
+   */
+  @property({ type: Boolean }) prefill = false
+
   /** Who is writing, as an opaque id the host gives — one person, one id; not a name. Sent with the save when set. */
   @property({ attribute: 'settled-by' }) settledBy = ''
 
@@ -77,7 +84,10 @@ export class LowlineForm extends LitElement {
     if (changed.has('record') || changed.has('form') || changed.has('data') || changed.has('content')) {
       // The values it was opened with are taken before anything is suggested or put in.
       this.session = new Session(this.record, valuesOf(this.data), this.rate, Math.random, this.strings)
+      this.session.prefills = this.prefill
       this.fieldStates = {}
+    } else if (changed.has('prefill') && this.session) {
+      this.session.prefills = this.prefill
     }
   }
 

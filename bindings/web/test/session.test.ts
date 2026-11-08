@@ -123,6 +123,14 @@ describe('Session', () => {
     expect(checked.fieldStates).toEqual({})
   })
 
+  it('puts nothing in when the host keeps suggestions beside their fields', () => {
+    const session = new Session('r', { customer: 'Beta' }, 0.05, never)
+    session.prefills = false
+    const round = session.apply([lee], { customer: 'Beta' })
+    expect(round.prefill).toEqual({})
+    expect(round.fieldStates.owner?.suggestions).toEqual(['lee'])
+  })
+
   it('puts nothing in a field that holds a value, or for a field the host must not fill', () => {
     const session = new Session('r', {}, 0.05, never)
     expect(session.apply([lee], { owner: 'kim' }).prefill).toEqual({})
@@ -303,7 +311,7 @@ describe('Session', () => {
     expect(round.fieldStates.owner).toEqual({
       suggestions: ['lee'],
       decline: 'Not this',
-      note: 'Suggested from what was written',
+      note: 'Judged from this record’s values — no settled record answers it',
     })
 
     // Other values to read: asked again, and the old judgement is not shown for them.

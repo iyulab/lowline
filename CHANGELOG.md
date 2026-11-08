@@ -36,6 +36,13 @@ All notable changes to this project are written here. The format follows
 
 ### Changed
 
+- **The element no longer puts a suggestion in before the person takes it, unless the host asks.** A value in a field
+  reads as the person's own; a suggestion now stays beside its field until taken. A host that wants the engine's
+  `prefill` honored sets `prefill` on the element — and a value put in that way and saved unchanged is settled as taken.
+
+- **A judgement's note says what it rests on.** The default note of a value the host's model judged reads "Judged from
+  this record's values — no settled record answers it" instead of "Suggested from what was written".
+
 - **`Strings` takes the abstain notes.** A host that gives its own `strings` adds `abstain` (a text for each reason, an
   empty one to show no note) and `judgedNothing`; `englishStrings` has both.
 

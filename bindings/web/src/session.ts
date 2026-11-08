@@ -73,7 +73,7 @@ export const englishStrings: Strings = {
   decline: 'Not this',
   fromValue: 'As before with {field} {value}',
   fromSimilar: 'As in a similar record',
-  fromJudgement: 'Suggested from what was written',
+  fromJudgement: 'Judged from this record’s values — no settled record answers it',
   fromWriting: 'From what you wrote',
   abstain: {
     off: '',
@@ -108,6 +108,12 @@ export class Session {
   private written = new Map<string, FieldState>()
   /** The judgement asked for each field, by what it reads; `null` while the host is still judging. */
   private judgements = new Map<string, { reads: string; proposal: Proposal | null }>()
+
+  /**
+   * Whether a suggestion the engine allows to go in unasked (`prefill`) is put in as the field's starting value. Off, it
+   * stays beside the field until the person takes it.
+   */
+  prefills = true
 
   /** The values the form held when it was last looked at, to tell which fields' values arrived since. */
   private seen: Values
@@ -181,7 +187,7 @@ export class Session {
         this.draft.showPromise(field, false, 0)
       }
       this.draft.reach(field, this.clock())
-      if (proposal.prefill && isEmpty(values[field])) {
+      if (this.prefills && proposal.prefill && isEmpty(values[field])) {
         round.prefill[field] = suggestion.value
         this.filled.add(field)
       }
