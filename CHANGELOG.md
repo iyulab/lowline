@@ -27,8 +27,14 @@ All notable changes to this project are written here. The format follows
   answer shown — not for a check, whose answer was not displayed. `PromiseDisplay { rate }` draws it at random, before
   the answer is looked at (`PromiseDisplay`, `PromiseShown` in .NET), so the records can tell how displaying the promise
   changes what people settle. The report stands until another suggestion is shown for the field or its answer is held
-  back. The element never displays the promise and reports so (`shown: false` at probability 0) for each answer that
-  carries one.
+  back. The element reports it for each answer that carries a promise.
+
+- **The element can show a suggestion's promise, for a share of suggestions the host sets.** `<lowline-form
+  promise-rate="0.5">` shows, beside half of the suggestions that carry a promise, how often a suggestion like it has been
+  right — as a count out of ten, rounded down ("right 8 times in 10 like this"; `Strings.promise`). It is drawn once for
+  each suggestion a field shows and the draw goes into the record, so a host can compare what people settled with the
+  promise in view and without it before showing it to everyone. Off (`0`) by default: the element shows no promise and
+  reports `shown: false` at probability 0, as before.
 
 - **The element says why an empty decided field has no suggestion.** `<lowline-form>` shows a note beside a decided
   field the engine abstains on — needs a judgement, not sure enough, nothing settled yet, never suggested for, among
@@ -46,7 +52,7 @@ All notable changes to this project are written here. The format follows
   this record's values — no settled record answers it" instead of "Suggested from what was written".
 
 - **`Strings` takes the abstain notes.** A host that gives its own `strings` adds `abstain` (a text for each reason, an
-  empty one to show no note) and `judgedNothing`; `englishStrings` has both.
+  empty one to show no note), `judgedNothing` and `promise`; `englishStrings` has them all.
 
 - **The `gil` feature uses `iyulab-gil` 0.12.** A host that names Gil's types alongside the engine's moves its own
   `iyulab-gil` dependency to 0.12 too. What the engine proposes and learns is unchanged; Gil 0.11 replays less when

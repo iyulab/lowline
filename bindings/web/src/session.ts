@@ -67,6 +67,11 @@ export interface Strings {
   abstain: Record<Abstain, string>
   /** The note of an empty decided field a judgement was asked for and gave nothing the form can show. */
   judgedNothing: string
+  /**
+   * How often a suggestion like the one shown has been right, as a count out of ten — `{right}` is filled in. Said only
+   * when the host turns the display on (`promises`), after where the suggestion comes from.
+   */
+  promise: string
 }
 
 export const englishStrings: Strings = {
@@ -86,6 +91,7 @@ export const englishStrings: Strings = {
     together: 'No suggestion until the fields decided with it are settled',
   },
   judgedNothing: 'Needs your judgement — neither the records nor a judgement gave a suggestion',
+  promise: 'right {right} times in 10 like this',
 }
 
 /** What the form does with one round of proposals: what each field shows, and the values to put in unasked. */
@@ -116,6 +122,16 @@ export class Session {
    * stays beside the field until the person takes it.
    */
   prefills = true
+
+  /**
+   * How often the promise of a suggestion is shown beside it, from 0 (never — the default) to 1 (always). Drawn once for
+   * each suggestion a field shows, and the draw goes into the draft — so the records can tell whether seeing it changed
+   * what people settled. A value outside 0 to 1 shows none.
+   */
+  promises = 0
+
+  /** The promise draw of the suggestion each field shows: whether its promise is shown. */
+  private promised = new Map<string, { value: string; shown: boolean }>()
 
   /** The values the form held when it was last looked at, to tell which fields' values arrived since. */
   private seen: Values
@@ -187,20 +203,22 @@ export class Session {
       // Turned down, it stays down for this record: neither shown again nor put back in.
       if (this.draft.declined(field, suggestion)) continue
       this.draft.show(field, suggestion, proposal)
-      // The form shows the answer and where it came from, never the precision promised for it: the record says so, for
-      // the answers that carry one.
-      if (proposal.promise !== undefined && (suggestion.origin ?? 'decider') === 'decider') {
-        this.draft.showPromise(field, false, 0)
-      }
+      // The answers that carry a promise say in the record whether it was shown beside them, and with what chance.
+      const promised = proposal.promise !== undefined && (suggestion.origin ?? 'decider') === 'decider'
+      const shown = promised && this.promiseShown(field, suggestion.value)
+      if (promised) this.draft.showPromise(field, shown, this.promiseRate())
       this.draft.reach(field, this.clock())
       if (this.prefills && proposal.prefill && isEmpty(values[field])) {
         round.prefill[field] = suggestion.value
         this.filled.add(field)
       }
+      const note = [this.note(proposal, values), shown ? this.promiseNote(proposal.promise!) : undefined]
+        .filter((part) => part)
+        .join(' · ')
       round.fieldStates[field] = {
         suggestions: [suggestion.value],
         decline: this.strings.decline,
-        ...(this.note(proposal, values) ? { note: this.note(proposal, values) } : {}),
+        ...(note ? { note } : {}),
       }
     }
     return round
@@ -296,6 +314,7 @@ export class Session {
     this.draft.openAt(this.clock())
     this.seen = { ...this.draft.opened }
     this.drawn.clear()
+    this.promised.clear()
     this.filled.clear()
     this.written.clear()
     this.judgements.clear()
@@ -315,6 +334,30 @@ export class Session {
       return true
     }
     return false
+  }
+
+  /** How often promises are shown: `promises` when it is one, else never. */
+  private promiseRate(): number {
+    return this.promises >= 0 && this.promises <= 1 ? this.promises : 0
+  }
+
+  /** Whether the promise of the field's suggestion `value` is shown — drawn the first time that suggestion is shown. */
+  private promiseShown(field: string, value: string): boolean {
+    const drawn = this.promised.get(field)
+    if (drawn?.value === value) return drawn.shown
+    const rate = this.promiseRate()
+    const shown = rate >= 1 || (rate > 0 && this.random() < rate)
+    this.promised.set(field, { value, shown })
+    return shown
+  }
+
+  /**
+   * A promise as a count out of ten, rounded down: a promise is never said higher than the records bear it out, and a
+   * count reads more plainly than a percentage.
+   */
+  private promiseNote(promise: number): string {
+    const right = Math.max(0, Math.min(10, Math.floor(promise * 10 + 1e-9)))
+    return this.strings.promise.replace('{right}', String(right))
   }
 
   /** Where the suggestion comes from, in words. A field's value is shown as the record holds it now. */

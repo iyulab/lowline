@@ -96,7 +96,9 @@ written on the record (`suggested`, `sources`, `promises`), so what the decider 
 
 Whether a suggestion's promise was displayed beside it rides on the record too (`promise_shown`: displayed or not, and the
 probability it was drawn to be displayed with), for an answer shown — a check's answer was not displayed at all. The
-element never displays the promise and says so (`shown: false` at probability 0). A host that displays it says so with
+element displays it only when the host sets `promise-rate` — as a count out of ten, rounded down, for that share of
+suggestions drawn at random — and otherwise says it did not (`shown: false` at probability 0). A host with its own form
+that displays it says so with
 `Draft::show_promise` (Rust) or the draft's `promise_shown` (`PromiseShown.Always`, .NET); one that wants to tell whether
 displaying the promise changes how people settle draws it at random with `PromiseDisplay`, field by field, before looking
 at the answer. A draft whose outcome its probability rules out — displayed at 0, not displayed at 1 — is refused.

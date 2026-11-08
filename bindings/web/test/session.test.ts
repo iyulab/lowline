@@ -254,6 +254,45 @@ describe('Session', () => {
     expect(session.draft.fields.owner.promise_shown).toBeUndefined()
   })
 
+  it('shows the promise beside the suggestion as a count out of ten, rounded down, when the host turns it on', () => {
+    const session = new Session('r', {}, 0.05, never, undefined, () => 10)
+    session.promises = 1
+    const round = session.apply([{ ...lee, promise: 0.974 }], {})
+    expect(round.fieldStates.owner.note).toBe('As before with customer beta · right 9 times in 10 like this')
+    expect(session.draft.fields.owner.promise_shown).toEqual({ shown: true, probability: 1 })
+  })
+
+  it('draws the display once for each suggestion shown, reports the draw, and draws again for another suggestion', () => {
+    // The check is drawn first (0.3 — not held back), then the display: 0.3 shows it, 0.9 does not.
+    const rolls = [0.3, 0.3, 0.9]
+    const session = new Session('r', {}, 0.05, () => rolls.shift() ?? 0, undefined, () => 10)
+    session.promises = 0.5
+    expect(session.apply([{ ...lee, promise: 0.8 }], {}).fieldStates.owner.note).toContain('right 8 times in 10')
+    expect(session.draft.fields.owner.promise_shown).toEqual({ shown: true, probability: 0.5 })
+    // The same suggestion again: the same draw, nothing rolled.
+    expect(session.apply([{ ...lee, promise: 0.8 }], {}).fieldStates.owner.note).toContain('right 8 times in 10')
+    const kim = { ...lee, suggestion: { value: 'kim', origin: 'decider' as const, fit: 'exact' as const }, promise: 0.8 }
+    expect(session.apply([kim], {}).fieldStates.owner.note).toBe('As before with customer beta')
+    expect(session.draft.fields.owner.promise_shown).toEqual({ shown: false, probability: 0.5 })
+  })
+
+  it('shows no promise for a suggestion that carries none, nor when the rate is out of range', () => {
+    const off = new Session('r', {}, 0, () => 0, undefined, () => 10)
+    off.promises = 2
+    expect(off.apply([{ ...lee, promise: 0.9 }], {}).fieldStates.owner.note).toBe('As before with customer beta')
+    expect(off.draft.fields.owner.promise_shown).toEqual({ shown: false, probability: 0 })
+    const none = new Session('r', {}, 0, () => 0, undefined, () => 10)
+    none.promises = 1
+    expect(none.apply([lee], {}).fieldStates.owner.note).toBe('As before with customer beta')
+    expect(none.draft.fields.owner.promise_shown).toBeUndefined()
+  })
+
+  it('lets the host word the promise', () => {
+    const session = new Session('r', {}, 0, never, { ...englishStrings, promise: '10번 중 {right}번 맞음' }, () => 10)
+    session.promises = 1
+    expect(session.apply([{ ...lee, promise: 0.86 }], {}).fieldStates.owner.note).toBe('As before with customer beta · 10번 중 8번 맞음')
+  })
+
   it('keeps the answer held back for a check, with its layer and promise', () => {
     const session = new Session('r', {}, 0.05, () => 0, undefined, () => 10)
     session.apply([{ ...lee, promise: 0.8 }], {})

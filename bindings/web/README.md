@@ -21,6 +21,8 @@ routes — the contract at the end of this page, which a host implements over th
 | `content` | The form's formdown text. |
 | `data` | The record's values when it was opened. |
 | `rate` | How often a field's answer is held back to check it, from 0 to 1 (one in twenty by default). |
+| `prefill` | Whether a suggestion the engine allows to go in unasked is put in the field before the person takes it. Off by default — a value in a field reads as the person's own. |
+| `promise-rate` | How often a suggestion's promise — right *n* times in 10 like it, rounded down — is shown beside it, from 0 to 1. Off (0) by default; the draw goes into the record, so showing it can be measured before it is turned on for everyone. |
 | `strings` | The words the form shows, in the host's language. |
 | `settled-by` | Who is writing, as an opaque id the host gives — one person, one id, never a name. Sent with the save when set. |
 | `batch` | The batch the record is written in, when several come at once from one source. Sent with the save when set. |

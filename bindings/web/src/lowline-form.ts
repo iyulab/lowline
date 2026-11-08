@@ -57,6 +57,13 @@ export class LowlineForm extends LitElement {
    */
   @property({ type: Boolean }) prefill = false
 
+  /**
+   * How often a suggestion's promise — how often a suggestion like it has been right, as a count out of ten — is shown
+   * beside it, from 0 to 1. Off (0) by default. Drawn once for each suggestion shown, and the draw is sent with the save,
+   * so a host can measure whether showing it helps people settle rightly before turning it on for everyone.
+   */
+  @property({ type: Number, attribute: 'promise-rate' }) promiseRate = 0
+
   /** Who is writing, as an opaque id the host gives — one person, one id; not a name. Sent with the save when set. */
   @property({ attribute: 'settled-by' }) settledBy = ''
 
@@ -85,9 +92,11 @@ export class LowlineForm extends LitElement {
       // The values it was opened with are taken before anything is suggested or put in.
       this.session = new Session(this.record, valuesOf(this.data), this.rate, Math.random, this.strings)
       this.session.prefills = this.prefill
+      this.session.promises = this.promiseRate
       this.fieldStates = {}
-    } else if (changed.has('prefill') && this.session) {
-      this.session.prefills = this.prefill
+    } else if (this.session) {
+      if (changed.has('prefill')) this.session.prefills = this.prefill
+      if (changed.has('promiseRate')) this.session.promises = this.promiseRate
     }
   }
 
