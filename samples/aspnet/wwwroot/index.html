@@ -7,6 +7,7 @@
   <script type="module" src="/element/lowline-form.bundle.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
+    textarea { box-sizing: border-box; width: 100%; }
     output { display: block; margin-top: 1rem; color: #555; }
     #model { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.9rem; color: #444; }
   </style>
@@ -37,6 +38,10 @@
   <script type="module">
     const form = document.querySelector('lowline-form')
     form.content = '@customer: [text]\n@owner: [select options="kim,lee"]'
+    // `?promise-rate=0.5` shows how often a suggestion like it has been right beside half of the suggestions, drawn at
+    // random — what a host measuring whether to show it everywhere would set.
+    const rate = new URLSearchParams(location.search).get('promise-rate')
+    if (rate !== null) form.promiseRate = Number(rate)
     // Each record takes an id of its own; opening a saved record again would take its id back.
     form.record = crypto.randomUUID()
     document.querySelector('#fill').addEventListener('click', () => form.fill(document.querySelector('#written').value))

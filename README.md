@@ -186,7 +186,8 @@ scripts/sample.sh   # builds the engine and the element, then serves http://loca
 
 It judges an owner the records cannot answer through `Lowline.Extensions.AI`, over a stand-in chat client the page can
 make answer in different shapes, or over a local model server (`LOWLINE_SAMPLE_MODEL_URL`, `LOWLINE_SAMPLE_MODEL`); the
-page shows what the model's answers came to.
+page shows what the model's answers came to. Opened as `/?promise-rate=0.5`, the element shows beside half of the
+suggestions how often a suggestion like it has been right.
 
 ## Who decides
 
