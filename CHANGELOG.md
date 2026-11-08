@@ -32,7 +32,8 @@ All notable changes to this project are written here. The format follows
 
 - **The element says why an empty decided field has no suggestion.** `<lowline-form>` shows a note beside a decided
   field the engine abstains on — needs a judgement, not sure enough, nothing settled yet, never suggested for, among
-  others — and, when a judgement was asked for and gave nothing it can show, says so. A field that holds a value, or one held back for a check
+  others — and, when a judgement was asked for and gave nothing it can show, or a value filled from what the person
+  wrote cannot go in the field, says so. A field that holds a value, or one held back for a check
   with its group, shows no note. Before, such a field looked like one nothing is ever suggested for.
 
 ### Changed

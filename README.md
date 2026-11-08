@@ -6,7 +6,9 @@
 
 Lowline is a form engine that learns from the records people confirm. A host app puts a form on
 screen; the engine suggests values for its fields from the records already confirmed, says how often
-such a suggestion has been right, and learns from what the person accepts, corrects or turns down.
+such a suggestion has been right, and learns from the values the person settles — taking a suggestion, changing it, or
+typing their own. A suggestion turned down is not shown again in that record and counts against how often suggestions
+were taken; it teaches no value.
 Nothing is saved until a person confirms it.
 
 Status: early development (0.x) — the packages are published, and may change between minor versions.

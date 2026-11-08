@@ -86,7 +86,9 @@ describe('Session', () => {
   })
 
   it('says why an empty decided field is shown no suggestion, in the host’s words', () => {
-    const asking: Proposal = { field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement' }
+    const asking: Proposal = {
+      field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement', asks: [['customer', 'Gamma']],
+    }
     const unsure: Proposal = { ...asking, field: 'site', abstain: 'unsure' }
     const off: Proposal = { ...asking, field: 'note', abstain: 'off' }
     const round = new Session('r', {}, 0.05, never).apply([asking, unsure, off], {})
@@ -114,6 +116,11 @@ describe('Session', () => {
     expect(round.fieldStates.owner).toEqual({
       note: 'Needs your judgement — neither the records nor a judgement gave a suggestion',
     })
+  })
+
+  it('says nothing of a field that asks for a judgement on nothing written yet', () => {
+    const early: Proposal = { field: 'owner', suggestion: null, prefill: false, layer: null, abstain: 'needs-judgement', asks: [] }
+    expect(new Session('r', {}, 0.05, never).apply([early], {}).fieldStates).toEqual({})
   })
 
   it('says nothing of a field that holds a value, or one held back with a field drawn for a check', () => {
@@ -283,10 +290,17 @@ describe('Session', () => {
       { field: 'owner', suggestion: { value: 'kim', origin: 'other', fit: 'exact' }, prefill: false, layer: null, abstain: null },
       { field: 'kind', suggestion: null, prefill: false, layer: null, abstain: 'not-a-choice' },
     ])
-    expect(states).toEqual({ owner: { suggestions: ['kim'], decline: 'Not this', note: 'From what you wrote' } })
+    expect(states).toEqual({
+      owner: { suggestions: ['kim'], decline: 'Not this', note: 'From what you wrote' },
+      kind: { note: 'No suggestion — the value given was not one of the choices' },
+    })
     expect(session.draft.shown('owner')?.origin).toBe('other')
     // The records suggest lee; what was filled from the writing stays in view, and nothing is put in.
-    expect(session.apply([lee], {})).toEqual({ fieldStates: states, prefill: {} })
+    expect(session.apply([lee], {})).toEqual({ fieldStates: { owner: states.owner }, prefill: {} })
+    // The records have nothing for the field the writing could not fill: what the writing gave is still said.
+    const kind: Proposal = { field: 'kind', suggestion: null, prefill: false, layer: null, abstain: 'unsure' }
+    expect(session.apply([kind], {}).fieldStates.kind).toEqual(states.kind)
+    expect(session.apply([kind], { kind: 'bug' }).fieldStates.kind).toBeUndefined()
     expect(session.draft.shown('owner')?.value).toBe('kim')
     session.picked('owner')
     expect(session.apply([lee], {}).fieldStates.owner.suggestions).toEqual(['lee'])

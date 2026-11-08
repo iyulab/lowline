@@ -81,8 +81,8 @@ export const englishStrings: Strings = {
     unsure: 'No suggestion — the records are not sure enough',
     'not-allowed': 'No suggestion among the choices you may pick',
     'needs-judgement': 'Needs your judgement — the records cannot tell',
-    'not-a-choice': 'No suggestion — the judgement was not one of the choices',
-    malformed: 'No suggestion — the judgement does not fit this field',
+    'not-a-choice': 'No suggestion — the value given was not one of the choices',
+    malformed: 'No suggestion — the value given does not fit this field',
     together: 'No suggestion until the fields decided with it are settled',
   },
   judgedNothing: 'Needs your judgement — neither the records nor a judgement gave a suggestion',
@@ -106,6 +106,8 @@ export class Session {
   private filled = new Set<string>()
   /** What filling from the person's writing offers, by field, until the person picks it or turns it down. */
   private written = new Map<string, FieldState>()
+  /** Why filling from the person's writing gave a field nothing to offer, by field, until it offers one. */
+  private unfilled = new Map<string, string>()
   /** The judgement asked for each field, by what it reads; `null` while the host is still judging. */
   private judgements = new Map<string, { reads: string; proposal: Proposal | null }>()
 
@@ -174,7 +176,11 @@ export class Session {
         // Why the field is empty, said beside it: silent, it would read as a field nothing is suggested for, and a
         // person passes over it. A field that already holds a value needs no word.
         const judged = this.judgements.get(field)?.proposal === proposal
-        const why = judged ? this.strings.judgedNothing : proposal.abstain ? this.strings.abstain[proposal.abstain] : ''
+        // A field that asks for a judgement on nothing yet has not been looked at: there is nothing to say of it.
+        const early = proposal.abstain === 'needs-judgement' && (proposal.asks?.length ?? 0) === 0
+        const why =
+          this.unfilled.get(field) ??
+          (judged ? this.strings.judgedNothing : proposal.abstain && !early ? this.strings.abstain[proposal.abstain] : '')
         if (why && isEmpty(values[field])) round.fieldStates[field] = { note: why }
         continue
       }
@@ -250,13 +256,20 @@ export class Session {
    * on its own, in place of what the records suggest for the field. Answers what every field shows now.
    */
   applyFill(proposals: Proposal[]): Record<string, FieldState> {
-    for (const { field, suggestion } of proposals) {
-      if (!suggestion) continue
+    for (const { field, suggestion, abstain } of proposals) {
+      if (!suggestion) {
+        // A value was given for the field that it cannot take: said beside the field, not dropped in silence.
+        const why = abstain ? this.strings.abstain[abstain] : ''
+        if (why) this.unfilled.set(field, why)
+        continue
+      }
+      this.unfilled.delete(field)
       this.draft.show(field, suggestion)
       this.filled.delete(field)
       this.written.set(field, { suggestions: [suggestion.value], decline: this.strings.decline, note: this.strings.fromWriting })
     }
-    return Object.fromEntries(this.written)
+    const unfilled = [...this.unfilled].filter(([field]) => !this.written.has(field))
+    return { ...Object.fromEntries(this.written), ...Object.fromEntries(unfilled.map(([field, note]) => [field, { note }])) }
   }
 
   /** The person picked a field's offered value: what was offered from their writing has done its part. */

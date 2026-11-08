@@ -147,6 +147,8 @@ export class LowlineForm extends LitElement {
     if (session !== this.session) return
     this.fieldStates = session.applyFill(proposals)
     if (this.formdown) this.formdown.fieldStates = this.fieldStates
+    // The fields the writing did not fill keep what the records say of them.
+    void this.ask()
   }
 
   /** Asks again what to show for the decided fields still open. */
