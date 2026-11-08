@@ -62,6 +62,13 @@ All notable changes to this project are written here. The format follows
 
 ### Fixed
 
+- **A suggestion turned down stays out of view for the rest of the record.** `<lowline-form>` showed a suggestion the
+  person turned down again once another suggestion had come and gone for the field — type a customer, turn the owner
+  down, type another customer, then the first again. It now stays turned down in that record, and the draft says so
+  when it comes back (`declined: true`), so the record counts the turn-down. A new record starts with none.
+
+- **`strings` changed while a record is written take effect at once.** They waited for the next record.
+
 - **A draft whose check is drawn with an impossible probability is refused.** A field of a draft's JSON held back with
   `held` 0, below 0 or above 1 was taken, and the check counted as infinitely many values, or as fewer than one; it is
   now refused when the draft is read.

@@ -97,6 +97,7 @@ export class LowlineForm extends LitElement {
     } else if (this.session) {
       if (changed.has('prefill')) this.session.prefills = this.prefill
       if (changed.has('promiseRate')) this.session.promises = this.promiseRate
+      if (changed.has('strings')) this.session.strings = this.strings
     }
   }
 

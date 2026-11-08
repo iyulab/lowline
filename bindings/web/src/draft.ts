@@ -63,17 +63,22 @@ export class Draft {
   private arrival: string[] = []
   private by?: string
   private batch?: string
+  /** The values the person turned down, by field: for this record, each stays turned down whatever is shown between. */
+  readonly #turnedDown = new Map<string, Set<string>>()
 
   /** A record opened holding `values` — none for a new one. Empty values are left out. */
   constructor(values: Values = {}) {
     this.opened = Object.fromEntries(Object.entries(values).filter(([, v]) => !isEmpty(v)))
   }
 
-  /** A suggestion came into view for the field. A suggestion turned down earlier stays turned down only if it is this. */
+  /**
+   * A suggestion came into view for the field. It is turned down if the person turned its value down before in this
+   * record — even with other suggestions shown since.
+   */
   show(field: string, suggestion: Suggestion, reported: Reported = {}): void {
     const track = (this.fields[field] ??= {})
     if (!sameSuggestion(track.shown, suggestion)) {
-      track.declined = false
+      track.declined = this.#turnedDown.get(field)?.has(suggestion.value) === true
       delete track.promise_shown
     }
     track.shown = { ...suggestion }
@@ -159,10 +164,13 @@ export class Draft {
     const track = this.fields[field]
     if (!track?.shown) return false
     track.declined = true
+    const values = this.#turnedDown.get(field) ?? new Set<string>()
+    values.add(track.shown.value)
+    this.#turnedDown.set(field, values)
     return true
   }
 
-  /** Whether `suggestion` is the one in view for the field and the person turned it down. */
+  /** Whether `suggestion` is the one in view for the field and the person turned it down — now or before, in this record. */
   declined(field: string, suggestion: Suggestion): boolean {
     const track = this.fields[field]
     return track?.declined === true && sameSuggestion(track.shown, suggestion)

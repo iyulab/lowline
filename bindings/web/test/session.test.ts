@@ -33,6 +33,10 @@ describe('Draft', () => {
     expect(draft.fields.owner.declined).toBe(true)
     draft.show('owner', { value: 'kim' })
     expect(draft.fields.owner.declined).toBe(false)
+    // Back to the value turned down: still turned down in this record, and not written into its JSON otherwise.
+    draft.show('owner', { value: 'lee' })
+    expect(draft.fields.owner.declined).toBe(true)
+    expect(JSON.parse(JSON.stringify(draft)).fields.owner).toEqual({ shown: { value: 'lee' }, declined: true })
   })
 
   it('holds an answer back with its probability, and refuses one out of range', () => {
@@ -254,6 +258,20 @@ describe('Session', () => {
     expect(session.draft.fields.owner.promise_shown).toBeUndefined()
   })
 
+  it('keeps a suggestion turned down out of view for the rest of the record, whatever is suggested between', () => {
+    const kim: Proposal = { ...lee, suggestion: { value: 'kim', origin: 'decider', fit: 'exact' }, basis: [{ kind: 'value', field: 'customer', value: 'Acme' }] }
+    const session = new Session('r', {}, 0.05, never, undefined, () => 10)
+    expect(session.apply([kim], { customer: 'Acme' }).fieldStates.owner?.suggestions).toEqual(['kim'])
+    session.decline('owner', { customer: 'Acme' })
+    expect(session.apply([kim], { customer: 'Acme' }).fieldStates.owner).toBeUndefined()
+    expect(session.apply([lee], { customer: 'Beta' }).fieldStates.owner?.suggestions).toEqual(['lee'])
+    expect(session.apply([kim], { customer: 'Acme' }).fieldStates.owner).toBeUndefined()
+    expect(session.draft.fields.owner).toMatchObject({ shown: { value: 'kim' }, declined: true })
+    // A new record starts with nothing turned down.
+    session.saved({ customer: 'Acme' })
+    expect(session.apply([kim], { customer: 'Acme' }).fieldStates.owner?.suggestions).toEqual(['kim'])
+  })
+
   it('shows the promise beside the suggestion as a count out of ten, rounded down, when the host turns it on', () => {
     const session = new Session('r', {}, 0.05, never, undefined, () => 10)
     session.promises = 1
@@ -285,6 +303,12 @@ describe('Session', () => {
     none.promises = 1
     expect(none.apply([lee], {}).fieldStates.owner.note).toBe('As before with customer beta')
     expect(none.draft.fields.owner.promise_shown).toBeUndefined()
+  })
+
+  it('says the words the host changes to while a record is written in the next round', () => {
+    const session = new Session('r', {}, 0.05, never, undefined, () => 10)
+    session.strings = { ...englishStrings, decline: 'Nope' }
+    expect(session.apply([lee], {}).fieldStates.owner?.decline).toBe('Nope')
   })
 
   it('lets the host word the promise', () => {

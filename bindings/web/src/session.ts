@@ -141,7 +141,8 @@ export class Session {
     opened: Values,
     readonly rate = 0.05,
     private readonly random: () => number = Math.random,
-    private readonly strings: Strings = englishStrings,
+    /** The words the form shows; a host may change them while a record is written, and the next round says them. */
+    public strings: Strings = englishStrings,
     /** A steady clock in milliseconds (`performance.now()` by default): the record's times are read from it. */
     private readonly clock: () => number = () => performance.now(),
   ) {
@@ -200,9 +201,10 @@ export class Session {
         if (why && isEmpty(values[field])) round.fieldStates[field] = { note: why }
         continue
       }
-      // Turned down, it stays down for this record: neither shown again nor put back in.
-      if (this.draft.declined(field, suggestion)) continue
+      // Turned down, it stays down for this record — whatever was suggested between: neither shown again nor put back in.
+      // The draft takes it as the suggestion in view, turned down, so the record says what was last offered.
       this.draft.show(field, suggestion, proposal)
+      if (this.draft.declined(field, suggestion)) continue
       // The answers that carry a promise say in the record whether it was shown beside them, and with what chance.
       const promised = proposal.promise !== undefined && (suggestion.origin ?? 'decider') === 'decider'
       const shown = promised && this.promiseShown(field, suggestion.value)
