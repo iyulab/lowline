@@ -184,6 +184,29 @@ It judges an owner the records cannot answer through `Lowline.Extensions.AI`, ov
 make answer in different shapes, or over a local model server (`LOWLINE_SAMPLE_MODEL_URL`, `LOWLINE_SAMPLE_MODEL`); the
 page shows what the model's answers came to.
 
+## Who decides
+
+The engine suggests; a person decides. What the engine holds to, whatever the host:
+
+- **It saves nothing on its own.** A record is settled only when the host calls `Settle` with what was saved. The
+  element saves only when the host calls `save()`, which a host wires to a person's own act.
+- **What was shown is on the record.** The draft the host settles with says, field by field, what was suggested, from
+  which layer and with what promise, and whether the person took it, changed it, turned it down or typed with nothing
+  in view.
+- **A judgement from outside the records is never put in unasked.** A value the host's model judges is shown for a
+  person to take, whatever the field's policy, and a model's answer is checked against its field before it is shown.
+- **A value no person settled teaches nothing.** What the host settles as `SettledBy.Application` — an import, another
+  program's values — is not learned from.
+
+What the host decides, and answers for:
+
+- **Whether a suggestion goes in before a person looks.** A field's policy, as its form declares it (`offer` by default,
+  `confirm` or `off`), says whether the host *may* put a suggested value in as the field's starting value (`Proposal.Prefill`); the
+  host decides whether it does. A value put in that way and saved unchanged is settled as taken.
+- **Whether a record is saved without a person.** A host that saves on its own settles as `SettledBy.Application`.
+- **Who may settle, and which choices each person may pick** — authentication, permissions and allowed choices are the
+  host's.
+
 ## Development
 
 ```sh
