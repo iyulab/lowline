@@ -4,14 +4,20 @@
 //   (cd bindings/web && npm ci && npm run bundle)
 //   dotnet run --project samples/aspnet
 //
+// Or, from the repository root: scripts/sample.sh
+//
 // The first run seeds forty records — Acme's owner kim, Beta's lee — so the owner is suggested at once. Filling from
-// what a person wrote, and judging an owner the records cannot answer (a customer never seen), go through a stand-in for
-// a real model (WordModel, below): a host gives its own.
+// what a person wrote, and judging an owner the records cannot answer (a customer never seen), go through the engine's
+// model over a chat client (Lowline.Extensions.AI). The chat client is a stand-in that answers as the page asks, or a
+// local model server: set LOWLINE_SAMPLE_MODEL_URL (an OpenAI-compatible endpoint such as http://localhost:11434/v1)
+// and LOWLINE_SAMPLE_MODEL. The page shows what the model's answers came to, from the counter the engine's model keeps.
 
-using System.Text.RegularExpressions;
+using System.Text.Json.Nodes;
 
 using Lowline;
+using Lowline.Extensions.AI;
 using Lowline.Sample;
+using Microsoft.Extensions.AI;
 using Lowline.Sqlite;
 using Microsoft.Extensions.FileProviders;
 
@@ -26,7 +32,12 @@ const string Intake = """
 
 var builder = WebApplication.CreateSlimBuilder(args);
 var database = Path.Combine(builder.Environment.ContentRootPath, "sample.db");
-builder.Services.AddLowline(o => o.UseSqlite($"Data Source={database}").UseModel(new WordModel()).Form("intake", Intake));
+var standIn = new StandInChatClient();
+IChatClient chat = Environment.GetEnvironmentVariable("LOWLINE_SAMPLE_MODEL_URL") is { Length: > 0 } url
+    ? new ChatCompletionsClient(new Uri(url), Environment.GetEnvironmentVariable("LOWLINE_SAMPLE_MODEL") ?? "")
+    : standIn;
+var health = new ModelHealth();
+builder.Services.AddLowline(o => o.UseSqlite($"Data Source={database}").UseChatClient(chat).Form("intake", Intake));
 
 var app = builder.Build();
 app.UseDefaultFiles();
@@ -35,6 +46,28 @@ app.UseStaticFiles();
 var bundle = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "..", "bindings", "web", "dist", "bundle"));
 app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(bundle), RequestPath = "/element" });
 app.MapLowline("/lowline");
+
+// The sample's own: what the model's answers came to, and — with the stand-in — how it answers.
+app.MapGet("/sample/model", () => Results.Text(Model().ToJsonString(), "application/json"));
+app.MapPost("/sample/model", async (HttpRequest request) =>
+{
+    var asked = await JsonNode.ParseAsync(request.Body);
+    if (chat != standIn || !Enum.TryParse<StandInAnswer>((string?)asked?["answer"], ignoreCase: true, out var answer))
+    {
+        return Results.BadRequest();
+    }
+
+    standIn.Answer = answer;
+    return Results.Text(Model().ToJsonString(), "application/json");
+});
+
+JsonObject Model()
+{
+    var model = health.Read();
+    model["standIn"] = chat == standIn;
+    model["answer"] = chat == standIn ? standIn.Answer.ToString() : null;
+    return model;
+}
 
 await Seed(app.Services.GetRequiredService<LowlineWebOptions>().Store!);
 app.Run();
@@ -57,39 +90,5 @@ static async Task Seed(ILowlineStore store)
             ["owner"] = i % 2 == 0 ? "kim" : "lee",
         };
         await store.AddRecordAsync(scope, engine.Settle($"seed-{i}", saved, null, SettledBy.Person, start.AddMinutes(i)));
-    }
-}
-
-/// <summary>A stand-in for a real model: for each field it is asked about, the word written after the field's name —
-/// "customer Beta, owner lee". Whatever it gives is checked against its field before anyone sees it.</summary>
-sealed partial class WordModel : ILowlineModel
-{
-    public Task<IReadOnlyDictionary<string, FieldValue>> FillAsync(
-        LowlineFillRequest request, CancellationToken cancellationToken = default)
-    {
-        var answered = new Dictionary<string, FieldValue>();
-        foreach (var field in request.Fields)
-        {
-            var found = Regex.Match(request.Text, $@"\b{Regex.Escape(field.Name)}\s*[:=]?\s*(\w+)", RegexOptions.IgnoreCase);
-            if (found.Success)
-            {
-                answered[field.Name] = found.Groups[1].Value;
-            }
-        }
-
-        return Task.FromResult<IReadOnlyDictionary<string, FieldValue>>(answered);
-    }
-
-    /// <summary>For a field the records cannot answer: the first choice that does not come before the first value it
-    /// reads, alphabetically — a rule standing in for a model's judgement, trusted so the sample shows it.</summary>
-    public Task<IReadOnlyList<JudgedValue>> JudgeAsync(
-        LowlineJudgeRequest request, CancellationToken cancellationToken = default)
-    {
-        var read = request.Evidence.FirstOrDefault().Value ?? "";
-        var choice = request.Choices?
-            .Order(StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(c => string.Compare(c, read, StringComparison.OrdinalIgnoreCase) >= 0)
-            ?? request.Choices?.FirstOrDefault();
-        return Task.FromResult<IReadOnlyList<JudgedValue>>(choice is null ? [] : [new JudgedValue(choice, 0.6, true)]);
     }
 }

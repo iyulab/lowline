@@ -8,6 +8,7 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
     output { display: block; margin-top: 1rem; color: #555; }
+    #model { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.9rem; color: #444; }
   </style>
 </head>
 <body>
@@ -19,6 +20,17 @@
   <lowline-form src="/lowline" form="intake"></lowline-form>
   <button id="save" type="button">Save</button>
   <output id="said"></output>
+  <section id="model">
+    <p id="stand-in" hidden><label>The stand-in model, asked to judge an owner the records cannot answer
+      (type a customer never seen, such as <code>Gamma</code>):
+      <select id="answer">
+        <option value="Knows">answers a choice</option>
+        <option value="DoesNotKnow">says it cannot tell</option>
+        <option value="QuotedProbability">answers with its probability in quotes</option>
+        <option value="Prose">answers in a sentence</option>
+      </select></label></p>
+    <p>Model: <span id="health">no answers yet</span></p>
+  </section>
   <script type="module">
     const form = document.querySelector('lowline-form')
     form.content = '@customer: [text]\n@owner: [select options="kim,lee"]'
@@ -31,6 +43,28 @@
       form.record = crypto.randomUUID()
       form.data = {}
     })
+
+    // What the model's answers came to — read by the host from the counter the engine's model keeps.
+    const show = (model) => {
+      document.querySelector('#stand-in').hidden = !model.standIn
+      if (model.answer) document.querySelector('#answer').value = model.answer
+      const parts = []
+      if (model.answered) parts.push(`${model.answered} answered`)
+      if (model.unknown) parts.push(`${model.unknown} said it could not tell`)
+      if (model.unreadable) parts.push(`${model.unreadable} could not be read (${model.lastUnreadable})`)
+      document.querySelector('#health').textContent = parts.length ? parts.join(' · ') : 'no answers yet'
+    }
+    const refresh = async () => show(await (await fetch('/sample/model')).json())
+    document.querySelector('#answer').addEventListener('change', async (event) => {
+      const response = await fetch('/sample/model', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ answer: event.target.value }),
+      })
+      show(await response.json())
+    })
+    refresh()
+    setInterval(refresh, 1000)
   </script>
 </body>
 </html>

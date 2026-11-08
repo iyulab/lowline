@@ -177,10 +177,12 @@ people. Its fields are settled as `Fill`, which the decider does not learn from,
 owner of a known customer is suggested at once:
 
 ```sh
-cargo build -p lowline-ffi
-(cd bindings/web && npm ci && npm run bundle)
-dotnet run --project samples/aspnet
+scripts/sample.sh   # builds the engine and the element, then serves http://localhost:5180
 ```
+
+It judges an owner the records cannot answer through `Lowline.Extensions.AI`, over a stand-in chat client the page can
+make answer in different shapes, or over a local model server (`LOWLINE_SAMPLE_MODEL_URL`, `LOWLINE_SAMPLE_MODEL`); the
+page shows what the model's answers came to.
 
 ## Development
 
