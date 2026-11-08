@@ -76,7 +76,7 @@ export const englishStrings: Strings = {
   fromJudgement: 'Judged from this record’s values — no settled record answers it',
   fromWriting: 'From what you wrote',
   abstain: {
-    off: '',
+    off: 'Yours to decide — this form suggests nothing here',
     'no-evidence': 'No suggestion yet — nothing settled bears on it',
     unsure: 'No suggestion — the records are not sure enough',
     'not-allowed': 'No suggestion among the choices you may pick',
@@ -85,7 +85,7 @@ export const englishStrings: Strings = {
     malformed: 'No suggestion — the judgement does not fit this field',
     together: 'No suggestion until the fields decided with it are settled',
   },
-  judgedNothing: 'Needs your judgement — neither the records nor the judgement could tell',
+  judgedNothing: 'Needs your judgement — neither the records nor a judgement gave a suggestion',
 }
 
 /** What the form does with one round of proposals: what each field shows, and the values to put in unasked. */

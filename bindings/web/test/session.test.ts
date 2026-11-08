@@ -93,6 +93,7 @@ describe('Session', () => {
     expect(round.fieldStates).toEqual({
       owner: { note: 'Needs your judgement — the records cannot tell' },
       site: { note: 'No suggestion — the records are not sure enough' },
+      note: { note: 'Yours to decide — this form suggests nothing here' },
     })
     expect(round.prefill).toEqual({})
 
@@ -110,7 +111,9 @@ describe('Session', () => {
     expect(session.toJudge([asking])).toEqual(['owner'])
     session.takeJudged([asking], [{ ...asking, abstain: 'unsure', asks: [] }])
     const round = session.apply(session.judged([asking]), {})
-    expect(round.fieldStates.owner).toEqual({ note: 'Needs your judgement — neither the records nor the judgement could tell' })
+    expect(round.fieldStates.owner).toEqual({
+      note: 'Needs your judgement — neither the records nor a judgement gave a suggestion',
+    })
   })
 
   it('says nothing of a field that holds a value, or one held back with a field drawn for a check', () => {
