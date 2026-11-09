@@ -202,6 +202,17 @@ public sealed class LowlineForms : IDisposable
         return running.Engine.Report ?? [];
     }
 
+    /// <summary>The scope's settled records cut by the ISO week and form version each decision was first settled in,
+    /// with each cut's usage counts — see <see cref="LowlineEngine.Aggregate"/>: what the host may send on about how its
+    /// answers went, with no value, text, settler or record id in it. Nothing is sent; sharing it is the host's.</summary>
+    public async Task<LowlineAggregate> AggregateAsync(
+        LowlineScope scope, CancellationToken cancellationToken = default)
+    {
+        var running = await StartAsync(scope, cancellationToken).ConfigureAwait(false);
+        var records = await _store.ReadRecordsAsync(scope, cancellationToken).ConfigureAwait(false);
+        return running.Engine.Aggregate(records.Select(r => r.Json));
+    }
+
     /// <summary>Completes when the scope's thresholds, if being chosen again after a save, are chosen and stored — and
     /// fails as that did. Completes at once when nothing is being chosen.</summary>
     public async Task WhenTunedAsync(LowlineScope scope)

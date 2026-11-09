@@ -220,6 +220,13 @@ impl Engine {
         gil::usage::usage(records)
     }
 
+    /// The settled `records` cut by the week and form version each decision was first settled in, with each cut's
+    /// usage counts ([`super::aggregate`]) — what a host can send on about how its answers went, with no value, text,
+    /// settler or record id in it. The engine sends nothing anywhere; nothing about it changes.
+    pub fn aggregate(&self, records: &[Record]) -> super::Aggregate {
+        super::aggregate(records)
+    }
+
     /// What to show for each decided field of the record `id` that is still open, given its `values` so far — in the
     /// form's order. A decided field that takes one value and already has one is not answered. `allowed` holds, by
     /// field, the choices this person may pick now (the host's permissions and active filters); a field it leaves out

@@ -25,6 +25,34 @@ public sealed class FormsTests
     private static Dictionary<string, FieldValue> Customer(string name) => new() { ["customer"] = name };
 
     [Fact]
+    public async Task The_aggregate_counts_an_audit_with_the_decision_it_audits_and_holds_no_content()
+    {
+        var definition = System.Text.Json.Nodes.JsonNode.Parse(EngineTests.Intake)!.AsObject();
+        definition["formVersion"] = "owners-2";
+        var store = await StoreWith(Seoul, EngineTests.Alternating(40));
+        using var forms = new LowlineForms(store);
+        forms.Define("intake", definition.ToJsonString());
+        var acme = new Dictionary<string, FieldValue> { ["customer"] = "Acme", ["owner"] = "kim" };
+
+        await forms.SettleAsync(Seoul, "rec-first", acme, EngineTests.Shown("owner", "kim"), cancellationToken: Ct);
+        // Settled again by a second person with the answer held back: an audit of the same decision.
+        await forms.SettleAsync(
+            Seoul, "rec-first", acme, null, SettledBy.Person,
+            new Attestation { Settler = "second", Held = new Dictionary<string, double> { ["owner"] = 0.1 } }, Ct);
+
+        var aggregate = await forms.AggregateAsync(Seoul, Ct);
+        aggregate.Decisions.Should().Be(41, "forty seeded and one settled twice");
+        var latest = aggregate.Cuts.Single(c => c.FormVersion == "owners-2");
+        latest.Week.Should().Be(
+            $"{System.Globalization.ISOWeek.GetYear(DateTime.UtcNow)}-W{System.Globalization.ISOWeek.GetWeekOfYear(DateTime.UtcNow):00}");
+        var owner = latest.Usage["owner"];
+        (owner.Decisions, owner.Accepted, owner.Audits, owner.FirstChecksWithoutAnswer).Should().Be((1, 1, 1, 0));
+
+        var sent = System.Text.Json.JsonSerializer.Serialize(aggregate, LowlineJson.Default.LowlineAggregate);
+        sent.Should().NotContainAny("Acme", "kim", "rec-first", "second", "r1");
+    }
+
+    [Fact]
     public async Task An_engine_starts_from_the_store_and_keeps_its_tuning_there()
     {
         var store = await StoreWith(Seoul, EngineTests.Alternating(40));

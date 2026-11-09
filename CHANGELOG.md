@@ -8,6 +8,25 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- **The aggregate a host may send on: usage counts by week and form version, with no content.**
+  `lowline::gil::aggregate(&records)` (and `Engine::aggregate`; `lowline_engine_aggregate` in the C ABI;
+  `LowlineEngine.Aggregate` and `LowlineForms.AggregateAsync` in .NET) cuts the settled record lines by the ISO week each
+  decision was first settled in and its `form_version`, and counts each cut with `usage`:
+  `{ decisions, cuts: [{ week, form_version, usage: { field: counts } }] }`. No value, text, settler or record id is in
+  it, and the engine sends it nowhere. Every line of a decision goes into the cut of its first settlement, so a later
+  audit is counted as an audit of it and not as a decision of its own.
+
+- **The usage counts tell first checks, audits and the promise-display arms apart** (iyulab-gil 0.13):
+  `AttributeUsage` gains `first_checks`, `first_checks_right`, `first_checks_without_answer` (it should stay 0),
+  `audits` and `promise_display` (accepts and corrections with the promise displayed or not, per draw probability;
+  `PromiseDisplayUsage` in .NET). A check made later on a decision already settled is no longer counted as another
+  decision.
+
+- **The element can be opened for an audit.** `<lowline-form audit="0.1">` — the probability the host drew the record
+  with — shows nothing the first settler or the decider said: every decided field's answer is held back with that
+  probability as a check, and no other suggestion, note or judgement is shown. Open the record with only the values it
+  does not decide, and name the second person with `settled-by`.
+
 - **`Lowline.Extensions.AI`: the host's model over a `Microsoft.Extensions.AI` chat client.** `UseChatClient(client)` (or
   `new ChatClientLowlineModel(client)`) fills forms from what a person wrote and showed — attachments are handed to the
   client as data — and judges a decided field the records could not answer, trusting a value from `TrustFrom` (0.7). It
@@ -43,6 +62,15 @@ All notable changes to this project are written here. The format follows
   with its group, shows no note. Before, such a field looked like one nothing is ever suggested for.
 
 ### Changed
+
+- **A store keeps every line a record was settled with.** `ILowlineStore.AddRecordAsync` no longer replaces the record of
+  the same id: a record reopened and saved again, or audited, keeps its earlier lines, so the engine learns from the
+  latest and counts a later check as an audit of the first settlement. `ReadRecordsAsync` gives every line;
+  `ForgetBeforeAsync` removes the records last settled before the date, with all their lines; `ForgetAsync` removes every
+  line of the record. `InMemoryLowlineStore` and `SqliteLowlineStore` both do so; a SQLite database made by an earlier
+  version (`lowline_records` keyed by id) is made again on first use, its rows kept. A host with its own
+  `ILowlineStore` keeps each line in the same way.
+- iyulab-gil 0.12 → 0.13.
 
 - **The element no longer puts a suggestion in before the person takes it, unless the host asks.** A value in a field
   reads as the person's own; a suggestion now stays beside its field until taken. A host that wants the engine's

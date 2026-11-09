@@ -518,6 +518,29 @@ public sealed record AttributeUsage
     /// <summary>The weighted count of answers whose rightness is known.</summary>
     [JsonPropertyName("judged_weight")] public double JudgedWeight { get; init; }
 
+    /// <summary>Decisions whose first settlement was a check — the answer held back, never shown: counted once each,
+    /// without weight.</summary>
+    [JsonPropertyName("first_checks")] public int FirstChecks { get; init; }
+
+    /// <summary>Of those, the ones that agreed with the answer held back.</summary>
+    [JsonPropertyName("first_checks_right")] public int FirstChecksRight { get; init; }
+
+    /// <summary>First checks whose record does not say what answer was held back — it should stay 0: a check that
+    /// cannot be compared with its answer measures nothing.</summary>
+    [JsonPropertyName("first_checks_without_answer")] public int FirstChecksWithoutAnswer { get; init; }
+
+    /// <summary>Checks made later on a decision already settled (an audit) — counted here and in <see cref="Checked"/>,
+    /// not as decisions.</summary>
+    [JsonPropertyName("audits")] public int Audits { get; init; }
+
+    /// <summary>Accepts and corrections by whether the promise was displayed beside the answer, for each probability it
+    /// was drawn to be displayed with.</summary>
+    [JsonPropertyName("promise_display")] public IReadOnlyList<PromiseDisplayUsage> PromiseDisplay
+    {
+        get => field ?? [];
+        init;
+    } = [];
+
     /// <summary>The share of decisions answered; <c>null</c> with no decisions.</summary>
     [JsonIgnore] public double? AnswerRate => Decisions > 0 ? (double)Answered / Decisions : null;
 
@@ -526,6 +549,58 @@ public sealed record AttributeUsage
 
     /// <summary>The mean promise of the answers made under one; <c>null</c> when none was.</summary>
     [JsonIgnore] public double? Promise => Promised > 0 ? PromiseSum / Promised : null;
+}
+
+/// <summary>Accepts and corrections of the answers whose promise was drawn to be displayed with one probability
+/// (<see cref="PromiseShown"/>), by whether it was.</summary>
+public sealed record PromiseDisplayUsage
+{
+    /// <summary>The probability the promise was drawn to be displayed with.</summary>
+    [JsonPropertyName("probability")] public double Probability { get; init; }
+
+    /// <summary>Accepted with the promise displayed.</summary>
+    [JsonPropertyName("shown_accepted")] public int ShownAccepted { get; init; }
+
+    /// <summary>Corrected with the promise displayed.</summary>
+    [JsonPropertyName("shown_corrected")] public int ShownCorrected { get; init; }
+
+    /// <summary>Accepted with the promise not displayed.</summary>
+    [JsonPropertyName("hidden_accepted")] public int HiddenAccepted { get; init; }
+
+    /// <summary>Corrected with the promise not displayed.</summary>
+    [JsonPropertyName("hidden_corrected")] public int HiddenCorrected { get; init; }
+}
+
+/// <summary>What a host may send on about how its answers went (<see cref="LowlineEngine.Aggregate"/>): the usage
+/// counts of its settled records, cut by the ISO week each decision was first settled in and the form version it was
+/// settled on. No value, text, settler or record id is in it; the engine sends it nowhere — whether to share it is the
+/// host's.</summary>
+public sealed record LowlineAggregate
+{
+    /// <summary>The decisions the records hold — records with distinct ids; a record settled again later is the same
+    /// decision.</summary>
+    [JsonPropertyName("decisions")] public int Decisions { get; init; }
+
+    /// <summary>The cuts, by week and then form version, oldest first.</summary>
+    [JsonPropertyName("cuts")] public IReadOnlyList<AggregateCut> Cuts { get => field ?? []; init; } = [];
+}
+
+/// <summary>The decisions first settled in one week on one form version, and what their answers came to.</summary>
+public sealed record AggregateCut
+{
+    /// <summary>The ISO 8601 week the decisions were first settled in, UTC, such as <c>2026-W47</c>.</summary>
+    [JsonPropertyName("week")] public string Week { get; init; } = "";
+
+    /// <summary>The form version the decisions were first settled on; <c>null</c> for records that do not say.</summary>
+    [JsonPropertyName("form_version")] public string? FormVersion { get; init; }
+
+    /// <summary>The usage counts of the cut's decisions, by decided field — a later audit counted with the decision it
+    /// audits.</summary>
+    [JsonPropertyName("usage")] public IReadOnlyDictionary<string, AttributeUsage> Usage
+    {
+        get => field ?? new Dictionary<string, AttributeUsage>();
+        init;
+    } = new Dictionary<string, AttributeUsage>();
 }
 
 /// <summary>What the host vouches for about a record, in place of what the form being measured says of itself: who
@@ -565,6 +640,7 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(Dictionary<string, double>))]
 [JsonSerializable(typeof(List<FieldReport>))]
 [JsonSerializable(typeof(Dictionary<string, AttributeUsage>))]
+[JsonSerializable(typeof(LowlineAggregate))]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(Attestation))]
 public sealed partial class LowlineJson : JsonSerializerContext;

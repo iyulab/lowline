@@ -178,7 +178,7 @@ teaches no suggestion: nobody saw one, and a value no person confirmed must not 
 people. Its fields are settled as `Fill`, which the decider does not learn from, however many there are.
 
 [`samples/aspnet`](samples/aspnet) is all of it on one page, with a stand-in model, seeding forty records so the
-owner of a known customer is suggested at once:
+owner of a known customer and the priority of a known topic are suggested at once:
 
 ```sh
 scripts/sample.sh   # builds the engine and the element, then serves http://localhost:5180
@@ -186,8 +186,60 @@ scripts/sample.sh   # builds the engine and the element, then serves http://loca
 
 It judges an owner the records cannot answer through `Lowline.Extensions.AI`, over a stand-in chat client the page can
 make answer in different shapes, or over a local model server (`LOWLINE_SAMPLE_MODEL_URL`, `LOWLINE_SAMPLE_MODEL`); the
-page shows what the model's answers came to. Opened as `/?promise-rate=0.5`, the element shows beside half of the
-suggestions how often a suggestion like it has been right.
+page shows what the model's answers came to — the stand-in answers each field in the shape chosen for it. Opened as
+`/?promise-rate=0.5`, the element shows beside half of the suggestions how often a suggestion like it has been right;
+`/?rate=1` holds every answer back to check it. The last record saved can be audited from the page, as a second person.
+Below the form, the page shows what the host could send: the aggregate of its records (`GET /lowline/intake/aggregate`).
+
+## Sharing how the answers went
+
+What a host may send on about its suggestions — to the people improving the engine, or across its own sites — is an
+aggregate: the usage counts of its settled records, cut by the ISO week each decision was first settled in and the
+`formVersion` it was settled on. It holds counts only: no value, no text, no one who settled and no record id. The engine
+sends it nowhere; whether to share it, and with whom, is the host's decision.
+
+```csharp
+// .NET (Lowline, and Lowline.Sqlite for the store): the forms the host already runs.
+var aggregate = await forms.AggregateAsync(new LowlineScope("intake", "default"));
+// Or from record lines the host keeps itself:
+var same = engine.Aggregate(lines);
+```
+
+```rust
+// Rust (features `gil` and `serde`): the record lines the host stores.
+let aggregate = lowline::gil::aggregate(&records);
+let json = serde_json::to_string(&aggregate)?;
+```
+
+```json
+{
+  "decisions": 128,
+  "cuts": [
+    { "week": "2026-W47", "form_version": "intake-2",
+      "usage": { "owner": { "decisions": 41, "accepted": 30, "corrected": 4, "rejected": 2, "entered": 5,
+                            "first_checks": 4, "first_checks_right": 4, "first_checks_without_answer": 0,
+                            "audits": 1, "promise_display": [ { "probability": 0.5, "shown_accepted": 15,
+                            "shown_corrected": 2, "hidden_accepted": 15, "hidden_corrected": 2 } ], "…": "…" } } }
+  ]
+}
+```
+
+`decisions` counts records with distinct ids. Each cut's `usage` is what `Usage` counts on that cut's decisions — every
+line of a decision goes into the cut of its first settlement, so a record settled again later by a second person (an
+audit) is counted under `audits` and not as another decision, and `first_checks_without_answer` stays 0. A store keeps
+every line a record was settled with for this reason (`ILowlineStore.AddRecordAsync`; a SQLite database from before is
+made again on first use, its rows kept).
+
+A host that wants to know how well its suggestions serve people — and whether showing their promise helps — can run a
+measured pilot and share the aggregate, week by week:
+
+- **one form**, and in it the busiest decided field or more;
+- **six weeks**;
+- **checks on that field at 1 in 10** — the element's `rate="0.1"` (or `Recheck { rate: 0.1 }`), the answer held back and
+  kept on the record (`suggested`, `sources`), so the precision is measured on values nobody saw an answer for;
+- **the promise shown at random** — the element's `promise-rate` set to a value between 0 and 1, such as `0.5`, so the
+  two arms can be compared;
+- **audits**, optionally, where a second person is at hand (`Audit`, the element's `audit`).
 
 ## Who decides
 

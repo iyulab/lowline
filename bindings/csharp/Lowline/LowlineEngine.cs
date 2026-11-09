@@ -181,6 +181,24 @@ public sealed unsafe class LowlineEngine : IDisposable
         return JsonSerializer.Deserialize(Native.Result(length), LowlineJson.Default.DictionaryStringAttributeUsage)!;
     }
 
+    /// <summary>The settled <paramref name="records"/> — as the host stores them — cut by the ISO week and form version
+    /// each decision was first settled in, with each cut's usage counts (<see cref="Usage"/>): what a host can send on
+    /// about how its answers went. No value, text, settler or record id is in it, and the engine sends it nowhere. A
+    /// record settled again later (an audit) is counted in the cut of its first settlement. Nothing is learned or
+    /// changed.</summary>
+    public LowlineAggregate Aggregate(IEnumerable<string> records)
+    {
+        var lines = new Utf8(Lines(records));
+        nuint length;
+        using var _ = Read();
+        fixed (byte* p = lines.Bytes)
+        {
+            Native.Check(Native.EngineAggregate(_handle, lines.At(p), &length));
+        }
+
+        return JsonSerializer.Deserialize(Native.Result(length), LowlineJson.Default.LowlineAggregate)!;
+    }
+
     /// <summary>What to show for each decided field of record <paramref name="id"/> that is still open, given its
     /// values so far, in the form's order. <paramref name="allowed"/> holds, by field, the choices this person may pick
     /// now; a field it leaves out may take any value. The record's own saved version is not evidence for itself.

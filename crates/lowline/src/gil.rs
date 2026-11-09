@@ -5,8 +5,10 @@
 //! the [`Proposal`] the host shows ([`proposal`]). [`Engine`] does all of it for one form, keeping the schema and the
 //! memories between calls, so that a host only stores what it is handed back.
 
+mod aggregate;
 mod engine;
 
+pub use aggregate::{Aggregate, Cut, aggregate};
 pub use engine::{Engine, Stale};
 
 use crate::policy::Policy;

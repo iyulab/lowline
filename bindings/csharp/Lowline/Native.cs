@@ -68,6 +68,9 @@ internal static unsafe partial class Native
     [LibraryImport(Library, EntryPoint = "lowline_engine_usage")]
     internal static partial int EngineUsage(nint engine, Str records, nuint* resultLen);
 
+    [LibraryImport(Library, EntryPoint = "lowline_engine_aggregate")]
+    internal static partial int EngineAggregate(nint engine, Str records, nuint* resultLen);
+
     [LibraryImport(Library, EntryPoint = "lowline_engine_propose")]
     internal static partial int EnginePropose(nint engine, Str id, Str values, Str allowed, nuint* resultLen);
 
