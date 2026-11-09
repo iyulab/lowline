@@ -30,6 +30,8 @@
       color: #666; padding-top: 0.7rem; font-weight: 600; }
     #aggregate td.zero { color: #aaa; }
     #aggregate td.alarm { color: #b00020; font-weight: 600; }
+    #aggregate tr.total td { font-weight: 600; }
+    #aggregate tr.part td:first-child { padding-left: 1.2rem; }
     #aggregate td.fine::after { content: ' ✓'; color: #2e7d32; }
     #aggregate pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; background: #f6f6f6; padding: 0.5rem; }
     @media (max-width: 30rem) { #aggregate .scope { grid-template-columns: 1fr; } }
@@ -121,22 +123,26 @@
         'Auditing the last record: settle its owner and priority again, seeing nothing said before, and save.'
     })
 
-    // What the host could send: the aggregate, read from its own route, shown as counts by field in groups.
+    // What the host could send: the aggregate, read from its own route, shown as counts by field in groups. Each
+    // group opens with its total and splits it: a field's decision either had a suggestion ready or the engine
+    // abstained, so the two totals make its decisions; an audit is a second look at a decision, not one of its own.
+    // A row of `zero` should stay 0.
     const groups = [
-      ['Suggestions', [
-        ['answered', 'A suggestion was ready'],
-        ['abstained', 'None — the engine abstained'],
-      ]],
-      ['What people did with the suggestion', [
+      ['Decisions in this field', 'decisions', []],
+      ['A suggestion was ready', 'answered', [
         ['accepted', 'Taken'],
         ['corrected', 'Changed'],
         ['rejected', 'Turned down'],
-        ['entered', 'Typed, nothing suggested'],
+        ['first_checks', 'Held back for a check — the person typed it'],
+        ['filled', 'Saved by the application'],
+        ['entered_over_answer', 'Typed over it', 'zero'],
       ]],
-      ['Checks', [
-        ['first_checks', 'Answer held back'],
-        ['first_checks_right', '… and the person agreed'],
-        ['first_checks_without_answer', '… with no answer kept', 'zero'],
+      ['None — the engine abstained', 'abstained', [
+        ['entered', 'Typed'],
+      ]],
+      ['Checks', null, [
+        ['first_checks_right', 'Held back, and the person agreed with it'],
+        ['first_checks_without_answer', 'Held back with no answer kept', 'zero'],
         ['audits', 'Audited by a second person'],
       ]],
     ]
@@ -162,7 +168,7 @@
         const title = document.createElement('strong')
         title.textContent = `${weekName(cut.week)} · form ${cut.form_version ?? '(no version)'}`
         const size = document.createElement('span')
-        size.textContent = `${decided} ${decided === 1 ? 'decision' : 'decisions'}`
+        size.textContent = `${decided} ${decided === 1 ? 'decision' : 'decisions'} in the busiest field`
         header.append(title, size)
         const table = document.createElement('table')
         const head = table.createTHead().insertRow()
@@ -173,8 +179,9 @@
           body.insertRow().append(th)
           return body
         }
-        const row = (body, label, count, mustBeZero) => {
+        const row = (body, label, count, mustBeZero, kind = '') => {
           const tr = body.insertRow()
+          tr.className = kind
           tr.insertCell().textContent = label
           for (const field of fields) {
             const n = count(cut.usage[field])
@@ -183,11 +190,12 @@
             td.className = mustBeZero ? (n === 0 ? 'zero fine' : 'alarm') : n === 0 ? 'zero' : ''
           }
         }
-        for (const [label, items] of groups) {
+        // Abstentions are the decisions with no suggestion ready: `decisions − answered`.
+        const count = (key) => (u) => (key === 'abstained' ? u.decisions - u.answered : u[key])
+        for (const [label, total, items] of groups) {
           const body = group(label)
-          // Abstentions are the decisions with no suggestion ready: `decisions − answered`.
-          const count = (key) => (u) => (key === 'abstained' ? u.decisions - u.answered : u[key])
-          for (const [key, name, rule] of items) row(body, name, count(key), rule === 'zero')
+          if (total) row(body, items.length ? 'All of them' : 'Decided', count(total), false, 'total')
+          for (const [key, name, rule] of items) row(body, name, count(key), rule === 'zero', total ? 'part' : '')
         }
         // Only a draw between never and always splits the answers into two arms to compare.
         const drawn = [...new Set(fields.flatMap((f) => (cut.usage[f].promise_display ?? []).map((d) => d.probability)))]

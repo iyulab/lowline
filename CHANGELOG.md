@@ -6,6 +6,12 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `samples/aspnet`: the aggregate screen opens each field with its decisions, split into those with a suggestion ready
+  and those the engine abstained on, each total over the rows that make it up; the card's header names the busiest
+  field's count.
+
 ## [0.12.1] - 2026-11-09
 
 ### Added
