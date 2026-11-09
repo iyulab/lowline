@@ -6,6 +6,17 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`lowline::gil::Record`**: the record line a host stores, re-exported, so a host that keeps its lines as JSON reads
+  them back for `aggregate`, `tune` or `Engine` with `serde_json::from_str::<lowline::gil::Record>` — without depending
+  on `iyulab-gil` itself, at a version that could differ from the engine's.
+
+### Documentation
+
+- The README's aggregate section is whole on its own: where `forms` and `engine` come from in .NET, and how a Rust host
+  reads its stored lines back.
+
 ## [0.12.0] - 2026-11-09
 
 ### Added

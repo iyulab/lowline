@@ -204,14 +204,28 @@ aggregate: the usage counts of its settled records, cut by the ISO week each dec
 | whether the promise was shown beside the suggestion, for a host drawing it at random | any record id |
 
 ```csharp
-// .NET (Lowline, and Lowline.Sqlite for the store): the forms the host already runs.
+// .NET — packages Lowline, and Lowline.Sqlite for the store: the forms the host already runs.
+using System.Text.Json;
+using Lowline;
+using Lowline.Sqlite;
+
+using var forms = new LowlineForms(new SqliteLowlineStore("Data Source=lowline.db"));
+forms.Define("intake", intakeDefinition);                // the form, as above
 var aggregate = await forms.AggregateAsync(new LowlineScope("intake", "default"));
-// Or from record lines the host keeps itself:
-var same = engine.Aggregate(lines);
+var json = JsonSerializer.Serialize(aggregate, LowlineJson.Default.LowlineAggregate);
+
+// Or from record lines the host keeps itself, one JSON line each, as the engine handed them back to store:
+using var engine = LowlineEngine.Create(definition);    // the definition with its "name" beside "form"
+var same = engine.Aggregate(File.ReadLines("records.jsonl"));
 ```
 
 ```rust
-// Rust (features `gil` and `serde`): the record lines the host stores.
+// Rust — crate lowline with features `gil` and `serde`, and serde_json: the record lines the host stores.
+let records = std::fs::read_to_string("records.jsonl")?
+    .lines()
+    .filter(|line| !line.is_empty())
+    .map(serde_json::from_str::<lowline::gil::Record>)
+    .collect::<Result<Vec<_>, _>>()?;
 let aggregate = lowline::gil::aggregate(&records);
 let json = serde_json::to_string(&aggregate)?;
 ```

@@ -10,6 +10,10 @@ mod engine;
 
 pub use aggregate::{Aggregate, Cut, aggregate};
 pub use engine::{Engine, Stale};
+/// A record line as the host stores it — what [`record`], [`decision`] and [`Engine`] hand back, and what [`aggregate`],
+/// [`tune`] and [`Engine`] read. With the `serde` feature it reads from and writes to the line's JSON, so a host keeping
+/// its lines needs no dependency on Gil of its own (and none whose version could differ from the one the engine uses).
+pub use gil::schema::Record;
 
 use crate::policy::Policy;
 #[cfg(test)]
