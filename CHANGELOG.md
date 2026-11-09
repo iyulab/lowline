@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-09
+
 ### Added
 
 - **`lowline::gil::Record`**: the record line a host stores, re-exported, so a host that keeps its lines as JSON reads
