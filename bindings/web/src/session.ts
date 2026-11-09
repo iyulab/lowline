@@ -130,6 +130,19 @@ export class Session {
    */
   promises = 0
 
+  /**
+   * The probability this record was drawn with to be settled again by a second person — an audit — or 0 (the default)
+   * for a record written as usual. Above 0 and at most 1, the person is shown nothing the first settler or the decider
+   * said: every decided field's answer is held back with this probability (a check), and no other suggestion, note or
+   * judgement is shown. The host draws the record and opens it with only the values it did not decide.
+   */
+  audit = 0
+
+  /** Whether the record is being audited: `audit` is a probability above 0 and at most 1. */
+  get auditing(): boolean {
+    return this.audit > 0 && this.audit <= 1
+  }
+
   /** The promise draw of the suggestion each field shows: whether its promise is shown. */
   private promised = new Map<string, { value: string; shown: boolean }>()
 
@@ -181,6 +194,8 @@ export class Session {
     for (const proposal of proposals) {
       if (proposal.suggestion && !this.written.has(proposal.field)) this.draw(proposal)
     }
+    // Audited, the record shows nothing anyone said of it: answers that can be checked are held, the rest go unshown.
+    if (this.auditing) return { fieldStates: {}, prefill: {} }
     // A field held back for a check holds back the open fields of its group: the person settling it with nothing in view
     // is not shown what is suggested alongside it. Only the held field is the check.
     const held = proposals.filter((p) => this.draft.held(p.field) !== undefined)
@@ -331,6 +346,10 @@ export class Session {
       !proposal.several && (suggestion.origin ?? 'decider') === 'decider' && (suggestion.fit ?? 'exact') === 'exact'
     if (!checkable) return false
     this.drawn.add(field)
+    if (this.auditing) {
+      this.draft.hold(field, this.audit, { ...proposal, suggestion })
+      return true
+    }
     if (this.rate > 0 && this.rate <= 1 && this.random() < this.rate) {
       this.draft.hold(field, this.rate, { ...proposal, suggestion })
       return true

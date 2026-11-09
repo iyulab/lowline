@@ -47,6 +47,14 @@ export class LowlineForm extends LitElement {
   /** How often a field's answer is held back to check it, from 0 to 1. */
   @property({ type: Number }) rate = 0.05
 
+  /**
+   * The probability the host drew this record with to be settled again by a second person — an audit — from 0 (not
+   * audited, the default) to 1. Audited, the form shows none of what the first settler or the decider said: the decided
+   * fields' answers are held back with it as checks. Open the record with only the values it does not decide, and name
+   * the second person with `settled-by`.
+   */
+  @property({ type: Number }) audit = 0
+
   /** The words the form shows, in the host's language. */
   @property({ attribute: false }) strings: Strings = englishStrings
 
@@ -88,11 +96,18 @@ export class LowlineForm extends LitElement {
       this.client = new LowlineClient(this.src)
       this.canJudge = true
     }
-    if (changed.has('record') || changed.has('form') || changed.has('data') || changed.has('content')) {
+    if (
+      changed.has('record') ||
+      changed.has('form') ||
+      changed.has('data') ||
+      changed.has('content') ||
+      changed.has('audit')
+    ) {
       // The values it was opened with are taken before anything is suggested or put in.
       this.session = new Session(this.record, valuesOf(this.data), this.rate, Math.random, this.strings)
       this.session.prefills = this.prefill
       this.session.promises = this.promiseRate
+      this.session.audit = this.audit
       this.fieldStates = {}
     } else if (this.session) {
       if (changed.has('prefill')) this.session.prefills = this.prefill
@@ -185,7 +200,7 @@ export class LowlineForm extends LitElement {
       session.took(this.values())
     }
     formdown.fieldStates = this.fieldStates
-    if (this.canJudge) void this.judge(session, values, shown)
+    if (this.canJudge && !session.auditing) void this.judge(session, values, shown)
   }
 
   /**

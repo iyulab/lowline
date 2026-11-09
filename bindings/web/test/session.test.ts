@@ -185,6 +185,17 @@ describe('Session', () => {
     expect(session.draft.shown('owner')?.value).toBe('lee')
   })
 
+  it('audited, holds every checkable answer back with the audit’s probability and shows nothing else', () => {
+    const session = new Session('r', {}, 0.05, never)
+    session.audit = 0.1
+    const unsure: Proposal = { field: 'priority', abstain: 'unsure' }
+    const round = session.apply([lee, { ...lee, field: 'team', suggestion: { value: 'A-', fit: 'prefix' } }, unsure], {})
+    expect(round).toEqual({ fieldStates: {}, prefill: {} })
+    expect(session.draft.held('owner')).toBe(0.1)
+    expect(session.draft.held('team')).toBeUndefined()
+    expect(session.draft.shown('team')).toBeUndefined()
+  })
+
   it('never holds back a class or a suggestion from elsewhere', () => {
     const session = new Session('r', {}, 1, () => 0)
     session.apply([{ ...lee, suggestion: { value: 'A-', fit: 'prefix' }, prefill: false }], {})
