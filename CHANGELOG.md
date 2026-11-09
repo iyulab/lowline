@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-09
+
 ### Added
 
 - **The aggregate a host may send on: usage counts by week and form version, with no content.**
@@ -63,6 +65,7 @@ All notable changes to this project are written here. The format follows
 
 ### Changed
 
+- `@iyulab/lowline-form` takes `@formdown/ui` 0.26.1, which keeps a key typed right after moving into a field.
 - **A store keeps every line a record was settled with.** `ILowlineStore.AddRecordAsync` no longer replaces the record of
   the same id: a record reopened and saved again, or audited, keeps its earlier lines, so the engine learns from the
   latest and counts a later check as an audit of the first settlement. `ReadRecordsAsync` gives every line;
