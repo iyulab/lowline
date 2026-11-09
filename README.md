@@ -224,12 +224,30 @@ let json = serde_json::to_string(&aggregate)?;
       "usage": { "owner": { "decisions": 41, "accepted": 30, "corrected": 4, "rejected": 2, "entered": 5,
                             "first_checks": 4, "first_checks_right": 4, "first_checks_without_answer": 0,
                             "audits": 1, "promise_display": [ { "probability": 0.5, "shown_accepted": 15,
-                            "shown_corrected": 2, "hidden_accepted": 15, "hidden_corrected": 2 } ], "…": "…" } } }
+                            "shown_corrected": 2, "hidden_accepted": 15, "hidden_corrected": 2 } ],
+                            "…": "the other counts below" } } }
   ]
 }
 ```
 
-`decisions` counts records with distinct ids. Each cut's `usage` is what `Usage` counts on that cut's decisions — every
+Each field's counts, as `usage` writes them:
+
+| Count | What it is |
+|---|---|
+| `decisions` | decisions settled, or turned down with a suggestion in view |
+| `answered` | of them, those with a suggestion ready (shown, or held back for a check); `decisions − answered` abstained |
+| `accepted`, `corrected`, `rejected` | the suggestion taken, changed to another value, turned down and left empty |
+| `filled` | the suggestion saved by the application on its own (`SettledBy.Application`) |
+| `entered` | no suggestion, a value typed; `entered_over_answer` — typed although a suggestion was ready (should stay 0) |
+| `accepted_other`, `corrected_other` | a value from elsewhere (the host's model filling the form) kept or changed |
+| `checked`, `checked_right` | checks — the answer held back, first or in an audit — and those that agreed with it |
+| `first_checks`, `first_checks_right`, `first_checks_without_answer` | decisions first settled as a check, those agreeing, and those whose record lost the answer (should stay 0) |
+| `audits` | checks made later by a second person on a decision already settled — not decisions |
+| `promised`, `promise_sum` | suggestions made under a promise, and the sum of those promises |
+| `right_weight`, `judged_weight` | the weighted counts the realized precision rests on (a check weighs one ÷ its probability) |
+| `promise_display` | per probability the promise was drawn to be displayed with: taken and changed, displayed or not |
+
+`decisions` at the top counts records with distinct ids. Each cut's `usage` is what `Usage` counts on that cut's decisions — every
 line of a decision goes into the cut of its first settlement, so a record settled again later by a second person (an
 audit) is counted under `audits` and not as another decision, and `first_checks_without_answer` stays 0. A store keeps
 every line a record was settled with for this reason (`ILowlineStore.AddRecordAsync`; a SQLite database from before is

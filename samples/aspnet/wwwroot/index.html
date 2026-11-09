@@ -123,6 +123,10 @@
 
     // What the host could send: the aggregate, read from its own route, shown as counts by field in groups.
     const groups = [
+      ['Suggestions', [
+        ['answered', 'A suggestion was ready'],
+        ['abstained', 'None — the engine abstained'],
+      ]],
       ['What people did with the suggestion', [
         ['accepted', 'Taken'],
         ['corrected', 'Changed'],
@@ -181,7 +185,9 @@
         }
         for (const [label, items] of groups) {
           const body = group(label)
-          for (const [key, name, rule] of items) row(body, name, (u) => u[key], rule === 'zero')
+          // Abstentions are the decisions with no suggestion ready: `decisions − answered`.
+          const count = (key) => (u) => (key === 'abstained' ? u.decisions - u.answered : u[key])
+          for (const [key, name, rule] of items) row(body, name, count(key), rule === 'zero')
         }
         // Only a draw between never and always splits the answers into two arms to compare.
         const drawn = [...new Set(fields.flatMap((f) => (cut.usage[f].promise_display ?? []).map((d) => d.probability)))]
