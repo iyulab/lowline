@@ -195,8 +195,13 @@ Below the form, the page shows what the host could send: the aggregate of its re
 
 What a host may send on about its suggestions — to the people improving the engine, or across its own sites — is an
 aggregate: the usage counts of its settled records, cut by the ISO week each decision was first settled in and the
-`formVersion` it was settled on. It holds counts only: no value, no text, no one who settled and no record id. The engine
-sends it nowhere; whether to share it, and with whom, is the host's decision.
+`formVersion` it was settled on. The engine sends it nowhere; whether to share it, and with whom, is the host's decision.
+
+| In it — counts, by decided field | Not in it |
+|---|---|
+| what people did with each suggestion: taken, changed, turned down, typed with nothing suggested | any value or text |
+| checks (the answer held back) and audits (a second person settling again) | who settled |
+| whether the promise was shown beside the suggestion, for a host drawing it at random | any record id |
 
 ```csharp
 // .NET (Lowline, and Lowline.Sqlite for the store): the forms the host already runs.

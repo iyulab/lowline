@@ -10,10 +10,29 @@
     textarea { box-sizing: border-box; width: 100%; }
     output { display: block; margin-top: 1rem; color: #555; }
     #model, #aggregate { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.9rem; color: #444; }
-    #aggregate table { border-collapse: collapse; margin: 0.5rem 0; }
-    #aggregate th, #aggregate td { padding: 0.15rem 0.6rem; text-align: right; border-bottom: 1px solid #eee; }
+    #aggregate h2 { margin-bottom: 0.25rem; color: #222; }
+    #aggregate .lead { margin-top: 0; }
+    #aggregate .scope { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin: 1rem 0; }
+    #aggregate .scope div { border-radius: 6px; padding: 0.6rem 0.8rem; }
+    #aggregate .scope .in { background: #eef6ee; }
+    #aggregate .scope .out { background: #f8eeee; }
+    #aggregate .scope h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 0.3rem; color: #333; }
+    #aggregate .scope ul { margin: 0; padding-left: 1.1rem; }
+    #aggregate .cut { border: 1px solid #ddd; border-radius: 6px; margin: 1rem 0; overflow: hidden; }
+    #aggregate .cut header { background: #f4f4f4; padding: 0.5rem 0.8rem; display: flex; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.5rem; }
+    #aggregate .cut header strong { color: #222; }
+    #aggregate table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+    #aggregate th, #aggregate td { padding: 0.25rem 0.8rem; text-align: right; }
     #aggregate th:first-child, #aggregate td:first-child { text-align: left; }
+    #aggregate thead th { font-weight: 600; color: #222; border-bottom: 1px solid #ddd; }
+    #aggregate tbody th { text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
+      color: #666; padding-top: 0.7rem; font-weight: 600; }
+    #aggregate td.zero { color: #aaa; }
+    #aggregate td.alarm { color: #b00020; font-weight: 600; }
+    #aggregate td.fine::after { content: ' ✓'; color: #2e7d32; }
     #aggregate pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; background: #f6f6f6; padding: 0.5rem; }
+    @media (max-width: 30rem) { #aggregate .scope { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -40,9 +59,16 @@
   </section>
   <section id="aggregate">
     <h2>What this host could send</h2>
-    <p>Counts of what the suggestions came to, by week and form version — everything a host would share about how its
-      answers went. No value, no text, no one who settled and no record id is in it, and nothing is sent from here:
-      sharing it is the host's decision.</p>
+    <p class="lead">How the suggestions went, counted by week and form version. Nothing is sent from here — sharing it is
+      the host's decision.</p>
+    <div class="scope">
+      <div class="in"><h3>In it</h3><ul>
+        <li>what people did with each suggestion</li><li>checks and audits</li><li>whether the promise was shown</li>
+      </ul></div>
+      <div class="out"><h3>Not in it</h3><ul>
+        <li>any value or text</li><li>who settled</li><li>any record id</li>
+      </ul></div>
+    </div>
     <div id="cuts">No records yet.</div>
     <details><summary>The aggregate as the host takes it — <code>GET /lowline/intake/aggregate</code></summary>
       <pre id="sent"></pre></details>
@@ -95,25 +121,26 @@
         'Auditing the last record: settle its owner and priority again, seeing nothing said before, and save.'
     })
 
-    // What the host could send: the aggregate, read from its own route, shown as counts by field.
-    const rows = [
-      ['decisions', 'Decisions'],
-      ['answered', 'Answered'],
-      ['accepted', 'Taken'],
-      ['corrected', 'Changed'],
-      ['rejected', 'Turned down'],
-      ['entered', 'Typed with nothing suggested'],
-      ['first_checks', 'Checked first, answer held back'],
-      ['first_checks_right', '… agreeing with it'],
-      ['first_checks_without_answer', '… with no answer kept (should be 0)'],
-      ['audits', 'Audits (not decisions)'],
+    // What the host could send: the aggregate, read from its own route, shown as counts by field in groups.
+    const groups = [
+      ['What people did with the suggestion', [
+        ['accepted', 'Taken'],
+        ['corrected', 'Changed'],
+        ['rejected', 'Turned down'],
+        ['entered', 'Typed, nothing suggested'],
+      ]],
+      ['Checks', [
+        ['first_checks', 'Answer held back'],
+        ['first_checks_right', '… and the person agreed'],
+        ['first_checks_without_answer', '… with no answer kept', 'zero'],
+        ['audits', 'Audited by a second person'],
+      ]],
     ]
-    // The promise display is counted for each probability it was drawn with: only a draw between never and always
-    // splits the answers into two arms to compare.
-    const display = (usage, probability, shown) => {
-      const d = (usage.promise_display ?? []).find((d) => d.probability === probability)
-      const side = shown ? 'shown' : 'hidden'
-      return d ? `${d[`${side}_accepted`]} · ${d[`${side}_corrected`]}` : '0 · 0'
+    const arm = (usage, probability, shown, kind) =>
+      (usage.promise_display ?? []).find((d) => d.probability === probability)?.[`${shown ? 'shown' : 'hidden'}_${kind}`] ?? 0
+    const weekName = (week) => {
+      const [year, number] = week.split('-W')
+      return `Week ${Number(number)} of ${year}`
     }
     const aggregate = async () => {
       const response = await fetch('/lowline/intake/aggregate')
@@ -124,26 +151,49 @@
       cuts.replaceChildren()
       for (const cut of [...sent.cuts].reverse()) {
         const fields = Object.keys(cut.usage)
+        const card = document.createElement('article')
+        card.className = 'cut'
+        const decided = Math.max(...fields.map((f) => cut.usage[f].decisions))
+        const header = document.createElement('header')
+        const title = document.createElement('strong')
+        title.textContent = `${weekName(cut.week)} · form ${cut.form_version ?? '(no version)'}`
+        const size = document.createElement('span')
+        size.textContent = `${decided} ${decided === 1 ? 'decision' : 'decisions'}`
+        header.append(title, size)
         const table = document.createElement('table')
         const head = table.createTHead().insertRow()
-        for (const name of [`${cut.week} · ${cut.form_version ?? 'no form version'}`, ...fields]) {
-          const th = document.createElement('th')
-          th.textContent = name
-          head.append(th)
+        for (const name of ['', ...fields]) head.append(Object.assign(document.createElement('th'), { textContent: name }))
+        const group = (label) => {
+          const body = table.createTBody()
+          const th = Object.assign(document.createElement('th'), { textContent: label, colSpan: fields.length + 1 })
+          body.insertRow().append(th)
+          return body
         }
-        const body = table.createTBody()
-        const row = (label, count) => {
+        const row = (body, label, count, mustBeZero) => {
           const tr = body.insertRow()
           tr.insertCell().textContent = label
-          for (const field of fields) tr.insertCell().textContent = String(count(cut.usage[field]))
+          for (const field of fields) {
+            const n = count(cut.usage[field])
+            const td = tr.insertCell()
+            td.textContent = String(n)
+            td.className = mustBeZero ? (n === 0 ? 'zero fine' : 'alarm') : n === 0 ? 'zero' : ''
+          }
         }
-        for (const [key, label] of rows) row(label, (usage) => usage[key])
+        for (const [label, items] of groups) {
+          const body = group(label)
+          for (const [key, name, rule] of items) row(body, name, (u) => u[key], rule === 'zero')
+        }
+        // Only a draw between never and always splits the answers into two arms to compare.
         const drawn = [...new Set(fields.flatMap((f) => (cut.usage[f].promise_display ?? []).map((d) => d.probability)))]
         for (const probability of drawn.filter((p) => p > 0 && p < 1).sort()) {
-          row(`Promise shown (drawn ${probability}): taken · changed`, (u) => display(u, probability, true))
-          row(`Promise not shown (drawn ${probability}): taken · changed`, (u) => display(u, probability, false))
+          const body = group(`Promise beside the suggestion — shown to ${Math.round(probability * 100)}% at random`)
+          row(body, 'Shown: taken', (u) => arm(u, probability, true, 'accepted'))
+          row(body, 'Shown: changed', (u) => arm(u, probability, true, 'corrected'))
+          row(body, 'Not shown: taken', (u) => arm(u, probability, false, 'accepted'))
+          row(body, 'Not shown: changed', (u) => arm(u, probability, false, 'corrected'))
         }
-        cuts.append(table)
+        card.append(header, table)
+        cuts.append(card)
       }
       if (!sent.cuts.length) cuts.textContent = 'No records yet.'
     }
