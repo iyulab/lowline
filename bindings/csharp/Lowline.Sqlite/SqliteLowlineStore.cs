@@ -31,6 +31,7 @@ public sealed class SqliteLowlineStore : ILowlineStore
         {
             if (!_ready)
             {
+                KeepEveryLine(connection);
                 using var make = connection.CreateCommand();
                 make.CommandText = """
                     CREATE TABLE IF NOT EXISTS lowline_records (
@@ -38,11 +39,12 @@ public sealed class SqliteLowlineStore : ILowlineStore
                         space TEXT NOT NULL,
                         id TEXT NOT NULL,
                         settled_at INTEGER NOT NULL,
-                        record TEXT NOT NULL,
-                        PRIMARY KEY (form, space, id)
+                        record TEXT NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS lowline_records_settled
                         ON lowline_records (form, space, settled_at);
+                    CREATE INDEX IF NOT EXISTS lowline_records_id
+                        ON lowline_records (form, space, id);
                     CREATE TABLE IF NOT EXISTS lowline_tunings (
                         form TEXT NOT NULL,
                         space TEXT NOT NULL,
@@ -56,6 +58,39 @@ public sealed class SqliteLowlineStore : ILowlineStore
         }
 
         return connection;
+    }
+
+    /// <summary>A database made before a record kept every line it was settled with holds <c>lowline_records</c> keyed
+    /// by id, one line a record; it is made again without that key, its rows kept, so a record settled again keeps the
+    /// line before.</summary>
+    private static void KeepEveryLine(SqliteConnection connection)
+    {
+        using var keyed = connection.CreateCommand();
+        keyed.CommandText = "SELECT COUNT(*) FROM pragma_table_info('lowline_records') WHERE pk > 0";
+        if (Convert.ToInt64(keyed.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) == 0)
+        {
+            return;
+        }
+
+        using var transaction = connection.BeginTransaction();
+        using var remake = connection.CreateCommand();
+        remake.Transaction = transaction;
+        remake.CommandText = """
+            ALTER TABLE lowline_records RENAME TO lowline_records_keyed;
+            DROP INDEX IF EXISTS lowline_records_settled;
+            CREATE TABLE lowline_records (
+                form TEXT NOT NULL,
+                space TEXT NOT NULL,
+                id TEXT NOT NULL,
+                settled_at INTEGER NOT NULL,
+                record TEXT NOT NULL
+            );
+            INSERT INTO lowline_records (form, space, id, settled_at, record)
+                SELECT form, space, id, settled_at, record FROM lowline_records_keyed ORDER BY settled_at, rowid;
+            DROP TABLE lowline_records_keyed;
+            """;
+        remake.ExecuteNonQuery();
+        transaction.Commit();
     }
 
     private static SqliteCommand Command(SqliteConnection connection, string text, LowlineScope scope)
@@ -96,8 +131,7 @@ public sealed class SqliteLowlineStore : ILowlineStore
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var write = Command(
             connection,
-            "INSERT INTO lowline_records (form, space, id, settled_at, record) VALUES ($form, $space, $id, $at, $record) " +
-            "ON CONFLICT (form, space, id) DO UPDATE SET settled_at = excluded.settled_at, record = excluded.record",
+            "INSERT INTO lowline_records (form, space, id, settled_at, record) VALUES ($form, $space, $id, $at, $record)",
             scope);
         write.Parameters.AddWithValue("$id", record.Id);
         write.Parameters.AddWithValue("$at", record.SettledAt.UtcTicks);
@@ -135,17 +169,19 @@ public sealed class SqliteLowlineStore : ILowlineStore
         await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
         await using var forget = Command(
             connection,
-            "DELETE FROM lowline_records WHERE form = $form AND space = $space AND settled_at < $before RETURNING id",
+            "DELETE FROM lowline_records WHERE form = $form AND space = $space AND id IN (" +
+            "SELECT id FROM lowline_records WHERE form = $form AND space = $space " +
+            "GROUP BY id HAVING MAX(settled_at) < $before) RETURNING id",
             scope);
         forget.Parameters.AddWithValue("$before", before.UtcTicks);
-        var gone = new List<string>();
+        var gone = new HashSet<string>();
         await using var reader = await forget.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             gone.Add(reader.GetString(0));
         }
 
-        return gone;
+        return [.. gone];
     }
 
     /// <inheritdoc/>

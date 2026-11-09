@@ -4,7 +4,7 @@ using Lowline.Sqlite;
 namespace Lowline.Tests;
 
 /// <summary>The SQLite store keeps what the in-memory one keeps, across connections: records by scope in settlement
-/// order, a record saved again replacing itself, the tuning, and forgetting by date or id.</summary>
+/// order, a record saved again keeping each line it was settled with, the tuning, and forgetting by date or id.</summary>
 public sealed class SqliteTests : IDisposable
 {
     private readonly string _file = Path.Combine(Path.GetTempPath(), $"lowline-{Guid.NewGuid():N}.db");
@@ -29,7 +29,7 @@ public sealed class SqliteTests : IDisposable
         await store.AddRecordAsync(Seoul, At("b", 4), Ct);
 
         var again = new SqliteLowlineStore(Connection);
-        (await again.ReadRecordsAsync(Seoul, Ct)).Should().Equal(At("a", 1), At("b", 4));
+        (await again.ReadRecordsAsync(Seoul, Ct)).Should().Equal(At("a", 1), At("b", 2), At("b", 4));
         (await again.ReadRecordsAsync(Busan, Ct)).Should().Equal(At("c", 3));
 
         (await again.ReadTuningAsync(Seoul, Ct)).Should().BeNull();
@@ -52,6 +52,43 @@ public sealed class SqliteTests : IDisposable
         (await store.ForgetAsync(Seoul, "c", Ct)).Should().BeTrue();
         (await store.ForgetAsync(Seoul, "c", Ct)).Should().BeFalse();
         (await store.ReadRecordsAsync(Seoul, Ct)).Should().Equal(At("b", 2));
+    }
+
+    [Fact]
+    public async Task A_record_settled_again_since_is_not_forgotten_by_date_and_goes_whole_by_id()
+    {
+        var store = new SqliteLowlineStore(Connection);
+        await store.AddRecordAsync(Seoul, At("a", 1), Ct);
+        await store.AddRecordAsync(Seoul, At("b", 1), Ct);
+        await store.AddRecordAsync(Seoul, At("a", 5), Ct);
+
+        (await store.ForgetBeforeAsync(Seoul, EngineTests.Start.AddMinutes(3), Ct)).Should().Equal("b");
+        (await store.ReadRecordsAsync(Seoul, Ct)).Should().Equal(At("a", 1), At("a", 5));
+        (await store.ForgetAsync(Seoul, "a", Ct)).Should().BeTrue();
+        (await store.ReadRecordsAsync(Seoul, Ct)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_database_keyed_by_id_is_made_again_keeping_its_records()
+    {
+        await using (var old = new Microsoft.Data.Sqlite.SqliteConnection(Connection))
+        {
+            await old.OpenAsync(Ct);
+            await using var make = old.CreateCommand();
+            make.CommandText = $$"""
+                CREATE TABLE lowline_records (
+                    form TEXT NOT NULL, space TEXT NOT NULL, id TEXT NOT NULL, settled_at INTEGER NOT NULL,
+                    record TEXT NOT NULL, PRIMARY KEY (form, space, id));
+                CREATE INDEX lowline_records_settled ON lowline_records (form, space, settled_at);
+                INSERT INTO lowline_records VALUES
+                    ('intake', 'seoul', 'a', {{At("a", 1).SettledAt.UtcTicks}}, '{{At("a", 1).Json}}');
+                """;
+            await make.ExecuteNonQueryAsync(Ct);
+        }
+
+        var store = new SqliteLowlineStore(Connection);
+        await store.AddRecordAsync(Seoul, At("a", 2), Ct);
+        (await store.ReadRecordsAsync(Seoul, Ct)).Should().Equal(At("a", 1), At("a", 2));
     }
 
     [Fact]

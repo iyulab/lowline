@@ -10,10 +10,13 @@ public readonly record struct LowlineScope(string Form, string Space);
 /// engine itself stores nothing.</summary>
 public interface ILowlineStore
 {
-    /// <summary>The scope's settled records, in settlement order.</summary>
+    /// <summary>The scope's settled records, in settlement order — every line kept, a record settled more than once
+    /// giving one line for each time.</summary>
     Task<IReadOnlyList<SettledRecord>> ReadRecordsAsync(LowlineScope scope, CancellationToken cancellationToken = default);
 
-    /// <summary>Keeps a settled record, replacing the scope's record of the same id.</summary>
+    /// <summary>Keeps a settled record's line beside the lines kept before. A record settled again — reopened and saved,
+    /// or audited by a second person — keeps its earlier lines too: the engine learns each record from its latest line,
+    /// and counts a later check as an audit of the decision first settled, which the earlier line is.</summary>
     Task AddRecordAsync(LowlineScope scope, SettledRecord record, CancellationToken cancellationToken = default);
 
     /// <summary>The scope's tuning, or <c>null</c> when none was kept.</summary>
@@ -22,12 +25,13 @@ public interface ILowlineStore
     /// <summary>Keeps the scope's tuning, replacing the one before.</summary>
     Task WriteTuningAsync(LowlineScope scope, string tuning, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes the scope's records settled before <paramref name="before"/> — a retention period — and gives
-    /// the ids of those that went.</summary>
+    /// <summary>Removes the scope's records last settled before <paramref name="before"/> — a retention period — with
+    /// every line each kept, and gives the ids of those that went. A record settled again since keeps all its lines.
+    /// </summary>
     Task<IReadOnlyList<string>> ForgetBeforeAsync(
         LowlineScope scope, DateTimeOffset before, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes the scope's record of id <paramref name="id"/>, if it holds one.</summary>
+    /// <summary>Removes the scope's record of id <paramref name="id"/> — every line of it — if it holds one.</summary>
     Task<bool> ForgetAsync(LowlineScope scope, string id, CancellationToken cancellationToken = default);
 }
 
@@ -46,7 +50,7 @@ public sealed class InMemoryLowlineStore : ILowlineStore
         var kept = Of(scope);
         lock (kept)
         {
-            IReadOnlyList<SettledRecord> ordered = [.. kept.Records.Values.OrderBy(r => r.SettledAt)];
+            IReadOnlyList<SettledRecord> ordered = [.. kept.Records.OrderBy(r => r.SettledAt)];
             return Task.FromResult(ordered);
         }
     }
@@ -58,7 +62,7 @@ public sealed class InMemoryLowlineStore : ILowlineStore
         var kept = Of(scope);
         lock (kept)
         {
-            kept.Records[record.Id] = record;
+            kept.Records.Add(record);
         }
 
         return Task.CompletedTask;
@@ -93,13 +97,13 @@ public sealed class InMemoryLowlineStore : ILowlineStore
         var kept = Of(scope);
         lock (kept)
         {
-            var old = kept.Records.Values.Where(r => r.SettledAt < before).Select(r => r.Id).ToList();
-            foreach (var id in old)
-            {
-                kept.Records.Remove(id);
-            }
-
-            return Task.FromResult<IReadOnlyList<string>>(old);
+            var old = kept.Records
+                .GroupBy(r => r.Id)
+                .Where(lines => lines.Max(r => r.SettledAt) < before)
+                .Select(lines => lines.Key)
+                .ToHashSet();
+            kept.Records.RemoveAll(r => old.Contains(r.Id));
+            return Task.FromResult<IReadOnlyList<string>>([.. old]);
         }
     }
 
@@ -109,13 +113,13 @@ public sealed class InMemoryLowlineStore : ILowlineStore
         var kept = Of(scope);
         lock (kept)
         {
-            return Task.FromResult(kept.Records.Remove(id));
+            return Task.FromResult(kept.Records.RemoveAll(r => r.Id == id) > 0);
         }
     }
 
     private sealed class Kept
     {
-        public Dictionary<string, SettledRecord> Records { get; } = [];
+        public List<SettledRecord> Records { get; } = [];
 
         public string? Tuning { get; set; }
     }
