@@ -30,11 +30,13 @@ public enum StandInAnswer
 
 /// <summary>A chat client standing in for a real model, so the sample runs anywhere and answers as the page asks: it
 /// fills a field from the word written after its name ("customer Beta, owner lee"), and judges as
-/// <see cref="Answer"/> says.</summary>
+/// <see cref="Answers"/> says for the field it is asked to judge — so one field can be answered badly while another is
+/// answered well, as a real model may.</summary>
 public sealed partial class StandInChatClient : IChatClient
 {
-    /// <summary>How it answers a request to judge.</summary>
-    public StandInAnswer Answer { get; set; }
+    /// <summary>How it answers a request to judge, by field; a field left out is answered as a model in good health
+    /// answers (<see cref="StandInAnswer.Knows"/>).</summary>
+    public System.Collections.Concurrent.ConcurrentDictionary<string, StandInAnswer> Answers { get; } = new();
 
     public Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
@@ -69,7 +71,7 @@ public sealed partial class StandInChatClient : IChatClient
             ?? [];
         var choice = choices.FirstOrDefault(c => string.Compare(c, read, StringComparison.OrdinalIgnoreCase) >= 0)
             ?? choices.FirstOrDefault() ?? read;
-        return Answer switch
+        return Answers.GetValueOrDefault((string?)asked["field"] ?? "") switch
         {
             StandInAnswer.Knows => $$"""{"values": [{"value": "{{choice}}", "probability": 0.9}]}""",
             StandInAnswer.DoesNotKnow => """{"values": []}""",

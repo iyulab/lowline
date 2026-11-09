@@ -61,7 +61,10 @@ public static class LowlineEndpoints
     /// suggestions from elsewhere; <c>POST {prefix}/{form}/judge</c>, with a model too, takes <c>{ "id", "values" }</c>
     /// and answers, for the decided fields the records could not, what the model judged; <c>GET {prefix}/{form}/report</c>
     /// answers, per decided field of the request's memory space, the thresholds chosen and what the replay saw at them
-    /// (<see cref="LowlineForms.ReportAsync"/>) — counts and rates, no record's values. A form not defined is 404; input the
+    /// (<see cref="LowlineForms.ReportAsync"/>) — counts and rates, no record's values; <c>GET {prefix}/{form}/aggregate</c>
+    /// answers the memory space's usage counts cut by the week and form version each decision was first settled in
+    /// (<see cref="LowlineForms.AggregateAsync"/>) — what the host may send on, with no value, text, settler or record id.
+    /// Sending it is the host's decision; nothing is sent from here. A form not defined is 404; input the
     /// engine refuses is 400 with its message. Authorize the returned group as the host requires.</summary>
     public static RouteGroupBuilder MapLowline(this IEndpointRouteBuilder endpoints, string prefix = "/lowline")
     {
@@ -72,6 +75,7 @@ public static class LowlineEndpoints
         group.MapPost("{form}/fill", context => FillAsync(context, Form(context)));
         group.MapPost("{form}/judge", context => JudgeAsync(context, Form(context)));
         group.MapGet("{form}/report", context => ReportAsync(context, Form(context)));
+        group.MapGet("{form}/aggregate", context => AggregateAsync(context, Form(context)));
         return group;
     }
 
@@ -88,6 +92,22 @@ public static class LowlineEndpoints
             .ConfigureAwait(false);
         await context.Response.WriteAsJsonAsync(
                 new List<FieldReport>(report), LowlineJson.Default.ListFieldReport,
+                cancellationToken: context.RequestAborted)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task AggregateAsync(HttpContext context, string form)
+    {
+        var (forms, options) = Resolve(context);
+        if (!options.Forms.ContainsKey(form))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        var aggregate = await forms.AggregateAsync(new LowlineScope(form, options.Space(context)), context.RequestAborted)
+            .ConfigureAwait(false);
+        await context.Response.WriteAsJsonAsync(aggregate, LowlineJson.Default.LowlineAggregate,
                 cancellationToken: context.RequestAborted)
             .ConfigureAwait(false);
     }

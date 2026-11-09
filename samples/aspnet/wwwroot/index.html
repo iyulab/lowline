@@ -9,48 +9,145 @@
     body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 2rem auto; padding: 0 1rem; }
     textarea { box-sizing: border-box; width: 100%; }
     output { display: block; margin-top: 1rem; color: #555; }
-    #model { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.9rem; color: #444; }
+    #model, #aggregate { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.9rem; color: #444; }
+    #aggregate table { border-collapse: collapse; margin: 0.5rem 0; }
+    #aggregate th, #aggregate td { padding: 0.15rem 0.6rem; text-align: right; border-bottom: 1px solid #eee; }
+    #aggregate th:first-child, #aggregate td:first-child { text-align: left; }
+    #aggregate pre { white-space: pre-wrap; word-break: break-all; font-size: 0.8rem; background: #f6f6f6; padding: 0.5rem; }
   </style>
 </head>
 <body>
   <h1>Intake</h1>
-  <p>Type a customer — <code>Acme</code> or <code>Beta</code> — and the owner is suggested from the records saved before.</p>
+  <p>Type a customer — <code>Acme</code> or <code>Beta</code> — and the owner is suggested from the records saved before;
+    type a topic — <code>outage</code> or <code>invoice</code> — and the priority is.</p>
   <p><label>Or write it down — <code>customer Beta, owner lee</code> — and fill the form from it:<br>
     <textarea id="written" rows="2" cols="48"></textarea></label><br>
     <button id="fill" type="button">Fill from what I wrote</button></p>
   <lowline-form src="/lowline" form="intake"></lowline-form>
   <button id="save" type="button">Save</button>
+  <button id="audit" type="button" disabled>Audit the last record, as a second person</button>
   <output id="said"></output>
   <section id="model">
-    <p id="stand-in" hidden><label>The stand-in model, asked to judge an owner the records cannot answer
-      (type a customer never seen, such as <code>Gamma</code>):
-      <select id="answer">
-        <option value="Knows">answers a choice</option>
-        <option value="DoesNotKnow">says it cannot tell</option>
-        <option value="QuotedProbability">answers with its probability in quotes</option>
-        <option value="Prose">answers in a sentence</option>
-        <option value="Mixed">answers a choice, and another value with its probability in quotes</option>
-      </select></label></p>
+    <div id="stand-in" hidden>
+      <p>The stand-in model, asked to judge what the records cannot answer — type a customer never seen, such as
+        <code>Gamma</code>, and no topic — answers each field as chosen here:</p>
+      <p><label>The owner: <select class="answer" data-field="owner"></select></label></p>
+      <p><label>The priority: <select class="answer" data-field="priority"></select></label></p>
+    </div>
     <p>The model since the host started: <span id="health">no answers yet</span></p>
     <p>An answer the engine cannot read suggests nothing, as one that could not tell does — this line is how the host
       tells them apart.</p>
   </section>
+  <section id="aggregate">
+    <h2>What this host could send</h2>
+    <p>Counts of what the suggestions came to, by week and form version — everything a host would share about how its
+      answers went. No value, no text, no one who settled and no record id is in it, and nothing is sent from here:
+      sharing it is the host's decision.</p>
+    <div id="cuts">No records yet.</div>
+    <details><summary>The aggregate as the host takes it — <code>GET /lowline/intake/aggregate</code></summary>
+      <pre id="sent"></pre></details>
+  </section>
   <script type="module">
     const form = document.querySelector('lowline-form')
-    form.content = '@customer: [text]\n@owner: [select options="kim,lee"]'
+    form.content =
+      '@customer: [text]\n@topic: [text]\n@owner: [select options="kim,lee"]\n@priority: [select options="urgent,routine"]'
     // `?promise-rate=0.5` shows how often a suggestion like it has been right beside half of the suggestions, drawn at
     // random — what a host measuring whether to show it everywhere would set.
-    const rate = new URLSearchParams(location.search).get('promise-rate')
+    const asked = new URLSearchParams(location.search)
+    const rate = asked.get('promise-rate')
     if (rate !== null) form.promiseRate = Number(rate)
+    // `?rate=1` holds every answer back to check it — the share of answers a host measuring them holds back (1 in 20
+    // when left out). `?audit=` is the probability a record is drawn for audit with (1 in 10 when left out); the
+    // sample draws the last record whenever asked.
+    const checks = asked.get('rate')
+    if (checks !== null) form.rate = Number(checks)
+    const auditRate = Number(asked.get('audit') ?? 0.1)
     // Each record takes an id of its own; opening a saved record again would take its id back.
     form.record = crypto.randomUUID()
     document.querySelector('#fill').addEventListener('click', () => form.fill(document.querySelector('#written').value))
+    // The last record saved, to open again for audit with only the values the form does not decide.
+    let last = null
+    const auditButton = document.querySelector('#audit')
     document.querySelector('#save').addEventListener('click', async () => {
+      const values = form.values()
+      const audited = form.audit > 0
       await form.save()
-      document.querySelector('#said').textContent = 'Saved — the next record starts empty.'
+      document.querySelector('#said').textContent = audited
+        ? 'Audited — saved again by a second person. The next record starts empty.'
+        : 'Saved — the next record starts empty.'
+      last = audited ? null : { id: form.record, customer: values.customer ?? '', topic: values.topic ?? '' }
+      auditButton.disabled = last === null
+      form.audit = 0
+      form.settledBy = ''
       form.record = crypto.randomUUID()
       form.data = {}
+      aggregate()
     })
+    auditButton.addEventListener('click', () => {
+      if (!last) return
+      // Drawn for audit: opened again with what it does not decide, its answers held back, by a second person.
+      form.audit = auditRate
+      form.settledBy = 'second-person'
+      form.record = last.id
+      form.data = { customer: last.customer, topic: last.topic }
+      auditButton.disabled = true
+      document.querySelector('#said').textContent =
+        'Auditing the last record: settle its owner and priority again, seeing nothing said before, and save.'
+    })
+
+    // What the host could send: the aggregate, read from its own route, shown as counts by field.
+    const rows = [
+      ['decisions', 'Decisions'],
+      ['answered', 'Answered'],
+      ['accepted', 'Taken'],
+      ['corrected', 'Changed'],
+      ['rejected', 'Turned down'],
+      ['entered', 'Typed with nothing suggested'],
+      ['first_checks', 'Checked first, answer held back'],
+      ['first_checks_right', '… agreeing with it'],
+      ['first_checks_without_answer', '… with no answer kept (should be 0)'],
+      ['audits', 'Audits (not decisions)'],
+    ]
+    // The promise display is counted for each probability it was drawn with: only a draw between never and always
+    // splits the answers into two arms to compare.
+    const display = (usage, probability, shown) => {
+      const d = (usage.promise_display ?? []).find((d) => d.probability === probability)
+      const side = shown ? 'shown' : 'hidden'
+      return d ? `${d[`${side}_accepted`]} · ${d[`${side}_corrected`]}` : '0 · 0'
+    }
+    const aggregate = async () => {
+      const response = await fetch('/lowline/intake/aggregate')
+      if (!response.ok) return
+      const sent = await response.json()
+      document.querySelector('#sent').textContent = JSON.stringify(sent, null, 2)
+      const cuts = document.querySelector('#cuts')
+      cuts.replaceChildren()
+      for (const cut of [...sent.cuts].reverse()) {
+        const fields = Object.keys(cut.usage)
+        const table = document.createElement('table')
+        const head = table.createTHead().insertRow()
+        for (const name of [`${cut.week} · ${cut.form_version ?? 'no form version'}`, ...fields]) {
+          const th = document.createElement('th')
+          th.textContent = name
+          head.append(th)
+        }
+        const body = table.createTBody()
+        const row = (label, count) => {
+          const tr = body.insertRow()
+          tr.insertCell().textContent = label
+          for (const field of fields) tr.insertCell().textContent = String(count(cut.usage[field]))
+        }
+        for (const [key, label] of rows) row(label, (usage) => usage[key])
+        const drawn = [...new Set(fields.flatMap((f) => (cut.usage[f].promise_display ?? []).map((d) => d.probability)))]
+        for (const probability of drawn.filter((p) => p > 0 && p < 1).sort()) {
+          row(`Promise shown (drawn ${probability}): taken · changed`, (u) => display(u, probability, true))
+          row(`Promise not shown (drawn ${probability}): taken · changed`, (u) => display(u, probability, false))
+        }
+        cuts.append(table)
+      }
+      if (!sent.cuts.length) cuts.textContent = 'No records yet.'
+    }
+    aggregate()
 
     // What the model's answers came to — read by the host from the counter the engine's model keeps.
     const unreadable = {
@@ -65,7 +162,9 @@
     }
     const show = (model) => {
       document.querySelector('#stand-in').hidden = !model.standIn
-      if (model.answer) document.querySelector('#answer').value = model.answer
+      for (const select of document.querySelectorAll('.answer')) {
+        select.value = model.answers?.[select.dataset.field] ?? 'Knows'
+      }
       const parts = []
       const answers = (n) => (n === 1 ? '1 answer' : `${n} answers`)
       if (model.answered) parts.push(`${answers(model.answered)} used`)
@@ -82,14 +181,24 @@
       document.querySelector('#health').textContent = parts.length ? parts.join(' · ') : 'no answers yet'
     }
     const refresh = async () => show(await (await fetch('/sample/model')).json())
-    document.querySelector('#answer').addEventListener('change', async (event) => {
-      const response = await fetch('/sample/model', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ answer: event.target.value }),
+    const answers = [
+      ['Knows', 'answers a choice'],
+      ['DoesNotKnow', 'says it cannot tell'],
+      ['QuotedProbability', 'answers with its probability in quotes'],
+      ['Prose', 'answers in a sentence'],
+      ['Mixed', 'answers a choice, and another value with its probability in quotes'],
+    ]
+    for (const select of document.querySelectorAll('.answer')) {
+      for (const [value, label] of answers) select.add(new Option(label, value))
+      select.addEventListener('change', async () => {
+        const response = await fetch('/sample/model', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ field: select.dataset.field, answer: select.value }),
+        })
+        show(await response.json())
       })
-      show(await response.json())
-    })
+    }
     refresh()
     setInterval(refresh, 1000)
   </script>
