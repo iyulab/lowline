@@ -6,8 +6,17 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- .NET `LowlineForms.Define` and `LowlineOptions.Form`: a definition that is not JSON is refused with an
+  `ArgumentException` naming the form (`Form '<name>' is refused: its definition is not JSON (…)`, the parser's
+  `JsonException` inside), as documented — it used to escape as a bare `JsonException`. A definition that is JSON but
+  not an object now names the form the same way.
+
 ### Changed
 
+- .NET packages: `Lowline.Sqlite` now depends on `Microsoft.Data.Sqlite` 11.0.0 and `Lowline.Extensions.AI` on
+  `Microsoft.Extensions.AI.Abstractions` 11.0.0 (both still target `net10.0`). Rust: `iyulab-gil` 0.13.1.
 - `samples/aspnet`: the aggregate screen opens each field with its decisions, split into those with a suggestion ready
   and those the engine abstained on, each total over the rows that make it up; the card's header names the busiest
   field's count.

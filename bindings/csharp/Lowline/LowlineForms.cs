@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Lowline;
@@ -111,9 +112,22 @@ public sealed class LowlineForms : IDisposable
     internal static string Checked(string form, string definitionJson)
     {
         ArgumentException.ThrowIfNullOrEmpty(form);
-        if (JsonNode.Parse(definitionJson) is not JsonObject definition)
+        JsonNode? parsed;
+        try
         {
-            throw new ArgumentException("A form's definition is a JSON object.", nameof(definitionJson));
+            parsed = JsonNode.Parse(definitionJson);
+        }
+        catch (JsonException unreadable)
+        {
+            throw new ArgumentException(
+                $"Form '{form}' is refused: its definition is not JSON ({unreadable.Message})", nameof(definitionJson),
+                unreadable);
+        }
+
+        if (parsed is not JsonObject definition)
+        {
+            throw new ArgumentException(
+                $"Form '{form}' is refused: its definition is not a JSON object.", nameof(definitionJson));
         }
 
         definition["name"] = form;

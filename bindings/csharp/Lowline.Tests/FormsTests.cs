@@ -242,7 +242,11 @@ public sealed class FormsTests
         var options = () => new LowlineOptions().Form("lone", lone);
         options.Should().Throw<ArgumentException>().WithMessage("Form 'lone' is refused: *");
         var notObject = () => forms.Define("x", "[]");
-        notObject.Should().Throw<ArgumentException>().WithMessage("A form's definition is a JSON object.*");
+        notObject.Should().Throw<ArgumentException>().WithMessage("Form 'x' is refused: *not a JSON object*");
+        // Text that is not JSON at all is refused the same way, naming the form.
+        var notJson = () => new LowlineOptions().Form("order", "not json");
+        notJson.Should().Throw<ArgumentException>().WithMessage("Form 'order' is refused: *not JSON*")
+            .WithInnerException<System.Text.Json.JsonException>();
     }
 
     [Fact]
