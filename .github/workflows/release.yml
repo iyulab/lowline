@@ -49,7 +49,7 @@ jobs:
           node-version: 22
 
       - name: One version in every file
-        run: npx --yes @iyulab/tauri-kit-dev@0.11.1 versions --config versions.config.js
+        run: npx --yes @iyulab/tauri-kit-dev@0.14.0 versions --config versions.config.js
 
       - name: Source matches the release tag
         id: version
@@ -183,7 +183,7 @@ jobs:
 
       # The crates linked into the native libraries, with their license texts; a crate without one fails the release.
       - name: Write the native libraries' notices
-        run: npx --yes @iyulab/tauri-kit-dev@0.11.1 notices --config notices/config.mjs --strict
+        run: npx --yes @iyulab/tauri-kit-dev@0.14.0 notices --config notices/config.mjs --strict
 
       # NuGet and npm packages go in separate folders: the NuGet artifact may hold .nupkg/.snupkg files only.
       - name: Pack

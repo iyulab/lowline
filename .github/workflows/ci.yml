@@ -115,7 +115,7 @@ jobs:
           node-version: 22
 
       - name: Check public text
-        run: npx --yes @iyulab/tauri-kit-dev@0.11.0 public-text .
+        run: npx --yes @iyulab/tauri-kit-dev@0.14.0 public-text .
 
   # The native library for Alpine is built and loaded the way the release does it, so a change that breaks it fails here and
   # not on a tag.
