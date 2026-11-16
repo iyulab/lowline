@@ -6,6 +6,8 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-16
+
 ### Fixed
 
 - .NET `LowlineForms.Define` and `LowlineOptions.Form`: a definition that is not JSON is refused with an
