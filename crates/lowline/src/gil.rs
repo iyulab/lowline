@@ -219,6 +219,87 @@ pub struct FieldReport {
     /// too few cases are settled for one to stand — the judgement is then trusted by its own measure, with no promise.
     #[cfg_attr(feature = "serde", serde(default))]
     pub judgement: Option<gil::replay::ThresholdChoice>,
+    /// Where the thresholds were measured, when they are a [`Prior`] — measured on records kept elsewhere and put back
+    /// with [`Engine::restore_prior`] until the field's own records choose thresholds that stand: the prior's `source`.
+    /// `None` for thresholds chosen on the engine's own records.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub prior: Option<String>,
+}
+
+impl FieldReport {
+    /// Whether the replay chose a threshold the field is answered at: values settled alongside, a length typed, or the
+    /// similar records layer where it is offered. A field whose thresholds do not stand is not answered from its own
+    /// records — the place a [`Prior`] answers it from instead.
+    pub fn stands(&self) -> bool {
+        self.key.is_some()
+            || self
+                .typed
+                .as_ref()
+                .is_some_and(|typed| typed.iter().any(Option::is_some))
+            || (self.similar_offered && self.similar.is_some())
+    }
+}
+
+/// One decided field's thresholds measured on records kept elsewhere — a sample's, shipped with a form — for an engine
+/// to answer that field with while its own records have not chosen thresholds that stand ([`Engine::restore_prior`]).
+/// The answers made under it carry its promises, with its `source` beside them ([`crate::Proposal::prior`]). It is
+/// plain data for the host to keep with the form; [`Engine::prior`] takes one out of an engine whose own thresholds
+/// stand.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct Prior {
+    /// The decided field it is for.
+    pub field: String,
+    /// What it was measured on, in the host's words — said with every promise made under it.
+    pub source: String,
+    /// The version of Gil it was measured with ([`gil::tuning::VERSION`]). Scores are on that version's scale, so a
+    /// prior from another version is not put back — as a tuning of another version no longer stands.
+    pub gil: String,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub key_fields: Option<Vec<String>>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub key_concentrations: std::collections::BTreeMap<String, f64>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub key_threshold: Option<f64>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub typed_key_thresholds: Option<Vec<Option<f64>>>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub memory_threshold: Option<f64>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub memory_floor: Option<f64>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub coarse_key_threshold: Option<f64>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub coarse_memory_threshold: Option<f64>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub coarse_memory_floor: Option<f64>,
+    /// How the field's replays went where it was measured: the promises its answers carry.
+    pub report: FieldReport,
+}
+
+impl Prior {
+    /// `attribute` answering as the prior says: its keys and thresholds put on it, the rest left as it is.
+    fn put_on(&self, attribute: &mut gil::schema::Attribute) {
+        attribute.key_fields.clone_from(&self.key_fields);
+        attribute
+            .key_concentrations
+            .clone_from(&self.key_concentrations);
+        attribute.key_threshold = self.key_threshold;
+        attribute
+            .typed_key_thresholds
+            .clone_from(&self.typed_key_thresholds);
+        attribute.memory_threshold = self.memory_threshold;
+        attribute.memory_floor = self.memory_floor;
+        if let Some(level) = attribute.coarse.as_mut() {
+            level.key_threshold = self.coarse_key_threshold;
+            level.memory_threshold = self.coarse_memory_threshold;
+            level.memory_floor = self.coarse_memory_floor;
+        }
+    }
 }
 
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
@@ -326,6 +407,7 @@ pub fn tune(
             checks,
             counting,
             judgement: None,
+            prior: None,
         };
         if multiple {
             field.closest = closest(&keyed.chosen);

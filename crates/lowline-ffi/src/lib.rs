@@ -28,7 +28,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use gil::decider::ExternalCandidate;
 use gil::schema::Record;
 use gil::tuning::Tuning;
-use lowline::gil::{Engine, Tune, Tuned};
+use lowline::gil::{Engine, Prior, Tune, Tuned};
 use lowline::{
     Attestation, Draft, FieldValue, Form, FormdownSchema, Inference, SettledBy, SettlementKind,
 };
@@ -73,7 +73,7 @@ pub const LOWLINE_BROKEN: i32 = ffi_support::BROKEN;
 
 /// The version of this interface — its functions and statuses, and the JSON they read and write. It changes whenever
 /// a binding built for one version would misread the library of another.
-pub const LOWLINE_ABI_VERSION: u32 = 6;
+pub const LOWLINE_ABI_VERSION: u32 = 7;
 
 /// [`lowline_engine_settle`]: a person saved the record.
 pub const LOWLINE_SETTLED_BY_PERSON: u8 = 0;
@@ -376,6 +376,49 @@ pub unsafe extern "C" fn lowline_engine_restore(
             Ok(())
         })
     }
+}
+
+/// Puts back a prior for one decided field — its thresholds measured on records kept elsewhere, as JSON (what
+/// [`lowline_engine_prior`] hands back) — to answer the field with while its own thresholds do not stand. Its promises
+/// are the field's, with its source beside them in the report and in each proposal (`prior`). Refused, with the reason,
+/// for a prior measured with another version of Gil, for a field the form does not decide, or keyed on fields the form
+/// does not have; nothing changes then.
+///
+/// # Safety
+/// `engine` is a live handle used by nothing else during the call; `prior` is valid for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_restore_prior(
+    engine: *mut LowlineEngine,
+    prior: LowlineStr,
+) -> i32 {
+    // SAFETY: forwarded from the caller.
+    unsafe {
+        changing(engine, |engine| {
+            let prior: Prior = json(text(prior, "prior")?, "prior")?;
+            engine.restore_prior(prior).map_err(input)
+        })
+    }
+}
+
+/// The field's thresholds as a prior measured on this engine's records, described as `source`, as JSON — for a host
+/// making a sample to ship with the form — or `null` while the field's own thresholds do not stand.
+///
+/// # Safety
+/// `engine` is a live handle; `field` and `source` are valid for the call; `result_len` points to one writable `usize`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn lowline_engine_prior(
+    engine: *const LowlineEngine,
+    field: LowlineStr,
+    source: LowlineStr,
+    result_len: *mut usize,
+) -> i32 {
+    call(|| {
+        // SAFETY: forwarded from the caller, for every pointer below.
+        let engine = &unsafe { live(engine) }?.engine;
+        let field = unsafe { text(field, "field") }?;
+        let source = unsafe { text(source, "source") }?;
+        unsafe { set_result(written(&engine.prior(field, source)), result_len) }
+    })
 }
 
 /// Why the thresholds should be chosen again, as JSON: `null` while they stand, `"untuned"` when none were chosen or
@@ -740,7 +783,8 @@ pub unsafe extern "C" fn lowline_engine_record(
 }
 
 /// How each decided field's replays went when the thresholds were chosen, as JSON — an array of reports in the form's
-/// order, each the field's thresholds with what the replay saw at them — or `null` while none were chosen or restored.
+/// order, each the field's thresholds with what the replay saw at them, a field answered from a prior reported as the
+/// prior was measured (`prior` naming its source) — or `null` while none were chosen or restored and no prior is in use.
 ///
 /// # Safety
 /// `engine` is a live handle; `result_len` points to one writable `usize`.

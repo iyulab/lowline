@@ -90,6 +90,49 @@ public sealed unsafe class LowlineEngine : IDisposable
         }
     }
 
+    /// <summary>Puts back a prior for one decided field — its thresholds measured on records kept elsewhere, as JSON
+    /// (what <see cref="Prior"/> gives) — to answer the field with while its own thresholds do not stand: before any are
+    /// chosen, and after a choice that set none. Its promises are the field's, with its source beside them
+    /// (<see cref="Proposal.Prior"/>, <see cref="FieldReport.Prior"/>). The tuning <see cref="Tune"/> gives back owes it
+    /// nothing.</summary>
+    /// <exception cref="ArgumentException">A prior measured with another version of the decider, for a field the form
+    /// does not decide, or keyed on fields the form does not have; nothing changes.</exception>
+    public void RestorePrior(string prior)
+    {
+        ArgumentNullException.ThrowIfNull(prior);
+        var text = new Utf8(prior);
+        using var _ = Write();
+        fixed (byte* p = text.Bytes)
+        {
+            Native.Check(Native.EngineRestorePrior(_handle, text.At(p)));
+        }
+    }
+
+    /// <summary>The field's thresholds as a prior measured on this engine's records, described as
+    /// <paramref name="source"/>, as JSON for <see cref="RestorePrior"/> — for a host making a sample to ship with the
+    /// form; <c>null</c> while the field's own thresholds do not stand.</summary>
+    public string? Prior(string field, string source)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+        ArgumentNullException.ThrowIfNull(source);
+        var fieldText = new Utf8(field);
+        var sourceText = new Utf8(source);
+        nuint length;
+        string json;
+        using (Read())
+        {
+            fixed (byte* f = fieldText.Bytes)
+            fixed (byte* s = sourceText.Bytes)
+            {
+                Native.Check(Native.EnginePrior(_handle, fieldText.At(f), sourceText.At(s), &length));
+            }
+
+            json = Native.Result(length);
+        }
+
+        return json == "null" ? null : json;
+    }
+
     /// <summary>Why the thresholds should be chosen again, or <c>null</c> while they stand: <c>untuned</c> when none
     /// were chosen or restored, or <c>tuning</c> with the decider's reason as <see cref="Staleness.Detail"/> — another
     /// version of it, a changed form, or the learned records grown or shrunk by a tenth since the choice.</summary>

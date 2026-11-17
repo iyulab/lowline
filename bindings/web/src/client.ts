@@ -71,6 +71,11 @@ export interface FieldReport {
   checks: number
   /** What the precision was counted on: values settled with nothing in view and checks, or every settled value. */
   counting: 'unprompted' | 'settled'
+  /**
+   * Where the thresholds were measured, when the field is answered from a prior — measured on records kept elsewhere —
+   * until its own thresholds stand: the prior's source. Absent for thresholds chosen on the host's own records.
+   */
+  prior?: string
 }
 
 /**

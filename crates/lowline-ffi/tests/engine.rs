@@ -612,3 +612,45 @@ fn the_hosts_word_replaces_the_drafts_on_who_settled_and_what_was_checked() {
     }
     unsafe { lowline_engine_free(engine) };
 }
+
+#[test]
+fn a_prior_taken_from_one_engine_answers_another_until_its_own_thresholds_stand() {
+    let mut len = 0;
+    let elsewhere = engine();
+    ok(unsafe { lowline_engine_tune(elsewhere, s(&stored(40)), &mut len) });
+    ok(unsafe { lowline_engine_prior(elsewhere, s("owner"), s("40 sample records"), &mut len) });
+    let prior = result(len);
+    assert_eq!(prior["field"], "owner");
+    assert_eq!(prior["source"], "40 sample records");
+
+    let fresh = engine();
+    ok(unsafe { lowline_engine_prior(fresh, s("owner"), s("none"), &mut len) });
+    assert_eq!(result(len), Value::Null, "no thresholds of its own to give");
+    // A few records of its own — too few to choose thresholds on — and the prior to answer with meanwhile.
+    ok(unsafe { lowline_engine_learn(fresh, s(&stored(4))) });
+    ok(unsafe { lowline_engine_restore_prior(fresh, s(&prior.to_string())) });
+    let shown = propose(fresh, &json!({ "customer": "Acme" }), "");
+    assert_eq!(shown[0]["suggestion"]["value"], "kim");
+    assert_eq!(shown[0]["prior"], "40 sample records");
+    assert_eq!(shown[0]["promise"], prior["report"]["key"]["promise"]);
+    ok(unsafe { lowline_engine_report(fresh, &mut len) });
+    assert_eq!(result(len)[0]["prior"], "40 sample records");
+
+    // Its own forty records choose thresholds that stand: the prior is no longer used.
+    ok(unsafe { lowline_engine_tune(fresh, s(&stored(40)), &mut len) });
+    let shown = propose(fresh, &json!({ "customer": "Acme" }), "");
+    assert!(shown[0].get("prior").is_none());
+
+    let mut refused = prior.clone();
+    refused["gil"] = json!("0.0.1");
+    assert_eq!(
+        unsafe { lowline_engine_restore_prior(fresh, s(&refused.to_string())) },
+        LOWLINE_INVALID_INPUT
+    );
+    assert!(last_error().contains("Gil 0.0.1"), "{}", last_error());
+
+    unsafe {
+        lowline_engine_free(elsewhere);
+        lowline_engine_free(fresh);
+    }
+}

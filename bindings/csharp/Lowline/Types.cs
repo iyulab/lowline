@@ -283,6 +283,11 @@ public sealed record Proposal
     /// (<see cref="FieldReport.Judgement"/>), and before the thresholds were chosen.</summary>
     [JsonPropertyName("promise")] public double? Promise { get; init; }
 
+    /// <summary>Where <see cref="Promise"/> was measured, when the suggestion was held to a prior's thresholds
+    /// (<see cref="LowlineEngine.RestorePrior"/>): the prior's source, to say beside the promise; <c>null</c> for the
+    /// field's own.</summary>
+    [JsonPropertyName("prior")] public string? Prior { get; init; }
+
     /// <summary>For a suggestion from <see cref="Layer.Judgement"/>: the score the judgement gave it, on the judgement's
     /// own scale. The draft keeps it (<c>score</c> in the field's account), so the engine can choose from the records the
     /// score from which the judgement is trusted; <c>null</c> for an answer of the records, which have no such scale.</summary>
@@ -459,6 +464,11 @@ public sealed record FieldReport
     /// checks gather (<c>"counting": {"settled-until-checked": {"checks": K}}</c>), which of the two its checks so far
     /// made it.</summary>
     [JsonPropertyName("counting")] public Counting Counting { get; init; }
+
+    /// <summary>Where the thresholds were measured, when the field is answered from a prior
+    /// (<see cref="LowlineEngine.RestorePrior"/>) until its own thresholds stand: the prior's source; <c>null</c> for
+    /// thresholds chosen on the engine's own records.</summary>
+    [JsonPropertyName("prior")] public string? Prior { get; init; }
 }
 
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the

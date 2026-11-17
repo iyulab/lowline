@@ -291,6 +291,13 @@ describe('Session', () => {
     expect(session.draft.fields.owner.promise_shown).toEqual({ shown: true, probability: 1 })
   })
 
+  it('says where a promise was measured when the suggestion was held to a prior', () => {
+    const session = new Session('r', {}, 0.05, never, undefined, () => 10)
+    session.promises = 1
+    const round = session.apply([{ ...lee, promise: 0.91, prior: '1,015 sample records' }], {})
+    expect(round.fieldStates.owner.note).toBe('As before with customer beta · right 9 times in 10 like this in 1,015 sample records')
+  })
+
   it('draws the display once for each suggestion shown, reports the draw, and draws again for another suggestion', () => {
     // The check is drawn first (0.3 — not held back), then the display: 0.3 shows it, 0.9 does not.
     const rolls = [0.3, 0.3, 0.9]
