@@ -6,6 +6,11 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- npm `@iyulab/lowline-form` depends on `@formdown/ui` `^0.27.0` (was `^0.26.1`): a number field in a right-to-left
+  page reads left to right, and its input carries the `number-input` part.
+
 ## [0.12.2] - 2026-11-16
 
 ### Fixed
