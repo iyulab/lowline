@@ -94,15 +94,12 @@ fn a_field_with_too_few_records_of_its_own_is_answered_from_the_prior_and_says_s
     fresh.restore_prior(prior.clone()).unwrap();
     let shown = owner_for_acme(&fresh);
     assert_eq!(shown.suggestion.map(|s| s.value).as_deref(), Some("kim"));
-    assert_eq!(
-        shown.promise,
-        Some(prior.report.key.as_ref().unwrap().promise)
-    );
+    assert_eq!(shown.promise, prior.promises.key);
     assert_eq!(shown.prior.as_deref(), Some("40 sample records"));
-    assert_eq!(
-        report(&fresh, "owner").prior.as_deref(),
-        Some("40 sample records")
-    );
+    // The report says the field's own thresholds do not stand, and what the prior promises meanwhile.
+    let owner = report(&fresh, "owner");
+    assert!(!owner.stands());
+    assert_eq!(owner.prior.as_ref(), Some(&prior.promises));
 }
 
 #[test]
@@ -217,9 +214,31 @@ fn a_choice_that_sets_no_threshold_for_the_field_uses_the_prior_again() {
     let stored = fewer.tune(&few).clone();
     engine.restore(Some(stored));
     assert_eq!(
-        report(&engine, "owner").prior.as_deref(),
+        report(&engine, "owner")
+            .prior
+            .as_ref()
+            .map(|p| p.source.as_str()),
         Some("40 sample records")
     );
+}
+
+#[test]
+fn records_learned_after_the_prior_answer_as_those_learned_before_it() {
+    let form = form();
+    let mut before = engine_for(&form);
+    let few = records(&before, 4);
+    before.learn(&few);
+    before.restore_prior(sample()).unwrap();
+
+    let mut after = engine_for(&form);
+    after.restore_prior(sample()).unwrap();
+    after.learn(&few);
+
+    for customer in ["Acme", "Beta"] {
+        let shown =
+            |e: &Engine| e.propose("new", &saved(&[("customer", customer)]), &BTreeMap::new());
+        assert_eq!(shown(&after), shown(&before));
+    }
 }
 
 #[test]
@@ -236,20 +255,21 @@ fn a_prior_the_engine_cannot_use_is_refused_and_says_why() {
             .contains("Gil 0.0.1")
     );
 
-    let undecided = Prior {
+    let observed = Prior {
         field: "customer".into(),
         ..sample()
     };
     assert!(
         fresh
-            .restore_prior(undecided)
+            .restore_prior(observed)
             .unwrap_err()
-            .contains("reports on 'owner'")
+            .contains("does not decide 'customer'")
     );
 
-    let mut unknown = sample();
-    unknown.field = "manager".into();
-    unknown.report.field = "manager".into();
+    let unknown = Prior {
+        field: "manager".into(),
+        ..sample()
+    };
     assert!(
         fresh
             .restore_prior(unknown)
@@ -284,10 +304,11 @@ fn a_prior_is_plain_data_a_host_keeps_beside_the_form() {
     let prior = sample();
     let json = serde_json::to_value(&prior).unwrap();
     assert_eq!(json["field"], "owner");
-    assert_eq!(json["source"], "40 sample records");
     assert_eq!(json["gil"], gil::tuning::VERSION);
-    assert!(json["report"]["key"].is_object());
-    assert!(json["report"].get("prior").is_none());
+    assert_eq!(json["promises"]["source"], "40 sample records");
+    assert_eq!(json["promises"]["records"], 40);
+    assert!(json["promises"]["key"].is_number());
+    assert!(json["keyThreshold"].is_number());
     assert_eq!(serde_json::from_value::<Prior>(json).unwrap(), prior);
     assert!(
         engine_for(&form()).prior("owner", "none").is_none(),

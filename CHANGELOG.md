@@ -11,16 +11,19 @@ All notable changes to this project are written here. The format follows
 - A field can be answered from thresholds measured on records kept elsewhere — a prior, such as a sample shipped with
   a form — until its own records choose thresholds that stand. Rust `gil::Engine::restore_prior(Prior)` puts one back
   for one decided field and `gil::Engine::prior(field, source)` takes one out of an engine whose own thresholds for the
-  field stand; `gil::Prior` is plain data (field, source, the Gil version it was measured with, the field's keys and
-  thresholds, and its `FieldReport`). The prior is used while the field's own thresholds do not stand
+  field stand. `gil::Prior` is this crate's own plain data: the field, the Gil version it was measured with, the
+  field's keys and thresholds, and `gil::PriorPromises` — where it was measured, on how many records, and the
+  precision it promises by layer. The prior is used while the field's own thresholds do not stand
   (`FieldReport::stands`) and set aside once they do, judged on the tuning the engine holds now; the tuning `tune`
-  gives back, `choose` and `stale` owe it nothing, and the order a tuning and priors are restored in does not matter.
-  A prior measured with another Gil version, for a field the form does not decide, or keyed on fields the form does
-  not have is refused with the reason. Answers held to it carry its promise with its source: `Proposal::prior` and
-  `FieldReport::prior`. C ABI `lowline_engine_restore_prior` and `lowline_engine_prior`; .NET
-  `LowlineEngine.RestorePrior` and `LowlineEngine.Prior`, `Proposal.Prior`, `FieldReport.Prior`; npm `Proposal.prior`
-  and `FieldReport.prior`, and the form element says where a displayed promise was measured
-  (`Strings.promisePrior`, «right {right} times in 10 like this in {prior}»).
+  gives back, `choose` and `stale` owe it nothing, and the order a tuning, priors and records are put in does not
+  matter. A prior measured with another Gil version, for a field the form does not decide, or keyed on fields the form
+  does not have is refused with the reason. A field it answers keeps its own report — its thresholds do not stand —
+  with the prior's promises in `FieldReport::prior`, and each answer held to it carries its promise with the source in
+  `Proposal::prior`. C ABI `lowline_engine_restore_prior` and `lowline_engine_prior`; .NET
+  `LowlineEngine.RestorePrior` and `LowlineEngine.Prior`, `Proposal.Prior`, `FieldReport.Prior` (`PriorPromises`);
+  npm `Proposal.prior`, `FieldReport.prior` (`PriorPromises`), and the form element says where a displayed promise was
+  measured (`Strings.promisePrior`, «right {right} times in 10 like this in {prior}»). A host serving forms through
+  .NET `LowlineForms` (`MapLowline`) cannot give a prior yet — it restores the stored tuning only.
 
 ### Changed
 

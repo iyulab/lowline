@@ -621,7 +621,7 @@ fn a_prior_taken_from_one_engine_answers_another_until_its_own_thresholds_stand(
     ok(unsafe { lowline_engine_prior(elsewhere, s("owner"), s("40 sample records"), &mut len) });
     let prior = result(len);
     assert_eq!(prior["field"], "owner");
-    assert_eq!(prior["source"], "40 sample records");
+    assert_eq!(prior["promises"]["source"], "40 sample records");
 
     let fresh = engine();
     ok(unsafe { lowline_engine_prior(fresh, s("owner"), s("none"), &mut len) });
@@ -632,9 +632,9 @@ fn a_prior_taken_from_one_engine_answers_another_until_its_own_thresholds_stand(
     let shown = propose(fresh, &json!({ "customer": "Acme" }), "");
     assert_eq!(shown[0]["suggestion"]["value"], "kim");
     assert_eq!(shown[0]["prior"], "40 sample records");
-    assert_eq!(shown[0]["promise"], prior["report"]["key"]["promise"]);
+    assert_eq!(shown[0]["promise"], prior["promises"]["key"]);
     ok(unsafe { lowline_engine_report(fresh, &mut len) });
-    assert_eq!(result(len)[0]["prior"], "40 sample records");
+    assert_eq!(result(len)[0]["prior"], prior["promises"]);
 
     // Its own forty records choose thresholds that stand: the prior is no longer used.
     ok(unsafe { lowline_engine_tune(fresh, s(&stored(40)), &mut len) });

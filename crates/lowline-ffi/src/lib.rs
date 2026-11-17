@@ -783,8 +783,9 @@ pub unsafe extern "C" fn lowline_engine_record(
 }
 
 /// How each decided field's replays went when the thresholds were chosen, as JSON — an array of reports in the form's
-/// order, each the field's thresholds with what the replay saw at them, a field answered from a prior reported as the
-/// prior was measured (`prior` naming its source) — or `null` while none were chosen or restored and no prior is in use.
+/// order, each the field's thresholds with what the replay saw at them, a field answered from a prior with what the
+/// prior promises and where it was measured (`prior`) — or `null` while none were chosen or restored and no prior is in
+/// use.
 ///
 /// # Safety
 /// `engine` is a live handle; `result_len` points to one writable `usize`.

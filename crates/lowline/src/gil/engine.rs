@@ -8,7 +8,9 @@ use gil::lexical_memory::LexicalMemory;
 use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
-use super::{FieldReport, Prior, Tune, Tuned, annotate, proposal, record, schema, tune};
+use super::{
+    FieldReport, Prior, PriorPromises, Tune, Tuned, annotate, proposal, record, schema, tune,
+};
 use crate::proposal::{Layer, Proposal};
 use crate::provenance::{Attestation, Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
 use crate::schema::{FieldKind, ResolvedField, Role};
@@ -197,7 +199,7 @@ impl Engine {
     /// chosen as if there were none.
     ///
     /// The error says why it was not put back: measured with another version of Gil, for a field the form does not
-    /// decide, reported for another field, or keyed on fields the form does not have.
+    /// decide, or keyed on fields the form does not have.
     pub fn restore_prior(&mut self, prior: Prior) -> Result<(), String> {
         if prior.gil != gil::tuning::VERSION {
             return Err(format!(
@@ -205,12 +207,6 @@ impl Engine {
                 prior.field,
                 prior.gil,
                 gil::tuning::VERSION
-            ));
-        }
-        if prior.report.field != prior.field {
-            return Err(format!(
-                "the prior for '{}' reports on '{}'",
-                prior.field, prior.report.field
             ));
         }
         let mut attributes = self.base.attributes().to_vec();
@@ -249,9 +245,10 @@ impl Engine {
             .attributes
             .iter()
             .find(|a| a.attribute == field)?;
+        let promise =
+            |choice: &Option<gil::replay::ThresholdChoice>| choice.as_ref().map(|c| c.promise);
         Some(Prior {
             field: field.to_owned(),
-            source: source.into(),
             gil: tuned.tuning.version.clone(),
             key_fields: attribute.key_fields.clone(),
             key_concentrations: attribute.key_concentrations.clone(),
@@ -262,16 +259,28 @@ impl Engine {
             coarse_key_threshold: attribute.coarse_key_threshold,
             coarse_memory_threshold: attribute.coarse_memory_threshold,
             coarse_memory_floor: attribute.coarse_memory_floor,
-            report: FieldReport {
-                prior: None,
-                ..report.clone()
+            promises: PriorPromises {
+                source: source.into(),
+                records: report.chosen_on,
+                key: promise(&report.key),
+                typed: report
+                    .typed
+                    .as_ref()
+                    .map(|typed| typed.iter().map(promise).collect()),
+                similar: report
+                    .similar_offered
+                    .then(|| promise(&report.similar))
+                    .flatten(),
+                coarse: promise(&report.coarse),
+                coarse_similar: promise(&report.coarse_similar),
             },
         })
     }
 
     /// Sets the schema and reports the decider answers with from what the engine holds: the base schema, the own
     /// tuning on it, and each prior on a field the own thresholds do not stand for. The same whatever order the tuning
-    /// and the priors were restored in.
+    /// and the priors were restored in. A field a prior answers keeps its own report — its thresholds do not stand —
+    /// with the prior's promises beside it.
     fn answer_with(&mut self) {
         let own = self
             .tuned
@@ -292,13 +301,9 @@ impl Engine {
                 continue;
             };
             prior.put_on(attribute);
-            let report = FieldReport {
-                prior: Some(prior.source.clone()),
-                ..prior.report.clone()
-            };
             match reports.iter_mut().find(|r| r.field == prior.field) {
-                Some(own) => *own = report,
-                None => reports.push(report),
+                Some(own) => own.prior = Some(prior.promises.clone()),
+                None => reports.push(FieldReport::unchosen(&prior.field, prior.promises.clone())),
             }
             used = true;
         }
@@ -484,6 +489,28 @@ impl Engine {
         else {
             return shown;
         };
+        if let Some(prior) = &report.prior {
+            shown.promise = match (suggestion.origin, suggestion.fit, shown.layer) {
+                (Origin::Decider, Fit::Prefix, Some(Layer::Key)) => prior.coarse,
+                (Origin::Decider, Fit::Prefix, Some(Layer::Similar)) => prior.coarse_similar,
+                (Origin::Decider, Fit::Exact, Some(Layer::Key)) => match typed {
+                    Some(length) => prior
+                        .typed
+                        .as_ref()
+                        .and_then(|t| t.get(length.checked_sub(1)?).copied().flatten()),
+                    None => prior.key,
+                },
+                (Origin::Decider, Fit::Exact, Some(Layer::Similar)) => prior.similar,
+                // A judgement from outside the records is trusted by the field's own records, not the prior's.
+                (Origin::Decider, Fit::Exact, Some(Layer::Judgement)) => {
+                    shown.promise = report.judgement.as_ref().map(|c| c.promise);
+                    return shown;
+                }
+                _ => None,
+            };
+            shown.prior = shown.promise.map(|_| prior.source.clone());
+            return shown;
+        }
         let choice = match (suggestion.origin, suggestion.fit, shown.layer) {
             // A class is promised by the layer that backs it.
             (Origin::Decider, Fit::Prefix, Some(Layer::Key)) => report.coarse.as_ref(),
@@ -501,7 +528,6 @@ impl Engine {
             _ => None,
         };
         shown.promise = choice.map(|c| c.promise);
-        shown.prior = shown.promise.and(report.prior.clone());
         shown
     }
 

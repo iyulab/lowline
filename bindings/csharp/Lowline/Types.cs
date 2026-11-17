@@ -465,10 +465,36 @@ public sealed record FieldReport
     /// made it.</summary>
     [JsonPropertyName("counting")] public Counting Counting { get; init; }
 
-    /// <summary>Where the thresholds were measured, when the field is answered from a prior
-    /// (<see cref="LowlineEngine.RestorePrior"/>) until its own thresholds stand: the prior's source; <c>null</c> for
-    /// thresholds chosen on the engine's own records.</summary>
-    [JsonPropertyName("prior")] public string? Prior { get; init; }
+    /// <summary>For a field answered from a prior (<see cref="LowlineEngine.RestorePrior"/>) while its own thresholds
+    /// above do not stand: what the prior promises and where it was measured; <c>null</c> for a field answered from its
+    /// own thresholds, or not at all.</summary>
+    [JsonPropertyName("prior")] public PriorPromises? Prior { get; init; }
+}
+
+/// <summary>What a prior promises for the next answers, by the layer they come from, and where it was measured
+/// (<see cref="FieldReport.Prior"/>). A layer it chose no threshold for promises nothing.</summary>
+public sealed record PriorPromises
+{
+    /// <summary>What it was measured on, in the host's words.</summary>
+    [JsonPropertyName("source")] public required string Source { get; init; }
+
+    /// <summary>How many settled records it was measured on.</summary>
+    [JsonPropertyName("records")] public int Records { get; init; }
+
+    /// <summary>For values settled alongside.</summary>
+    [JsonPropertyName("key")] public double? Key { get; init; }
+
+    /// <summary>For a free text field, for one, two, … characters typed.</summary>
+    [JsonPropertyName("typed")] public IReadOnlyList<double?>? Typed { get; init; }
+
+    /// <summary>For the similar records layer, where it was offered.</summary>
+    [JsonPropertyName("similar")] public double? Similar { get; init; }
+
+    /// <summary>For a class the keys back.</summary>
+    [JsonPropertyName("coarse")] public double? Coarse { get; init; }
+
+    /// <summary>For a class the similar records back.</summary>
+    [JsonPropertyName("coarseSimilar")] public double? CoarseSimilar { get; init; }
 }
 
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the

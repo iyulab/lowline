@@ -306,7 +306,8 @@ public sealed class EngineTests
         shown[0].Suggestion!.Value.Should().Be("kim");
         shown[0].Prior.Should().Be("40 sample records");
         shown[0].Promise.Should().Be(elsewhere.Report![0].Key!.Promise);
-        fresh.Report![0].Prior.Should().Be("40 sample records");
+        fresh.Report![0].Prior!.Source.Should().Be("40 sample records");
+        fresh.Report![0].Prior!.Records.Should().Be(40);
         fresh.Stale.Should().Be(new Staleness("untuned"), "the prior is not the engine's own tuning");
 
         fresh.Tune(Alternating(40).Select(r => r.Json));
