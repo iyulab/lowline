@@ -393,6 +393,76 @@ impl Prior {
     }
 }
 
+/// Why [`Engine::restore_prior`] did not put a prior back — nothing changed. A host shows the person which it was in its
+/// own words: the kind says it, the fields name what to show beside it. With the `serde` feature it reads and writes as
+/// JSON tagged by `kind` (`gil`, `notDecided`, `doesNotFit`).
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(
+        tag = "kind",
+        rename_all = "camelCase",
+        rename_all_fields = "camelCase"
+    )
+)]
+pub enum PriorRefused {
+    /// Measured with a version of Gil whose scores this engine cannot compare its own with: the thresholds would be
+    /// read on another scale. A sample measured again with this engine's Gil is put back.
+    Gil {
+        field: String,
+        /// The Gil version it was measured with.
+        measured: String,
+        /// The Gil version this engine answers with.
+        current: String,
+    },
+    /// For a field the form does not decide — one it does not have, or one a person fills in.
+    NotDecided { field: String },
+    /// For a field the form decides, but not as the prior was measured: it is keyed on fields the form does not have.
+    DoesNotFit {
+        field: String,
+        /// What the form could not take, in the engine's words.
+        why: String,
+    },
+}
+
+impl PriorRefused {
+    /// The field the prior was for.
+    pub fn field(&self) -> &str {
+        match self {
+            Self::Gil { field, .. }
+            | Self::NotDecided { field }
+            | Self::DoesNotFit { field, .. } => field,
+        }
+    }
+}
+
+impl std::fmt::Display for PriorRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Gil {
+                field,
+                measured,
+                current,
+            } => write!(
+                f,
+                "the prior for '{field}' was measured with Gil {measured}; this engine answers with {current}"
+            ),
+            Self::NotDecided { field } => {
+                write!(
+                    f,
+                    "the form does not decide '{field}', which the prior is for"
+                )
+            }
+            Self::DoesNotFit { field, why } => {
+                write!(f, "the prior for '{field}' does not fit the form: {why}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PriorRefused {}
+
 /// Chooses the thresholds of `schema`'s decided attributes on the settled `records`, sets them on the schema and
 /// answers the [`Tuned`] that keeps them — the [`gil::tuning::Tuning`] a host stores and puts back with
 /// `Tuning::apply` and chooses again once `Tuning::stale` says so (including when there is no tuning yet), with how

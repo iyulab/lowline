@@ -57,7 +57,7 @@ internal static unsafe partial class Native
     internal static partial int EngineRestore(nint engine, Str tuning);
 
     [LibraryImport(Library, EntryPoint = "lowline_engine_restore_prior")]
-    internal static partial int EngineRestorePrior(nint engine, Str prior);
+    internal static partial int EngineRestorePrior(nint engine, Str prior, nuint* resultLen);
 
     [LibraryImport(Library, EntryPoint = "lowline_engine_prior")]
     internal static partial int EnginePrior(nint engine, Str field, Str source, nuint* resultLen);

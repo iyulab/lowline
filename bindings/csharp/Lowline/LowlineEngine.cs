@@ -95,17 +95,27 @@ public sealed unsafe class LowlineEngine : IDisposable
     /// chosen, and after a choice that set none. Its promises are the field's, with its source beside them
     /// (<see cref="Proposal.Prior"/>, <see cref="FieldReport.Prior"/>). The tuning <see cref="Tune"/> gives back owes it
     /// nothing.</summary>
-    /// <exception cref="ArgumentException">A prior measured with another version of the decider, for a field the form
-    /// does not decide, or keyed on fields the form does not have; nothing changes.</exception>
-    public void RestorePrior(string prior)
+    /// <returns><c>null</c> when it was put back; otherwise why not (<see cref="PriorRefusal"/>) — measured with another
+    /// version of the decider, for a field the form does not decide, or keyed on fields the form does not have — and
+    /// nothing changes.</returns>
+    /// <exception cref="ArgumentException">The prior is not JSON of a prior's shape.</exception>
+    public PriorRefusal? RestorePrior(string prior)
     {
         ArgumentNullException.ThrowIfNull(prior);
         var text = new Utf8(prior);
-        using var _ = Write();
-        fixed (byte* p = text.Bytes)
+        nuint length;
+        string json;
+        using (Write())
         {
-            Native.Check(Native.EngineRestorePrior(_handle, text.At(p)));
+            fixed (byte* p = text.Bytes)
+            {
+                Native.Check(Native.EngineRestorePrior(_handle, text.At(p), &length));
+            }
+
+            json = Native.Result(length);
         }
+
+        return JsonSerializer.Deserialize(json, LowlineJson.Default.PriorRefusal);
     }
 
     /// <summary>The field's thresholds as a prior measured on this engine's records, described as

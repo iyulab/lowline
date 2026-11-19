@@ -17,7 +17,9 @@ All notable changes to this project are written here. The format follows
   (`FieldReport::stands`) and set aside once they do, judged on the tuning the engine holds now; the tuning `tune`
   gives back, `choose` and `stale` owe it nothing, and the order a tuning, priors and records are put in does not
   matter. A prior measured with another Gil version, for a field the form does not decide, or keyed on fields the form
-  does not have is refused with the reason. A field it answers keeps its own report — its thresholds do not stand —
+  does not have is refused as a `gil::PriorRefused` saying which (`Gil`, `NotDecided`, `DoesNotFit`), for a host to
+  tell the person in its own words; the C ABI answers it as the call's JSON result tagged by `kind` (status OK — a
+  refusal is an answer), .NET as `RestorePrior`'s `PriorRefusal` (`null` when put back). A field it answers keeps its own report — its thresholds do not stand —
   with the prior's promises in `FieldReport::prior`, and each answer held to it carries its promise with the source in
   `Proposal::prior`. C ABI `lowline_engine_restore_prior` and `lowline_engine_prior`; .NET
   `LowlineEngine.RestorePrior` and `LowlineEngine.Prior`, `Proposal.Prior`, `FieldReport.Prior` (`PriorPromises`);

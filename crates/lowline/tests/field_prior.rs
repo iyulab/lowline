@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use lowline::gil::{Engine, Prior, Stale};
+use lowline::gil::{Engine, Prior, PriorRefused, Stale};
 use lowline::{Draft, Field, FieldKind, FieldValue, Form, Inference, SettledBy, gil as engine};
 
 fn saved(pairs: &[(&str, &str)]) -> BTreeMap<String, FieldValue> {
@@ -242,40 +242,41 @@ fn records_learned_after_the_prior_answer_as_those_learned_before_it() {
 }
 
 #[test]
-fn a_prior_the_engine_cannot_use_is_refused_and_says_why() {
+fn a_prior_the_engine_cannot_use_is_refused_and_says_which_kind() {
     let mut fresh = engine_for(&form());
     let other_version = Prior {
         gil: "0.0.1".into(),
         ..sample()
     };
-    assert!(
-        fresh
-            .restore_prior(other_version)
-            .unwrap_err()
-            .contains("Gil 0.0.1")
+    let refused = fresh.restore_prior(other_version).unwrap_err();
+    assert_eq!(
+        refused,
+        PriorRefused::Gil {
+            field: "owner".into(),
+            measured: "0.0.1".into(),
+            current: gil::tuning::VERSION.into(),
+        }
     );
+    assert!(refused.to_string().contains("Gil 0.0.1"));
 
     let observed = Prior {
         field: "customer".into(),
         ..sample()
     };
-    assert!(
-        fresh
-            .restore_prior(observed)
-            .unwrap_err()
-            .contains("does not decide 'customer'")
+    assert_eq!(
+        fresh.restore_prior(observed).unwrap_err(),
+        PriorRefused::NotDecided {
+            field: "customer".into()
+        }
     );
 
     let unknown = Prior {
         field: "manager".into(),
         ..sample()
     };
-    assert!(
-        fresh
-            .restore_prior(unknown)
-            .unwrap_err()
-            .contains("does not decide 'manager'")
-    );
+    let refused = fresh.restore_prior(unknown).unwrap_err();
+    assert_eq!(refused.field(), "manager");
+    assert!(refused.to_string().contains("does not decide 'manager'"));
 
     let renamed = Form {
         fields: vec![
@@ -290,13 +291,38 @@ fn a_prior_the_engine_cannot_use_is_refused_and_says_why() {
         key_fields: Some(vec!["customer".into()]),
         ..sample()
     };
+    let refused = elsewhere.restore_prior(keyed_on_customer).unwrap_err();
     assert!(
-        elsewhere
-            .restore_prior(keyed_on_customer)
-            .unwrap_err()
-            .contains("does not fit the form")
+        matches!(&refused, PriorRefused::DoesNotFit { field, why } if field == "owner" && !why.is_empty()),
+        "{refused:?}"
     );
+    assert!(refused.to_string().contains("does not fit the form"));
     assert!(elsewhere.report().is_none(), "nothing refused is used");
+}
+
+#[test]
+fn a_refusal_is_plain_data_tagged_by_its_kind() {
+    let refused = PriorRefused::Gil {
+        field: "owner".into(),
+        measured: "0.0.1".into(),
+        current: "0.13.1".into(),
+    };
+    let json = serde_json::to_value(&refused).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({ "kind": "gil", "field": "owner", "measured": "0.0.1", "current": "0.13.1" })
+    );
+    assert_eq!(
+        serde_json::to_value(PriorRefused::NotDecided {
+            field: "customer".into()
+        })
+        .unwrap(),
+        serde_json::json!({ "kind": "notDecided", "field": "customer" })
+    );
+    assert_eq!(
+        serde_json::from_value::<PriorRefused>(json).unwrap(),
+        refused
+    );
 }
 
 #[test]

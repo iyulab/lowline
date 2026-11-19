@@ -656,6 +656,42 @@ public sealed record Attestation
     [JsonPropertyName("held")] public IReadOnlyDictionary<string, double>? Held { get; init; }
 }
 
+/// <summary>Why <see cref="LowlineEngine.RestorePrior"/> did not put a prior back — nothing changed. A host shows the
+/// person which it was in its own words: <see cref="Kind"/> says it, the other members name what to show beside
+/// it.</summary>
+public sealed record PriorRefusal
+{
+    /// <summary>Which refusal it is.</summary>
+    [JsonPropertyName("kind")] public required PriorRefusalKind Kind { get; init; }
+
+    /// <summary>The field the prior was for.</summary>
+    [JsonPropertyName("field")] public required string Field { get; init; }
+
+    /// <summary>For <see cref="PriorRefusalKind.Gil"/>: the version of the decider it was measured with.</summary>
+    [JsonPropertyName("measured")] public string? Measured { get; init; }
+
+    /// <summary>For <see cref="PriorRefusalKind.Gil"/>: the version of the decider this engine answers with.</summary>
+    [JsonPropertyName("current")] public string? Current { get; init; }
+
+    /// <summary>For <see cref="PriorRefusalKind.DoesNotFit"/>: what the form could not take, in the engine's words.</summary>
+    [JsonPropertyName("why")] public string? Why { get; init; }
+}
+
+/// <summary>Which of the reasons a prior was not put back (<see cref="PriorRefusal"/>).</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<PriorRefusalKind>))]
+public enum PriorRefusalKind
+{
+    /// <summary>Measured with a version of the decider whose scores this engine cannot compare its own with. A sample
+    /// measured again with this engine's version is put back.</summary>
+    [JsonStringEnumMemberName("gil")] Gil,
+
+    /// <summary>For a field the form does not decide — one it does not have, or one a person fills in.</summary>
+    [JsonStringEnumMemberName("notDecided")] NotDecided,
+
+    /// <summary>For a field the form decides, but keyed on fields the form does not have.</summary>
+    [JsonStringEnumMemberName("doesNotFit")] DoesNotFit,
+}
+
 /// <summary>Why an engine's thresholds should be chosen again.</summary>
 public sealed record Staleness(string Reason, JsonElement? Detail = null);
 
@@ -679,4 +715,5 @@ public sealed record Staleness(string Reason, JsonElement? Detail = null);
 [JsonSerializable(typeof(LowlineAggregate))]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(Attestation))]
+[JsonSerializable(typeof(PriorRefusal))]
 public sealed partial class LowlineJson : JsonSerializerContext;

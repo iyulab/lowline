@@ -380,22 +380,29 @@ pub unsafe extern "C" fn lowline_engine_restore(
 
 /// Puts back a prior for one decided field — its thresholds measured on records kept elsewhere, as JSON (what
 /// [`lowline_engine_prior`] hands back) — to answer the field with while its own thresholds do not stand. Its promises
-/// are the field's, with its source beside them in the report and in each proposal (`prior`). Refused, with the reason,
-/// for a prior measured with another version of Gil, for a field the form does not decide, or keyed on fields the form
-/// does not have; nothing changes then.
+/// are the field's, with its source beside them in the report and in each proposal (`prior`).
+///
+/// The result says whether it was put back: `null`, or — with nothing changed — why not, as JSON tagged by `kind`:
+/// `{"kind": "gil", "field", "measured", "current"}` for a prior measured with a version of Gil whose scores this
+/// engine cannot compare its own with, `{"kind": "notDecided", "field"}` for a field the form does not decide, and
+/// `{"kind": "doesNotFit", "field", "why"}` for one keyed on fields the form does not have. A refusal is an answer, not
+/// a failed call: the status is [`LOWLINE_OK`]. A prior that is not JSON of that shape is [`LOWLINE_INVALID_INPUT`].
 ///
 /// # Safety
-/// `engine` is a live handle used by nothing else during the call; `prior` is valid for the call.
+/// `engine` is a live handle used by nothing else during the call; `prior` is valid for the call; `result_len` points
+/// to one writable `usize`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn lowline_engine_restore_prior(
     engine: *mut LowlineEngine,
     prior: LowlineStr,
+    result_len: *mut usize,
 ) -> i32 {
     // SAFETY: forwarded from the caller.
     unsafe {
         changing(engine, |engine| {
             let prior: Prior = json(text(prior, "prior")?, "prior")?;
-            engine.restore_prior(prior).map_err(input)
+            let refused = engine.restore_prior(prior).err();
+            set_result(written(&refused), result_len)
         })
     }
 }

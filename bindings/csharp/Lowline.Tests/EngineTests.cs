@@ -301,7 +301,7 @@ public sealed class EngineTests
         using var fresh = LowlineEngine.Create(Intake);
         fresh.Prior("owner", "none").Should().BeNull("no thresholds of its own to give");
         fresh.Learn(Alternating(4).Select(r => r.Json));
-        fresh.RestorePrior(prior!);
+        fresh.RestorePrior(prior!).Should().BeNull("put back");
         var shown = fresh.Propose("new", new Dictionary<string, FieldValue> { ["customer"] = "Acme" });
         shown[0].Suggestion!.Value.Should().Be("kim");
         shown[0].Prior.Should().Be("40 sample records");
@@ -315,8 +315,16 @@ public sealed class EngineTests
 
         var other = JsonNode.Parse(prior!)!;
         other["gil"] = "0.0.1";
-        var refused = () => fresh.RestorePrior(other.ToJsonString());
-        refused.Should().Throw<ArgumentException>().WithMessage("*Gil 0.0.1*");
+        fresh.RestorePrior(other.ToJsonString()).Should().BeEquivalentTo(new PriorRefusal
+        {
+            Kind = PriorRefusalKind.Gil, Field = "owner", Measured = "0.0.1", Current = (string)JsonNode.Parse(prior!)!["gil"]!,
+        });
+        other["gil"] = JsonNode.Parse(prior!)!["gil"]!.DeepClone();
+        other["field"] = "customer";
+        fresh.RestorePrior(other.ToJsonString())!.Kind.Should().Be(PriorRefusalKind.NotDecided);
+
+        var unreadable = () => fresh.RestorePrior("{\"field\": 1}");
+        unreadable.Should().Throw<ArgumentException>();
     }
 
     [Fact]

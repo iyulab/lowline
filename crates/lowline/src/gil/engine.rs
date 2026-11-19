@@ -9,7 +9,8 @@ use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
 use super::{
-    FieldReport, Prior, PriorPromises, Tune, Tuned, annotate, proposal, record, schema, tune,
+    FieldReport, Prior, PriorPromises, PriorRefused, Tune, Tuned, annotate, proposal, record,
+    schema, tune,
 };
 use crate::proposal::{Layer, Proposal};
 use crate::provenance::{Attestation, Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
@@ -198,34 +199,30 @@ impl Engine {
     /// and in each proposal. [`Engine::stale`] and [`Engine::choose`] do not read it: the engine's own thresholds are
     /// chosen as if there were none.
     ///
-    /// The error says why it was not put back: measured with another version of Gil, for a field the form does not
-    /// decide, or keyed on fields the form does not have.
-    pub fn restore_prior(&mut self, prior: Prior) -> Result<(), String> {
+    /// The error says why it was not put back ([`PriorRefused`]): measured with another version of Gil, for a field the
+    /// form does not decide, or keyed on fields the form does not have.
+    pub fn restore_prior(&mut self, prior: Prior) -> Result<(), PriorRefused> {
         if prior.gil != gil::tuning::VERSION {
-            return Err(format!(
-                "the prior for '{}' was measured with Gil {}; this engine answers with {}",
-                prior.field,
-                prior.gil,
-                gil::tuning::VERSION
-            ));
+            return Err(PriorRefused::Gil {
+                field: prior.field,
+                measured: prior.gil,
+                current: gil::tuning::VERSION.to_owned(),
+            });
         }
         let mut attributes = self.base.attributes().to_vec();
         let Some(attribute) = attributes
             .iter_mut()
             .find(|a| a.name == prior.field && a.role == AttributeRole::Decided)
         else {
-            return Err(format!(
-                "the form does not decide '{}', which the prior is for",
-                prior.field
-            ));
+            return Err(PriorRefused::NotDecided { field: prior.field });
         };
         prior.put_on(attribute);
-        Schema::new(self.base.name(), attributes).map_err(|why| {
-            format!(
-                "the prior for '{}' does not fit the form: {why}",
-                prior.field
-            )
-        })?;
+        if let Err(why) = Schema::new(self.base.name(), attributes) {
+            return Err(PriorRefused::DoesNotFit {
+                field: prior.field,
+                why: why.to_string(),
+            });
+        }
         self.priors.insert(prior.field.clone(), prior);
         self.answer_with();
         Ok(())
