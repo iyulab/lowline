@@ -32,8 +32,9 @@ All notable changes to this project are written here. The format follows
 - `gil::Engine::report` reports a field answered from a prior as the prior was measured; it is `Some` for an engine
   that has no tuning of its own but uses a prior.
 
-- npm `@iyulab/lowline-form` depends on `@formdown/ui` `^0.27.0` (was `^0.26.1`): a number field in a right-to-left
-  page reads left to right, and its input carries the `number-input` part.
+- npm `@iyulab/lowline-form` depends on `@formdown/ui` `^0.28.0` (was `^0.26.1`): a number field in a right-to-left
+  page reads left to right, and its input carries the `number-input` part; a host's choice can say what its value
+  means (`Choice.description`), and clearing a field's error no longer drops another id from its `aria-describedby`.
 
 ## [0.12.2] - 2026-11-16
 
