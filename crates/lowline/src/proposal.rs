@@ -119,6 +119,14 @@ pub struct Proposal {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub promise: Option<f64>,
+    /// Where `promise` was measured, when the suggestion was held to a prior's thresholds — measured on records kept
+    /// elsewhere and put back until the field's own records choose thresholds that stand (`Engine::restore_prior` in
+    /// the `gil` module): the prior's source, for the host to say beside the promise. `None` for the field's own.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub prior: Option<String>,
     /// For a suggestion from [`Layer::Judgement`]: the score the judgement gave it, on the judgement's own scale (the
     /// probability the host's model reported). It is kept on the record the suggestion ends up in
     /// ([`crate::Draft::show_proposed`]), so that the engine can choose, from the settled records, the score from which
@@ -151,6 +159,7 @@ impl Proposal {
             with: Vec::new(),
             together: None,
             promise: None,
+            prior: None,
             score: None,
             several: false,
         }
@@ -179,6 +188,7 @@ impl Proposal {
             with: Vec::new(),
             together: None,
             promise: None,
+            prior: None,
             score: None,
             several: false,
         }

@@ -8,7 +8,9 @@ use gil::lexical_memory::LexicalMemory;
 use gil::schema::{AttributePolicy, AttributeRole, Record, Schema};
 use gil::tuning::Tuning;
 
-use super::{FieldReport, Tune, Tuned, annotate, proposal, record, schema, tune};
+use super::{
+    FieldReport, Prior, PriorPromises, Tune, Tuned, annotate, proposal, record, schema, tune,
+};
 use crate::proposal::{Layer, Proposal};
 use crate::provenance::{Attestation, Draft, Fit, Origin, SettledBy, Settlement, SettlementKind};
 use crate::schema::{FieldKind, ResolvedField, Role};
@@ -52,10 +54,18 @@ use crate::value::FieldValue;
 /// ```
 pub struct Engine {
     fields: Vec<ResolvedField>,
+    /// The form's schema with no thresholds chosen: what the own tuning and the priors are put on.
+    base: Schema,
+    /// `base` with the own tuning and the priors still in use put on it — what the decider answers with.
     schema: Schema,
     decider: Decider,
     tune: Tune,
     tuned: Option<Tuned>,
+    /// Priors by field, as restored; each is used while the field's own thresholds do not stand.
+    priors: BTreeMap<String, Prior>,
+    /// How each decided field's thresholds were chosen, as answered with: the own report, a prior's for a field the
+    /// prior answers. `None` while there is neither.
+    reports: Option<Vec<FieldReport>>,
     learned: BTreeSet<String>,
     form_version: Option<String>,
 }
@@ -79,10 +89,13 @@ impl Engine {
         let schema = schema(name, &fields)?;
         Ok(Self {
             fields,
+            base: schema.clone(),
             schema,
             decider: Decider::new(KeyMemory::default(), Some(LexicalMemory::default())),
             tune,
             tuned: None,
+            priors: BTreeMap::new(),
+            reports: None,
             learned: BTreeSet::new(),
             form_version: None,
         })
@@ -93,20 +106,21 @@ impl Engine {
         &self.fields
     }
 
-    /// The schema the decider answers with, its thresholds as last chosen or restored.
+    /// The schema the decider answers with, its thresholds as last chosen or restored — a prior's for a field it answers.
     pub fn schema(&self) -> &Schema {
         &self.schema
     }
 
-    /// The tuning the thresholds come from, if one was chosen or restored.
+    /// The tuning the thresholds come from, if one was chosen or restored — the engine's own, never a prior's.
     pub fn tuning(&self) -> Option<&Tuning> {
         self.tuned.as_ref().map(|t| &t.tuning)
     }
 
     /// How each decided field's replays went when the thresholds were chosen — kept with the tuning, so an engine
-    /// restored from storage says the same; `None` while none were chosen or restored.
+    /// restored from storage says the same; a field answered from a prior is reported as the prior was measured, its
+    /// `prior` naming the source. `None` while none were chosen or restored and no prior is in use.
     pub fn report(&self) -> Option<&[FieldReport]> {
-        self.tuned.as_ref().map(|t| t.report.as_slice())
+        self.reports.as_deref()
     }
 
     /// The version of the form's code lists the records it settles are written under: it changes when a value comes to
@@ -148,37 +162,160 @@ impl Engine {
     /// Puts back a tuning the host stored, setting its thresholds on the schema; `None` leaves the engine untuned.
     /// Whether it still stands is [`Engine::stale`]'s to say — restore it after learning the stored records, so that it
     /// is judged on them. A tuning the form can no longer take — one naming key fields it has dropped — is not put
-    /// back: the engine stays untuned, and [`Engine::stale`] says so.
+    /// back: the engine stays untuned, and [`Engine::stale`] says so. Priors restored before or after it are used for
+    /// the fields its thresholds do not stand for.
     pub fn restore(&mut self, tuned: Option<Tuned>) {
-        self.tuned = match tuned {
-            Some(mut tuned) => match tuned.tuning.apply(&self.schema) {
-                Ok(schema) => {
-                    // A tuning stored before a class could be promised by the similar records that back it trusts
-                    // them for a class without saying how often they are right: chosen again, as one never chosen.
-                    let unpromised = tuned.report.iter().any(|field| {
-                        field.coarse_similar.is_none()
-                            && schema.attributes().iter().any(|a| {
-                                a.name == field.field
-                                    && a.coarse
-                                        .as_ref()
-                                        .is_some_and(|c| c.memory_threshold.is_some())
-                            })
-                    });
-                    if unpromised {
-                        None
-                    } else {
-                        self.schema = schema;
-                        // A tuning stored before reports said what they were chosen on says it in the tuning.
-                        for field in &mut tuned.report {
-                            field.chosen_on = tuned.tuning.settled;
-                        }
-                        Some(tuned)
-                    }
-                }
-                Err(_) => None,
-            },
-            None => None,
+        self.tuned = tuned.and_then(|mut tuned| {
+            let schema = tuned.tuning.apply(&self.base).ok()?;
+            // A tuning stored before a class could be promised by the similar records that back it trusts them for a
+            // class without saying how often they are right: chosen again, as one never chosen.
+            let unpromised = tuned.report.iter().any(|field| {
+                field.coarse_similar.is_none()
+                    && schema.attributes().iter().any(|a| {
+                        a.name == field.field
+                            && a.coarse
+                                .as_ref()
+                                .is_some_and(|c| c.memory_threshold.is_some())
+                    })
+            });
+            if unpromised {
+                return None;
+            }
+            // A tuning stored before reports said what they were chosen on says it in the tuning.
+            for field in &mut tuned.report {
+                field.chosen_on = tuned.tuning.settled;
+            }
+            Some(tuned)
+        });
+        self.answer_with();
+    }
+
+    /// Puts back a [`Prior`] for one decided field — thresholds measured on records kept elsewhere — to answer the field
+    /// with while its own thresholds do not stand ([`FieldReport::stands`]): before any are chosen, and after a choice
+    /// that set none. Once the field's own thresholds stand the prior is no longer used; a later choice that sets none
+    /// uses it again, so the engine answers from what the host holds now, not from what it held before. It replaces a
+    /// prior restored for the field before. Its promises are the field's, with its source beside them, in the report
+    /// and in each proposal. [`Engine::stale`] and [`Engine::choose`] do not read it: the engine's own thresholds are
+    /// chosen as if there were none.
+    ///
+    /// The error says why it was not put back: measured with another version of Gil, for a field the form does not
+    /// decide, or keyed on fields the form does not have.
+    pub fn restore_prior(&mut self, prior: Prior) -> Result<(), String> {
+        if prior.gil != gil::tuning::VERSION {
+            return Err(format!(
+                "the prior for '{}' was measured with Gil {}; this engine answers with {}",
+                prior.field,
+                prior.gil,
+                gil::tuning::VERSION
+            ));
+        }
+        let mut attributes = self.base.attributes().to_vec();
+        let Some(attribute) = attributes
+            .iter_mut()
+            .find(|a| a.name == prior.field && a.role == AttributeRole::Decided)
+        else {
+            return Err(format!(
+                "the form does not decide '{}', which the prior is for",
+                prior.field
+            ));
         };
+        prior.put_on(attribute);
+        Schema::new(self.base.name(), attributes).map_err(|why| {
+            format!(
+                "the prior for '{}' does not fit the form: {why}",
+                prior.field
+            )
+        })?;
+        self.priors.insert(prior.field.clone(), prior);
+        self.answer_with();
+        Ok(())
+    }
+
+    /// The field's thresholds as a [`Prior`] measured on this engine's records, described as `source` — for a host
+    /// making a sample to ship with the form. `None` while the field's own thresholds do not stand, or for a field the
+    /// form does not decide.
+    pub fn prior(&self, field: &str, source: impl Into<String>) -> Option<Prior> {
+        let tuned = self.tuned.as_ref()?;
+        let report = tuned
+            .report
+            .iter()
+            .find(|r| r.field == field && r.stands())?;
+        let attribute = tuned
+            .tuning
+            .attributes
+            .iter()
+            .find(|a| a.attribute == field)?;
+        let promise =
+            |choice: &Option<gil::replay::ThresholdChoice>| choice.as_ref().map(|c| c.promise);
+        Some(Prior {
+            field: field.to_owned(),
+            gil: tuned.tuning.version.clone(),
+            key_fields: attribute.key_fields.clone(),
+            key_concentrations: attribute.key_concentrations.clone(),
+            key_threshold: attribute.key_threshold,
+            typed_key_thresholds: attribute.typed_key_thresholds.clone(),
+            memory_threshold: attribute.memory_threshold,
+            memory_floor: attribute.memory_floor,
+            coarse_key_threshold: attribute.coarse_key_threshold,
+            coarse_memory_threshold: attribute.coarse_memory_threshold,
+            coarse_memory_floor: attribute.coarse_memory_floor,
+            promises: PriorPromises {
+                source: source.into(),
+                records: report.chosen_on,
+                key: promise(&report.key),
+                typed: report
+                    .typed
+                    .as_ref()
+                    .map(|typed| typed.iter().map(promise).collect()),
+                similar: report
+                    .similar_offered
+                    .then(|| promise(&report.similar))
+                    .flatten(),
+                coarse: promise(&report.coarse),
+                coarse_similar: promise(&report.coarse_similar),
+            },
+        })
+    }
+
+    /// Sets the schema and reports the decider answers with from what the engine holds: the base schema, the own
+    /// tuning on it, and each prior on a field the own thresholds do not stand for. The same whatever order the tuning
+    /// and the priors were restored in. A field a prior answers keeps its own report — its thresholds do not stand —
+    /// with the prior's promises beside it.
+    fn answer_with(&mut self) {
+        let own = self
+            .tuned
+            .as_ref()
+            .and_then(|t| t.tuning.apply(&self.base).ok());
+        let mut attributes = own.as_ref().unwrap_or(&self.base).attributes().to_vec();
+        let mut reports: Vec<FieldReport> = self
+            .tuned
+            .as_ref()
+            .map(|t| t.report.clone())
+            .unwrap_or_default();
+        let mut used = false;
+        for prior in self.priors.values() {
+            if reports.iter().any(|r| r.field == prior.field && r.stands()) {
+                continue;
+            }
+            let Some(attribute) = attributes.iter_mut().find(|a| a.name == prior.field) else {
+                continue;
+            };
+            prior.put_on(attribute);
+            match reports.iter_mut().find(|r| r.field == prior.field) {
+                Some(own) => own.prior = Some(prior.promises.clone()),
+                None => reports.push(FieldReport::unchosen(&prior.field, prior.promises.clone())),
+            }
+            used = true;
+        }
+        self.schema = if used {
+            Schema::new(self.base.name(), attributes)
+                .expect("each prior was checked against the form when restored")
+        } else {
+            own.unwrap_or_else(|| self.base.clone())
+        };
+        let order = |field: &str| self.fields.iter().position(|f| f.field.name == field);
+        reports.sort_by_key(|r| order(&r.field));
+        self.reports = (self.tuned.is_some() || used).then_some(reports);
     }
 
     /// Why the thresholds should be chosen again, or `None` while they stand: none chosen yet, or Gil's reason — another
@@ -188,7 +325,7 @@ impl Engine {
             None => Some(Stale::Untuned),
             Some(tuned) => tuned
                 .tuning
-                .stale(&self.schema, self.settled())
+                .stale(&self.base, self.settled())
                 .map(Stale::Tuning),
         }
     }
@@ -208,7 +345,7 @@ impl Engine {
     /// The records should be the ones the engine has learned: the tuning stands for as many records as it was chosen
     /// on.
     pub fn choose(&self, records: &[Record]) -> Tuned {
-        let mut schema = self.schema.clone();
+        let mut schema = self.base.clone();
         tune(&mut schema, &self.fields, records, &self.tune)
     }
 
@@ -346,12 +483,34 @@ impl Engine {
             return shown;
         };
         let Some(report) = self
-            .tuned
+            .reports
             .as_ref()
-            .and_then(|t| t.report.iter().find(|r| r.field == shown.field))
+            .and_then(|reports| reports.iter().find(|r| r.field == shown.field))
         else {
             return shown;
         };
+        if let Some(prior) = &report.prior {
+            shown.promise = match (suggestion.origin, suggestion.fit, shown.layer) {
+                (Origin::Decider, Fit::Prefix, Some(Layer::Key)) => prior.coarse,
+                (Origin::Decider, Fit::Prefix, Some(Layer::Similar)) => prior.coarse_similar,
+                (Origin::Decider, Fit::Exact, Some(Layer::Key)) => match typed {
+                    Some(length) => prior
+                        .typed
+                        .as_ref()
+                        .and_then(|t| t.get(length.checked_sub(1)?).copied().flatten()),
+                    None => prior.key,
+                },
+                (Origin::Decider, Fit::Exact, Some(Layer::Similar)) => prior.similar,
+                // A judgement from outside the records is trusted by the field's own records, not the prior's.
+                (Origin::Decider, Fit::Exact, Some(Layer::Judgement)) => {
+                    shown.promise = report.judgement.as_ref().map(|c| c.promise);
+                    return shown;
+                }
+                _ => None,
+            };
+            shown.prior = shown.promise.map(|_| prior.source.clone());
+            return shown;
+        }
         let choice = match (suggestion.origin, suggestion.fit, shown.layer) {
             // A class is promised by the layer that backs it.
             (Origin::Decider, Fit::Prefix, Some(Layer::Key)) => report.coarse.as_ref(),

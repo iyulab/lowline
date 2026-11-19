@@ -71,6 +71,23 @@ export interface FieldReport {
   checks: number
   /** What the precision was counted on: values settled with nothing in view and checks, or every settled value. */
   counting: 'unprompted' | 'settled'
+  /**
+   * For a field answered from a prior — thresholds measured on records kept elsewhere — while its own thresholds above
+   * do not stand: what the prior promises by layer and where it was measured. Absent otherwise.
+   */
+  prior?: PriorPromises
+}
+
+/** What a prior promises for the next answers, by the layer they come from, and where it was measured. */
+export interface PriorPromises {
+  source: string
+  /** How many settled records it was measured on. */
+  records: number
+  key?: number
+  typed?: (number | null)[]
+  similar?: number
+  coarse?: number
+  coarseSimilar?: number
 }
 
 /**

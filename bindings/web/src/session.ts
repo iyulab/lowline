@@ -34,6 +34,12 @@ export interface Proposal {
    * is trusted from was chosen from the records, and before thresholds were chosen.
    */
   promise?: number
+  /**
+   * Where `promise` was measured, when the suggestion was held to a prior's thresholds — measured on records kept
+   * elsewhere, used until the field's own records choose thresholds that stand: the prior's source. Absent for the
+   * field's own.
+   */
+  prior?: string
   /** For a judgement from outside the records: the score it gave the suggestion, on its own scale. The draft keeps it. */
   score?: number
   /** Whether the field takes several values: it is settled as a set, which cannot be a check, so none is drawn for it. */
@@ -72,6 +78,11 @@ export interface Strings {
    * when the host turns the display on (`promises`), after where the suggestion comes from.
    */
   promise: string
+  /**
+   * The promise of a suggestion held to a prior's thresholds — measured on records kept elsewhere — said with where it
+   * was measured: `{right}` and `{prior}` (the prior's source) are filled in.
+   */
+  promisePrior: string
 }
 
 export const englishStrings: Strings = {
@@ -92,6 +103,7 @@ export const englishStrings: Strings = {
   },
   judgedNothing: 'Needs your judgement — neither the records nor a judgement gave a suggestion',
   promise: 'right {right} times in 10 like this',
+  promisePrior: 'right {right} times in 10 like this in {prior}',
 }
 
 /** What the form does with one round of proposals: what each field shows, and the values to put in unasked. */
@@ -229,7 +241,7 @@ export class Session {
         round.prefill[field] = suggestion.value
         this.filled.add(field)
       }
-      const note = [this.note(proposal, values), shown ? this.promiseNote(proposal.promise!) : undefined]
+      const note = [this.note(proposal, values), shown ? this.promiseNote(proposal.promise!, proposal.prior) : undefined]
         .filter((part) => part)
         .join(' · ')
       round.fieldStates[field] = {
@@ -376,9 +388,10 @@ export class Session {
    * A promise as a count out of ten, rounded down: a promise is never said higher than the records bear it out, and a
    * count reads more plainly than a percentage.
    */
-  private promiseNote(promise: number): string {
-    const right = Math.max(0, Math.min(10, Math.floor(promise * 10 + 1e-9)))
-    return this.strings.promise.replace('{right}', String(right))
+  private promiseNote(promise: number, prior: string | undefined): string {
+    const right = String(Math.max(0, Math.min(10, Math.floor(promise * 10 + 1e-9))))
+    if (prior !== undefined) return this.strings.promisePrior.replace('{right}', right).replace('{prior}', prior)
+    return this.strings.promise.replace('{right}', right)
   }
 
   /** Where the suggestion comes from, in words. A field's value is shown as the record holds it now. */

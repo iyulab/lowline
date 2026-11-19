@@ -6,7 +6,31 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- A field can be answered from thresholds measured on records kept elsewhere — a prior, such as a sample shipped with
+  a form — until its own records choose thresholds that stand. Rust `gil::Engine::restore_prior(Prior)` puts one back
+  for one decided field and `gil::Engine::prior(field, source)` takes one out of an engine whose own thresholds for the
+  field stand. `gil::Prior` is this crate's own plain data: the field, the Gil version it was measured with, the
+  field's keys and thresholds, and `gil::PriorPromises` — where it was measured, on how many records, and the
+  precision it promises by layer. The prior is used while the field's own thresholds do not stand
+  (`FieldReport::stands`) and set aside once they do, judged on the tuning the engine holds now; the tuning `tune`
+  gives back, `choose` and `stale` owe it nothing, and the order a tuning, priors and records are put in does not
+  matter. A prior measured with another Gil version, for a field the form does not decide, or keyed on fields the form
+  does not have is refused with the reason. A field it answers keeps its own report — its thresholds do not stand —
+  with the prior's promises in `FieldReport::prior`, and each answer held to it carries its promise with the source in
+  `Proposal::prior`. C ABI `lowline_engine_restore_prior` and `lowline_engine_prior`; .NET
+  `LowlineEngine.RestorePrior` and `LowlineEngine.Prior`, `Proposal.Prior`, `FieldReport.Prior` (`PriorPromises`);
+  npm `Proposal.prior`, `FieldReport.prior` (`PriorPromises`), and the form element says where a displayed promise was
+  measured (`Strings.promisePrior`, «right {right} times in 10 like this in {prior}»). A host serving forms through
+  .NET `LowlineForms` (`MapLowline`) cannot give a prior yet — it restores the stored tuning only.
+
 ### Changed
+
+- The C ABI version is 7 (was 6): a binding of this release needs a library of this release.
+- npm `Strings` has a new member, `promisePrior`: a host that gives the form element its own words adds it.
+- `gil::Engine::report` reports a field answered from a prior as the prior was measured; it is `Some` for an engine
+  that has no tuning of its own but uses a prior.
 
 - npm `@iyulab/lowline-form` depends on `@formdown/ui` `^0.28.0` (was `^0.26.1`): a number field in a right-to-left
   page reads left to right, and its input carries the `number-input` part; a host's choice can say what its value

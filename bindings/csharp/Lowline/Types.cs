@@ -283,6 +283,11 @@ public sealed record Proposal
     /// (<see cref="FieldReport.Judgement"/>), and before the thresholds were chosen.</summary>
     [JsonPropertyName("promise")] public double? Promise { get; init; }
 
+    /// <summary>Where <see cref="Promise"/> was measured, when the suggestion was held to a prior's thresholds
+    /// (<see cref="LowlineEngine.RestorePrior"/>): the prior's source, to say beside the promise; <c>null</c> for the
+    /// field's own.</summary>
+    [JsonPropertyName("prior")] public string? Prior { get; init; }
+
     /// <summary>For a suggestion from <see cref="Layer.Judgement"/>: the score the judgement gave it, on the judgement's
     /// own scale. The draft keeps it (<c>score</c> in the field's account), so the engine can choose from the records the
     /// score from which the judgement is trusted; <c>null</c> for an answer of the records, which have no such scale.</summary>
@@ -459,6 +464,37 @@ public sealed record FieldReport
     /// checks gather (<c>"counting": {"settled-until-checked": {"checks": K}}</c>), which of the two its checks so far
     /// made it.</summary>
     [JsonPropertyName("counting")] public Counting Counting { get; init; }
+
+    /// <summary>For a field answered from a prior (<see cref="LowlineEngine.RestorePrior"/>) while its own thresholds
+    /// above do not stand: what the prior promises and where it was measured; <c>null</c> for a field answered from its
+    /// own thresholds, or not at all.</summary>
+    [JsonPropertyName("prior")] public PriorPromises? Prior { get; init; }
+}
+
+/// <summary>What a prior promises for the next answers, by the layer they come from, and where it was measured
+/// (<see cref="FieldReport.Prior"/>). A layer it chose no threshold for promises nothing.</summary>
+public sealed record PriorPromises
+{
+    /// <summary>What it was measured on, in the host's words.</summary>
+    [JsonPropertyName("source")] public required string Source { get; init; }
+
+    /// <summary>How many settled records it was measured on.</summary>
+    [JsonPropertyName("records")] public int Records { get; init; }
+
+    /// <summary>For values settled alongside.</summary>
+    [JsonPropertyName("key")] public double? Key { get; init; }
+
+    /// <summary>For a free text field, for one, two, … characters typed.</summary>
+    [JsonPropertyName("typed")] public IReadOnlyList<double?>? Typed { get; init; }
+
+    /// <summary>For the similar records layer, where it was offered.</summary>
+    [JsonPropertyName("similar")] public double? Similar { get; init; }
+
+    /// <summary>For a class the keys back.</summary>
+    [JsonPropertyName("coarse")] public double? Coarse { get; init; }
+
+    /// <summary>For a class the similar records back.</summary>
+    [JsonPropertyName("coarseSimilar")] public double? CoarseSimilar { get; init; }
 }
 
 /// <summary>A saved record as the engine gives it back for the host to store: its id, when it was settled, and the

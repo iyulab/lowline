@@ -291,6 +291,35 @@ public sealed class EngineTests
     }
 
     [Fact]
+    public void A_prior_from_one_engine_answers_another_until_its_own_thresholds_stand()
+    {
+        using var elsewhere = LowlineEngine.Create(Intake);
+        elsewhere.Tune(Alternating(40).Select(r => r.Json));
+        var prior = elsewhere.Prior("owner", "40 sample records");
+        prior.Should().NotBeNull();
+
+        using var fresh = LowlineEngine.Create(Intake);
+        fresh.Prior("owner", "none").Should().BeNull("no thresholds of its own to give");
+        fresh.Learn(Alternating(4).Select(r => r.Json));
+        fresh.RestorePrior(prior!);
+        var shown = fresh.Propose("new", new Dictionary<string, FieldValue> { ["customer"] = "Acme" });
+        shown[0].Suggestion!.Value.Should().Be("kim");
+        shown[0].Prior.Should().Be("40 sample records");
+        shown[0].Promise.Should().Be(elsewhere.Report![0].Key!.Promise);
+        fresh.Report![0].Prior!.Source.Should().Be("40 sample records");
+        fresh.Report![0].Prior!.Records.Should().Be(40);
+        fresh.Stale.Should().Be(new Staleness("untuned"), "the prior is not the engine's own tuning");
+
+        fresh.Tune(Alternating(40).Select(r => r.Json));
+        fresh.Propose("new", new Dictionary<string, FieldValue> { ["customer"] = "Acme" })[0].Prior.Should().BeNull();
+
+        var other = JsonNode.Parse(prior!)!;
+        other["gil"] = "0.0.1";
+        var refused = () => fresh.RestorePrior(other.ToJsonString());
+        refused.Should().Throw<ArgumentException>().WithMessage("*Gil 0.0.1*");
+    }
+
+    [Fact]
     public void An_audit_draws_a_settled_record_at_its_rate_and_is_off_by_default()
     {
         var audit = new Audit(0.1);
