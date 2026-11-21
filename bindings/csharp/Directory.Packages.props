@@ -6,7 +6,7 @@
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup Label="Models">
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="11.0.1" />
   </ItemGroup>
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="4.0.3" />

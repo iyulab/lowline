@@ -35,6 +35,7 @@ All notable changes to this project are written here. The format follows
 - npm `@iyulab/lowline-form` depends on `@formdown/ui` `^0.28.0` (was `^0.26.1`): a number field in a right-to-left
   page reads left to right, and its input carries the `number-input` part; a host's choice can say what its value
   means (`Choice.description`), and clearing a field's error no longer drops another id from its `aria-describedby`.
+- NuGet `Lowline.Extensions.AI` depends on `Microsoft.Extensions.AI.Abstractions` 11.0.1 (was 11.0.0).
 
 ## [0.12.2] - 2026-11-16
 
